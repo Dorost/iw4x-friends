@@ -82,6 +82,20 @@ tasks:
       - cmd: bash scripts/setup-linux.sh {{.CLI_ARGS}}
         platforms: [linux]
 
+  maps:
+    desc: Install the custom maps + bots pack into the game (and the server, if it's a separate bottle/folder)
+    cmds:
+      - cmd: |
+          if [ "${IW4X_SERVER_BOTTLE:-mw}" != "${IW4X_GAME_BOTTLE:-mw}" ]; then
+            bash scripts/install-maps.sh --bottle "$IW4X_SERVER_BOTTLE" --keep-zip {{.CLI_ARGS}}
+          fi
+          bash scripts/install-maps.sh --bottle "${IW4X_GAME_BOTTLE:-mw}" {{.CLI_ARGS}}
+        platforms: [darwin]
+      - cmd: 'powershell -NoProfile -ExecutionPolicy Bypass -Command ". scripts/windows/env.ps1; if ($ServerDir -ne $GameDir) { & scripts/install-maps.ps1 -InstallDir $ServerDir -KeepZip }; & scripts/install-maps.ps1 -InstallDir $GameDir"'
+        platforms: [windows]
+      - cmd: bash scripts/install-maps.sh --dir game {{.CLI_ARGS}}
+        platforms: [linux]
+
   sync-config:
     desc: Copy config/client.cfg into the standalone setup scripts
     cmds:

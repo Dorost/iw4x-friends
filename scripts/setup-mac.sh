@@ -5,7 +5,8 @@
 #   3. installs it into CrossOver's Bottles folder
 #   4. configures it: unique player identity, fullscreen at native resolution,
 #      Auto graphics, MSync on, shared game settings (config/client.cfg)
-#   5. creates a Desktop launcher that skips IW4x's remote update check
+#   5. installs the custom maps + bots pack (install-maps.sh)
+#   6. creates a Desktop launcher that skips IW4x's remote update check
 #
 # Run it straight from GitHub, in Terminal:
 #   zsh -c "$(curl -fsSL https://raw.githubusercontent.com/dorostanian/iw4x-lan-server/main/scripts/setup-mac.sh)"
@@ -323,6 +324,17 @@ CFG
 # END client.cfg
 print -r -- "$CLIENT_CFG" > "$GAME/main/client_tweaks.cfg"
 ok "game settings installed (lowest graphics, no FPS drops when hit)"
+
+# ---------------------------------------------------------------- custom maps + bots
+# Separate pack, also installable on its own with install-maps.sh. The local copy is
+# used when running from the repo, otherwise it's fetched from GitHub.
+maps_script="${0:A:h}/install-maps.sh"
+if [[ -f "$maps_script" ]]; then
+  bash "$maps_script" --bottle "$BOTTLE" || warn "custom maps not installed, run scripts/install-maps.sh later"
+else
+  bash -c "$(curl -fsSL https://raw.githubusercontent.com/dorostanian/iw4x-lan-server/main/scripts/install-maps.sh)" install-maps --bottle "$BOTTLE" \
+    || warn "custom maps not installed. Later, run: bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/dorostanian/iw4x-lan-server/main/scripts/install-maps.sh)\""
+fi
 
 # ---------------------------------------------------------------- launcher
 step "Desktop launcher"

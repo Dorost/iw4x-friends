@@ -5,7 +5,8 @@ One-shot setup of MW2 + IW4x on a Windows PC:
   3. installs the DirectX 9 runtime if missing
   4. configures the game: fresh profile, fullscreen at native resolution, shared game
      settings from config/client.cfg (lowest graphics, no FPS drops when hit)
-  5. creates a Desktop shortcut that skips IW4x's remote update check
+  5. installs the custom maps + bots pack (install-maps.ps1)
+  6. creates a Desktop shortcut that skips IW4x's remote update check
 
 Run it straight from GitHub, in PowerShell:
   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/dorostanian/iw4x-lan-server/main/scripts/setup-windows.ps1)))
@@ -92,7 +93,8 @@ if (-not $Installed) {
     # Drive answers with an HTML page instead of the file when the share's download
     # quota is used up ("Quota exceeded") or the link stopped working
     $head = (& curl.exe -sIL --max-time 20 $DriveUrl) -join "`n"
-    $remoteSize = ([regex]::Matches($head, '(?im)^content-length:\s*(\d+)') | Select-Object -Last 1).Groups[1].Value
+    $lengths = [regex]::Matches($head, '(?im)^content-length:\s*(\d+)')
+    $remoteSize = if ($lengths.Count) { $lengths[$lengths.Count - 1].Groups[1].Value } else { "" }
     $driveBlocked = ($head -match '(?im)^content-type:\s*text/html') -or ($remoteSize -eq "0")
     if ($driveBlocked) { $remoteSize = "" }
 
@@ -282,6 +284,17 @@ seta r_filmUseTweaks "0"
 # END client.cfg
 Set-Content -Path (Join-Path $game "main\client_tweaks.cfg") -Value $ClientCfg -Encoding ascii
 Ok "game settings installed (lowest graphics, no FPS drops when hit)"
+
+# ---------------------------------------------------------------- custom maps + bots
+# Separate pack, also installable on its own with install-maps.ps1. The local copy is
+# used when running from the repo, otherwise it's fetched from GitHub.
+$mapsScript = if ($PSCommandPath) { Join-Path (Split-Path $PSCommandPath) "install-maps.ps1" } else { "" }
+try {
+    if ($mapsScript -and (Test-Path $mapsScript)) { & $mapsScript -InstallDir $game }
+    else { & ([scriptblock]::Create((irm https://raw.githubusercontent.com/dorostanian/iw4x-lan-server/main/scripts/install-maps.ps1))) -InstallDir $game }
+} catch {
+    Warn "custom maps not installed. Later, run: & ([scriptblock]::Create((irm https://raw.githubusercontent.com/dorostanian/iw4x-lan-server/main/scripts/install-maps.ps1)))"
+}
 
 # ---------------------------------------------------------------- shortcut
 Step "Desktop shortcut"

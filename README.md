@@ -11,9 +11,15 @@ Play Modern Warfare 2 ([IW4x](https://iw4x.io)) with friends: one command instal
    & ([scriptblock]::Create((irm https://raw.githubusercontent.com/dorostanian/iw4x-lan-server/main/scripts/setup-windows.ps1)))
    ```
 
-3. Wait for the download (~16 GB). If it stops, run the same command again, it continues where it left off
+3. Wait for the download (~17 GB, game plus custom maps and bots). If it stops, run the same command again, it continues where it left off
 4. Click **Yes** if Windows asks to install DirectX, and **Allow** if the firewall asks about `iw4x.exe`
 5. Start the game with the **IW4x** icon on your Desktop
+
+Already have the game and only need the custom maps and bots? Run this instead:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/dorostanian/iw4x-lan-server/main/scripts/install-maps.ps1)))
+```
 
 ## Mac
 
@@ -24,9 +30,15 @@ Play Modern Warfare 2 ([IW4x](https://iw4x.io)) with friends: one command instal
    zsh -c "$(curl -fsSL https://raw.githubusercontent.com/dorostanian/iw4x-lan-server/main/scripts/setup-mac.sh)"
    ```
 
-3. Wait for the download (~16 GB). If it stops, run the same command again, it continues where it left off
+3. Wait for the download (~17 GB, game plus custom maps and bots). If it stops, run the same command again, it continues where it left off
 4. If CrossOver opens, choose **Try Now**, then go back to Terminal and press Enter
 5. Start the game with the **IW4x** icon on your Desktop
+
+Already have the game and only need the custom maps and bots? Run this instead:
+
+```sh
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/dorostanian/iw4x-lan-server/main/scripts/install-maps.sh)"
+```
 
 ## Joining a game
 
@@ -47,6 +59,12 @@ Runs on any Mac or Windows PC with the game installed (see above). No GPU needed
 3. The control page opens in your browser: press **Start**
 
 In the control page you can pick maps and game modes, add bots, kick players and set a game password (**Settings → Save & apply**). To protect the control page itself, set `UI_PASSWORD=yourpassword` in the `.env` file and start it again.
+
+The server needs the custom maps too: they come with the setup above. If the server runs from its own CrossOver bottle (for example `mw-server`), add them there:
+
+```sh
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/dorostanian/iw4x-lan-server/main/scripts/install-maps.sh)" install-maps --bottle mw-server
+```
 
 ### Linux VPS (optional)
 

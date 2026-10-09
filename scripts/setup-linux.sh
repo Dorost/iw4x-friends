@@ -140,6 +140,9 @@ else
 fi
 
 # ---------------------------------------------------------------- server.cfg
+step "Custom maps + bots"
+bash "$REPO/scripts/install-maps.sh" --dir "$GAME" || warn "custom maps not installed, run: bash scripts/install-maps.sh --dir game"
+
 step "Server config"
 cfg="$GAME/main/server.cfg"
 if [[ -f "$cfg" ]]; then
