@@ -34,7 +34,7 @@ def main() -> int:
             text = path.read_text()
             block = re.compile(
                 rf"(# BEGIN {re.escape(name)}[^\n]*\n{re.escape(opening)}\n).*?(^{re.escape(closing)}\n)",
-                re.S | re.M,
+                re.DOTALL | re.MULTILINE,
             )
             if not block.search(text):
                 print(f"{path.name}: BEGIN/END {name} block not found")
