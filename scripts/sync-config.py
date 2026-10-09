@@ -39,7 +39,7 @@ def main() -> int:
             if not block.search(text):
                 print(f"{path.name}: BEGIN/END {name} block not found")
                 return 1
-            updated = block.sub(lambda m: m.group(1) + content + "\n" + m.group(2), text, count=1)
+            updated = block.sub(lambda m, c=content: m.group(1) + c + "\n" + m.group(2), text, count=1)
             if updated != text:
                 stale.add(path.name)
                 if not check:
