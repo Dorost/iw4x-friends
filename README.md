@@ -52,13 +52,13 @@ If the server has a password, type `password <password>` first.
 
 **Max level and all unlocks:** at the main menu, press `~`, type `unlockstats` and press Enter, then restart the game. Progress is stored on each player's own computer, so everyone does this once on their machine.
 
-**Ready-made classes:** after `unlockstats`, load ten agile classes (SMGs and light rifles, a quickscope sniper, a Search & Destroy stealth class), see [`config/classes.cfg`](config/classes.cfg). Put the file in the game's `main` folder (`task game` does this), then at the main menu press `~` and type `exec classes.cfg`. They replace your custom class slots.
+**Ready-made classes:** ten agile classes (SMGs and light rifles, a quickscope sniper, a Search & Destroy stealth class), see [`config/classes.cfg`](config/classes.cfg). Starting the game with `task game` loads them automatically a few seconds after the menu appears, whenever the file is new or changed. Without the repo: put the file in the game's `main` folder, then at the main menu press `~` and type `exec classes.cfg`. They replace your custom class slots, so run `unlockstats` first.
 
 ## Server
 
 Runs on any Mac or Windows PC with the game installed (see above). No GPU needed.
 
-1. On this page click **Code → Download ZIP** and unzip it
+1. Get this repo: on GitHub **Code → Download ZIP** and unzip it (it's private, so you need access)
 2. Double-click **Start Server** (`Start Server.command` on Mac, `Start Server.cmd` on Windows). On a Mac the first time: right-click → Open
 3. The control page opens in your browser: press **Start**
 
@@ -75,7 +75,7 @@ bash scripts/install-maps.sh --bottle mw-server
 For a server on the internet, on an x86_64 VPS with a domain pointing to it:
 
 ```sh
-git clone https://github.com/dorostanian/iw4x-lan-server.git
+git clone git@github.com:dorostanian/iw4x-lan-server.git   # private: needs a GitHub key with access
 cd iw4x-lan-server
 bash scripts/setup-linux.sh
 docker compose up -d --build
