@@ -43,6 +43,7 @@ What it does:
    - CrossOver bottle: Graphics **Auto**, **MSync** on, DLSS off, High Resolution Mode off
    - fullscreen at the Mac's native "looks like" resolution
    - lowest graphics preset (textures, shadows, effects, AA off) with shader preloading, which avoids hitches when shooting starts
+   - damage audio filter (EQ/reverb) and scripted damage effects off. Under CrossOver the EQ made FPS drop to ~10 every time you got hit
 5. Puts an **IW4x** launcher on the Desktop that skips the update check that can hang, and offers to start the game.
 
 | Option | Effect |
@@ -68,11 +69,17 @@ Needs about 36 GB free disk space, or 20 GB if `mw.zip` is already downloaded. F
 ```sh
 git clone git@github.com:dorostanian/iw4x-lan-server.git
 cd iw4x-lan-server
-cp .env.example .env     # set IW4X_BOTTLE if your bottle is not called "mw"
+cp .env.example .env     # set the bottle names, see below
 task config              # copies server.cfg.example into the game's main/ folder
 ```
 
-`IW4X_GAME_DIR` defaults to the MW2 folder inside the bottle. Set it in `.env` if your install lives elsewhere.
+| Setting | Used by | Default |
+|---|---|---|
+| `IW4X_SERVER_BOTTLE` | dedicated server, web UI, `task server` | `mw` |
+| `IW4X_GAME_BOTTLE` | `task game`, `task game:update` | `mw` |
+| `IW4X_SERVER_DIR` / `IW4X_GAME_DIR` | override the MW2 folder inside those bottles | standard path |
+
+**Run the server in its own bottle** if you also play on the same Mac. Two Windows programs in one bottle share a single `wineserver`, and under load (getting hit, explosions) the game and server wait on each other, which shows up as stutter. Create a second bottle (for example `zsh scripts/setup-mac.sh --bottle mw-server`), copy `usermaps/`, `userraw/` and `main/server.cfg` into it, and set `IW4X_SERVER_BOTTLE=mw-server`.
 
 ## Usage
 

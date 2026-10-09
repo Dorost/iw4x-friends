@@ -266,6 +266,10 @@ typeset -A low=(
   fx_marks 0  fx_marks_ents 0  fx_marks_smodels 0                  # no decals
   ragdoll_enable 0  cg_brass 0
   r_preloadShaders 1                                               # no first-shot hitches
+  cg_splatterHitAlpha 0  cg_splatterTrackAlpha 0  cg_drawDamageFlash 0  cg_blood 0  # no hitches when hit
+  snd_touchStreamFilesOnLoad 1                                     # load sounds with the map, not mid-fight
+  snd_enableEq 0  snd_enableReverb 0           # damage audio filter is CPU-heavy under Rosetta: FPS drops to ~10 when hit
+  r_glow_allowed_script_forced 0  r_blur 0  r_filmUseTweaks 0      # no scripted damage/vision effects
   r_vsync 0  com_maxfps 85
 )
 for key val in "${(@kv)low}"; do setcfg "$key" "$val" "$cfg"; done

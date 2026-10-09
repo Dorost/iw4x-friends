@@ -4,7 +4,7 @@
 source "$(dirname "$0")/env.sh"
 cd "$IW4X_GAME_DIR" || exit 1
 if [[ "$1" == "--update" ]]; then
-  exec "$WINE" --bottle "$IW4X_BOTTLE" --cx-app iw4x-launcher.exe --arch x86
+  exec "$WINE" --bottle "$IW4X_GAME_BOTTLE" --cx-app iw4x-launcher.exe --arch x86
 fi
-exec "$WINE" --bottle "$IW4X_BOTTLE" --cx-app iw4x-launcher.exe \
+exec "$WINE" --bottle "$IW4X_GAME_BOTTLE" --cx-app iw4x-launcher.exe \
   --arch x86 --skip-remote --no-self-update --no-shortcuts --no-connect-protocol

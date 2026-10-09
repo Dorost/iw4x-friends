@@ -22,9 +22,10 @@ from fastapi.responses import FileResponse, HTMLResponse
 from PIL import Image
 from pydantic import BaseModel
 
-BOTTLE = os.environ.get("IW4X_BOTTLE", "mw")
+# the server's bottle (IW4X_BOTTLE is the older name of the same setting)
+BOTTLE = os.environ.get("IW4X_SERVER_BOTTLE") or os.environ.get("IW4X_BOTTLE", "mw")
 GAME_DIR = Path(os.environ.get(
-    "IW4X_GAME_DIR",
+    "IW4X_SERVER_DIR",
     Path.home() / "Library/Application Support/CrossOver/Bottles" / BOTTLE
     / "drive_c/Program Files (x86)/Call of Duty Modern Warfare 2",
 ))
@@ -244,8 +245,14 @@ def write_cfg(c: Config) -> None:
 # ---------- process control ----------
 
 def server_pids() -> list[int]:
+    """Server process and its wine wrapper; ignores shells that merely mention the command."""
     out = subprocess.run(["pgrep", "-f", MATCH], capture_output=True, text=True).stdout
-    return [int(p) for p in out.split()]
+    pids = []
+    for pid in out.split():
+        cmd = subprocess.run(["ps", "-o", "command=", "-p", pid], capture_output=True, text=True).stdout
+        if cmd.startswith("C:\\") or "winewrapper" in cmd:
+            pids.append(int(pid))
+    return pids
 
 
 def start_server() -> None:
@@ -260,13 +267,15 @@ def start_server() -> None:
 
 
 def stop_server() -> None:
-    subprocess.run(["pkill", "-f", MATCH])
-    for _ in range(30):
-        if not server_pids():
+    for sig in ("-TERM", "-KILL"):
+        pids = server_pids()
+        if not pids:
             return
-        time.sleep(0.5)
-    subprocess.run(["pkill", "-9", "-f", MATCH])
-    time.sleep(1)
+        subprocess.run(["kill", sig, *map(str, pids)])
+        for _ in range(30):
+            if not server_pids():
+                return
+            time.sleep(0.5)
 
 
 # ---------- network queries ----------
