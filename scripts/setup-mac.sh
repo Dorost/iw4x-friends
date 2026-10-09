@@ -7,7 +7,9 @@
 #      Auto graphics, MSync on, shared game settings (config/client.cfg)
 #   5. creates a Desktop launcher that skips IW4x's remote update check
 #
-# Standalone: copy this file to any Mac and run   zsh setup-mac.sh
+# Run it straight from GitHub, in Terminal:
+#   zsh -c "$(curl -fsSL https://raw.githubusercontent.com/dorostanian/iw4x-lan-server/main/scripts/setup-mac.sh)"
+# or as a downloaded file:   zsh setup-mac.sh
 # Safe to re-run: every step skips what is already done, and an interrupted
 # download resumes where it stopped.
 # Options:

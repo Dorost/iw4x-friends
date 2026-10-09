@@ -7,7 +7,9 @@ One-shot setup of MW2 + IW4x on a Windows PC:
      settings from config/client.cfg (lowest graphics, no FPS drops when hit)
   5. creates a Desktop shortcut that skips IW4x's remote update check
 
-Standalone: copy this file to any Windows PC and run (in PowerShell):
+Run it straight from GitHub, in PowerShell:
+  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/dorostanian/iw4x-lan-server/main/scripts/setup-windows.ps1)))
+or as a downloaded file:
   powershell -ExecutionPolicy Bypass -File setup-windows.ps1
 
 Safe to re-run: every step skips what is already done, and an interrupted
@@ -40,7 +42,8 @@ $MarkConfigured = ".iw4x-setup-configured"
 function Step($msg) { Write-Host "`n==> $msg" -ForegroundColor Cyan }
 function Ok($msg)   { Write-Host "    + $msg" -ForegroundColor Green }
 function Warn($msg) { Write-Host "    ! $msg" -ForegroundColor Yellow }
-function Die($msg)  { Write-Host "    x $msg" -ForegroundColor Red; exit 1 }
+# throw instead of exit: when run as a one-liner, exit would close the user's PowerShell window
+function Die($msg)  { Write-Host "    x $msg" -ForegroundColor Red; throw "Setup stopped, see the message above." }
 
 function FreeGB($path) {
     $root = [IO.Path]::GetPathRoot([IO.Path]::GetFullPath($path))
