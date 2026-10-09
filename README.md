@@ -50,6 +50,10 @@ connect <server-ip>:28960
 
 If the server has a password, type `password <password>` first.
 
+**Max level and all unlocks:** at the main menu, press `~`, type `unlockstats` and press Enter, then restart the game. Progress is stored on each player's own computer, so everyone does this once on their machine.
+
+**Ready-made classes:** after `unlockstats`, load ten agile classes (SMGs and light rifles, a quickscope sniper, a Search & Destroy stealth class), see [`config/classes.cfg`](config/classes.cfg). Put the file in the game's `main` folder (`task game` does this), then at the main menu press `~` and type `exec classes.cfg`. They replace your custom class slots.
+
 ## Server
 
 Runs on any Mac or Windows PC with the game installed (see above). No GPU needed.

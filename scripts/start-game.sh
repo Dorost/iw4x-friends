@@ -9,6 +9,7 @@ if ./scripts/kill-game.sh --dry-run | grep -q .; then
   exit 1
 fi
 cp config/client.cfg "$IW4X_GAME_DIR/main/client_tweaks.cfg"
+cp config/classes.cfg "$IW4X_GAME_DIR/main/classes.cfg"   # loaded on demand: exec classes.cfg
 cd "$IW4X_GAME_DIR" || exit 1
 skip=(--skip-remote --no-self-update --no-shortcuts --no-connect-protocol)
 [[ "$1" == "--update" ]] && skip=()

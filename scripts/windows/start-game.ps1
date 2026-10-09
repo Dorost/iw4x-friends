@@ -3,6 +3,7 @@
 param([switch]$Update)
 . (Join-Path $PSScriptRoot "env.ps1")
 Copy-Item "config\client.cfg" (Join-Path $GameDir "main\client_tweaks.cfg") -Force
+Copy-Item "config\classes.cfg" (Join-Path $GameDir "main\classes.cfg") -Force   # loaded on demand: exec classes.cfg
 $launcherArgs = @("--arch", "x86")
 if (-not $Update) { $launcherArgs += "--skip-remote", "--no-self-update", "--no-shortcuts", "--no-connect-protocol" }
 $launcherArgs += "--game-args", '"+exec client_tweaks.cfg"'
