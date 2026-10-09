@@ -40,8 +40,10 @@ else:
                         / "drive_c/Program Files (x86)/Call of Duty Modern Warfare 2")
 GAME_DIR = Path(os.environ.get("IW4X_SERVER_DIR", DEFAULT_GAME_DIR))
 CFG = GAME_DIR / "main" / "server.cfg"
-LOG = Path(__file__).resolve().parent / "server.log"
-THUMBS = Path(__file__).resolve().parent / "thumbs"
+# server console log and map thumbnails (a volume in Docker, so they survive rebuilds)
+DATA_DIR = Path(os.environ.get("UI_DATA_DIR", Path(__file__).resolve().parent))
+LOG = DATA_DIR / "server.log"
+THUMBS = DATA_DIR / "thumbs"
 WINE = os.environ.get("WINE", "wine" if IS_LINUX else "/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wine")
 PORT = int(os.environ.get("IW4X_PORT", "28960"))
 UI_PORT = int(os.environ.get("UI_PORT", "8080"))
@@ -283,7 +285,9 @@ def server_procs() -> list[psutil.Process]:
         if IS_WINDOWS:
             real = (proc.info["name"] or "").lower() == "iw4x.exe"
         else:
-            real = bool(re.match(r"[A-Z]:\\", cmd)) or "winewrapper" in cmd
+            # Linux: "wine iw4x.exe ..." until Wine rewrites it to the Windows path
+            real = (bool(re.match(r"[A-Z]:\\", cmd)) or "winewrapper" in cmd
+                    or (IS_LINUX and Path(proc.info["cmdline"][0]).name.startswith("wine")))
         if real:
             found.append(proc)
     return found
@@ -498,4 +502,6 @@ def index():
 
 
 if __name__ == "__main__":
+    if os.environ.get("AUTOSTART") == "1":
+        start_server()
     uvicorn.run(app, host=UI_HOST, port=UI_PORT)
