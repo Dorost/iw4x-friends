@@ -34,7 +34,7 @@ BOTTLE = os.environ.get("IW4X_SERVER_BOTTLE") or os.environ.get("IW4X_BOTTLE", "
 if IS_WINDOWS:
     DEFAULT_GAME_DIR = Path(r"C:\Games\Call of Duty Modern Warfare 2")
 elif IS_LINUX:
-    DEFAULT_GAME_DIR = Path(__file__).resolve().parents[2] / "game"
+    DEFAULT_GAME_DIR = Path(__file__).resolve().parent.parent.parent / "game"
 else:
     DEFAULT_GAME_DIR = (Path.home() / "Library/Application Support/CrossOver/Bottles" / BOTTLE
                         / "drive_c/Program Files (x86)/Call of Duty Modern Warfare 2")
