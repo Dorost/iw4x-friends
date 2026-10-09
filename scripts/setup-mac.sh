@@ -4,7 +4,7 @@
 #   2. downloads the prepared "mw" bottle from Google Drive
 #   3. installs it into CrossOver's Bottles folder
 #   4. configures it: unique player identity, fullscreen at native resolution,
-#      Auto graphics, MSync on
+#      Auto graphics, MSync on, shared game settings (config/client.cfg)
 #   5. creates a Desktop launcher that skips IW4x's remote update check
 #
 # Standalone: copy this file to any Mac and run   zsh setup-mac.sh
@@ -256,26 +256,71 @@ setcfg vid_xpos 0 "$cfg"
 setcfg vid_ypos 0 "$cfg"
 ok "fullscreen at $res"
 
-# Lowest graphics preset, so it runs smoothly on any Mac
-typeset -A low=(
-  r_picmip 3  r_picmip_bump 3  r_picmip_spec 3  r_picmip_manual 1  # lowest textures
-  sm_enable 0  sm_maxLights 0                                      # no shadows
-  r_aaSamples 1  r_texFilterAnisoMax 1                             # no AA / anisotropic
-  r_specular 0  r_glow_allowed 0  r_distortion 0  r_dof_enable 0
-  r_zFeather 0  r_drawWater 0  r_drawSun 0  r_dlightLimit 0        # no muzzle-flash lights
-  fx_marks 0  fx_marks_ents 0  fx_marks_smodels 0                  # no decals
-  ragdoll_enable 0  cg_brass 0
-  r_preloadShaders 1                                               # no first-shot hitches
-  cg_splatterHitAlpha 0  cg_splatterTrackAlpha 0  cg_drawDamageFlash 0  cg_blood 0  # no hitches when hit
-  snd_touchStreamFilesOnLoad 1                                     # load sounds with the map, not mid-fight
-  snd_enableEq 0  snd_enableReverb 0           # damage audio filter is CPU-heavy under Rosetta: FPS drops to ~10 when hit
-  r_glow_allowed_script_forced 0  r_blur 0  r_filmUseTweaks 0      # no scripted damage/vision effects
-  r_vsync 0  com_maxfps 85
-)
-for key val in "${(@kv)low}"; do setcfg "$key" "$val" "$cfg"; done
-ok "graphics set to lowest preset"
 touch "$BOTTLE_DIR/$MARK_CONFIGURED"
 fi
+
+# Shared game settings (lowest graphics, no hitches when hit). Loaded on every start via
+# "+exec client_tweaks.cfg", so they also cover settings the game itself never saves.
+# BEGIN client.cfg (generated from config/client.cfg by scripts/sync-config.py, don't edit here)
+CLIENT_CFG=$(cat <<'CFG'
+// Game settings for every player, applied on each game start (macOS and Windows).
+// The setup scripts install this as main/client_tweaks.cfg and the launchers start
+// the game with "+exec client_tweaks.cfg", so it also covers settings the game
+// itself never saves. Edit here, then run: task sync-config
+// Display resolution is detected per machine and not set here.
+
+// display
+seta r_fullscreen "1"
+seta r_noborder "0"
+seta r_vsync "0"
+seta com_maxfps "85"
+
+// lowest textures
+seta r_picmip "3"
+seta r_picmip_bump "3"
+seta r_picmip_spec "3"
+seta r_picmip_manual "1"
+
+// no shadows, AA, anisotropic filtering
+seta sm_enable "0"
+seta sm_maxLights "0"
+seta r_aaSamples "1"
+seta r_texFilterAnisoMax "1"
+
+// no expensive effects
+seta r_specular "0"
+seta r_glow_allowed "0"
+seta r_distortion "0"
+seta r_dof_enable "0"
+seta r_zFeather "0"
+seta r_drawWater "0"
+seta r_drawSun "0"
+seta r_dlightLimit "0"
+seta fx_marks "0"
+seta fx_marks_ents "0"
+seta fx_marks_smodels "0"
+seta ragdoll_enable "0"
+seta cg_brass "0"
+
+// no hitches: shaders prepared at map load
+seta r_preloadShaders "1"
+
+// no FPS drop when hit: blood/damage overlays, damage audio filter, scripted vision effects
+seta cg_splatterHitAlpha "0"
+seta cg_splatterTrackAlpha "0"
+seta cg_drawDamageFlash "0"
+seta cg_blood "0"
+seta snd_touchStreamFilesOnLoad "1"
+seta snd_enableEq "0"
+seta snd_enableReverb "0"
+seta r_glow_allowed_script_forced "0"
+seta r_blur "0"
+seta r_filmUseTweaks "0"
+CFG
+)
+# END client.cfg
+print -r -- "$CLIENT_CFG" > "$GAME/main/client_tweaks.cfg"
+ok "game settings installed (lowest graphics, no FPS drops when hit)"
 
 # ---------------------------------------------------------------- launcher
 step "Desktop launcher"
@@ -286,7 +331,8 @@ cat > "$launcher" <<EOF
 # Start IW4x, skipping the launcher's GitHub update check (it can hang under CrossOver)
 cd "$GAME"
 exec "$WINE" --bottle "$BOTTLE" --cx-app iw4x-launcher.exe \\
-  --arch x86 --skip-remote --no-self-update --no-shortcuts --no-connect-protocol
+  --arch x86 --skip-remote --no-self-update --no-shortcuts --no-connect-protocol \\
+  --game-args "+exec client_tweaks.cfg"
 EOF
 chmod +x "$launcher"
 ok "created $launcher"

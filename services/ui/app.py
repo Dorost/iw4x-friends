@@ -1,41 +1,47 @@
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["fastapi", "uvicorn", "pillow"]
+# dependencies = ["fastapi", "uvicorn", "pillow", "psutil"]
 # ///
 """Small web UI to configure and control the IW4x LAN dedicated server."""
 
-import io
+import base64
 import os
 import re
+import secrets
 import socket
 import struct
 import subprocess
+import sys
 import threading
 import time
 import zipfile
 from functools import cache
 from pathlib import Path
 
+import psutil
 import uvicorn
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from PIL import Image
 from pydantic import BaseModel
 
-# the server's bottle (IW4X_BOTTLE is the older name of the same setting)
+IS_WINDOWS = sys.platform == "win32"
+# macOS: the server runs inside a CrossOver bottle (IW4X_BOTTLE is the older name of
+# IW4X_SERVER_BOTTLE). Windows: it runs natively from the game folder.
 BOTTLE = os.environ.get("IW4X_SERVER_BOTTLE") or os.environ.get("IW4X_BOTTLE", "mw")
-GAME_DIR = Path(os.environ.get(
-    "IW4X_SERVER_DIR",
-    Path.home() / "Library/Application Support/CrossOver/Bottles" / BOTTLE
-    / "drive_c/Program Files (x86)/Call of Duty Modern Warfare 2",
-))
+if IS_WINDOWS:
+    DEFAULT_GAME_DIR = Path(r"C:\Games\Call of Duty Modern Warfare 2")
+else:
+    DEFAULT_GAME_DIR = (Path.home() / "Library/Application Support/CrossOver/Bottles" / BOTTLE
+                        / "drive_c/Program Files (x86)/Call of Duty Modern Warfare 2")
+GAME_DIR = Path(os.environ.get("IW4X_SERVER_DIR", DEFAULT_GAME_DIR))
 CFG = GAME_DIR / "main" / "server.cfg"
 LOG = Path(__file__).resolve().parent / "server.log"
 THUMBS = Path(__file__).resolve().parent / "thumbs"
 WINE = os.environ.get("WINE", "/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wine")
 PORT = int(os.environ.get("IW4X_PORT", "28960"))
 UI_PORT = int(os.environ.get("UI_PORT", "8080"))
-MATCH = "iw4x.exe -dedicated"
+UI_PASSWORD = os.environ.get("UI_PASSWORD", "")
 
 GAMETYPE_NAMES = {
     "war": "Team Deathmatch", "dm": "Free-for-all", "dom": "Domination",
@@ -75,6 +81,20 @@ BOT_SKILLS = {
 app = FastAPI()
 
 
+@app.middleware("http")
+async def require_password(request: Request, call_next):
+    """HTTP basic auth when UI_PASSWORD is set (any username)."""
+    if UI_PASSWORD:
+        auth = request.headers.get("authorization", "")
+        try:
+            given = base64.b64decode(auth.removeprefix("Basic ")).decode().split(":", 1)[1]
+        except (ValueError, IndexError):
+            given = ""
+        if not secrets.compare_digest(given.encode(), UI_PASSWORD.encode()):
+            return Response(status_code=401, headers={"WWW-Authenticate": 'Basic realm="IW4x Server"'})
+    return await call_next(request)
+
+
 def installed_maps() -> list[dict]:
     names = {
         p.stem for p in (GAME_DIR / "zone").rglob("mp_*.ff")
@@ -95,7 +115,7 @@ def installed_maps() -> list[dict]:
 def gametypes() -> dict[str, str]:
     """Stock modes plus any gametype script found in iwd archives or userraw."""
     ids = set(GAMETYPE_NAMES)
-    pattern = re.compile(r"maps/mp/gametypes/([a-z0-9]+)\.gsc$", re.I)
+    pattern = re.compile(r"maps/mp/gametypes/([a-z0-9]+)\.gsc$", re.IGNORECASE)
     for iwd in [*GAME_DIR.glob("main/**/*.iwd"), *GAME_DIR.glob("userraw/*.iwd")]:
         try:
             ids |= {m[1].lower() for n in zipfile.ZipFile(iwd).namelist() if (m := pattern.search(n))}
@@ -244,38 +264,54 @@ def write_cfg(c: Config) -> None:
 
 # ---------- process control ----------
 
+def server_procs() -> list[psutil.Process]:
+    """The dedicated server (and on macOS its wine wrapper); never shells that merely mention it."""
+    found = []
+    for proc in psutil.process_iter(["name", "cmdline"]):
+        try:
+            cmd = " ".join(proc.info["cmdline"] or [])
+        except (psutil.AccessDenied, psutil.NoSuchProcess):
+            continue
+        if "iw4x.exe" not in cmd or "-dedicated" not in cmd:
+            continue
+        if IS_WINDOWS:
+            real = (proc.info["name"] or "").lower() == "iw4x.exe"
+        else:
+            real = cmd.startswith("C:\\") or "winewrapper" in cmd
+        if real:
+            found.append(proc)
+    return found
+
+
 def server_pids() -> list[int]:
-    """Server process and its wine wrapper; ignores shells that merely mention the command."""
-    out = subprocess.run(["pgrep", "-f", MATCH], capture_output=True, text=True).stdout
-    pids = []
-    for pid in out.split():
-        cmd = subprocess.run(["ps", "-o", "command=", "-p", pid], capture_output=True, text=True).stdout
-        if cmd.startswith("C:\\") or "winewrapper" in cmd:
-            pids.append(int(pid))
-    return pids
+    return [p.pid for p in server_procs()]
 
 
 def start_server() -> None:
     if server_pids():
         return
-    subprocess.Popen(
-        [WINE, "--bottle", BOTTLE, "--cx-app", "iw4x.exe", "-dedicated",
-         "+set", "net_port", str(PORT), "+exec", "server.cfg", "+map_rotate"],
-        cwd=GAME_DIR, stdout=LOG.open("w"), stderr=subprocess.STDOUT,
-        stdin=subprocess.DEVNULL, start_new_session=True,
-    )
+    args = ["-dedicated", "+set", "net_port", str(PORT), "+exec", "server.cfg", "+map_rotate"]
+    if IS_WINDOWS:
+        cmd = [str(GAME_DIR / "iw4x.exe"), *args]
+        detach = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS}
+    else:
+        cmd = [WINE, "--bottle", BOTTLE, "--cx-app", "iw4x.exe", *args]
+        detach = {"start_new_session": True}
+    subprocess.Popen(cmd, cwd=GAME_DIR, stdout=LOG.open("w"), stderr=subprocess.STDOUT,
+                     stdin=subprocess.DEVNULL, **detach)
 
 
 def stop_server() -> None:
-    for sig in ("-TERM", "-KILL"):
-        pids = server_pids()
-        if not pids:
+    for force in (False, True):
+        procs = server_procs()
+        if not procs:
             return
-        subprocess.run(["kill", sig, *map(str, pids)])
-        for _ in range(30):
-            if not server_pids():
-                return
-            time.sleep(0.5)
+        for proc in procs:
+            try:
+                proc.kill() if force else proc.terminate()
+            except psutil.NoSuchProcess:
+                pass
+        psutil.wait_procs(procs, timeout=15)
 
 
 # ---------- network queries ----------
@@ -341,11 +377,15 @@ def live_status() -> dict | None:
 
 
 def lan_ip() -> str:
-    for iface in ("en0", "en1"):
-        ip = subprocess.run(["ipconfig", "getifaddr", iface], capture_output=True, text=True).stdout.strip()
-        if ip:
-            return ip
-    return "127.0.0.1"
+    """Address of the interface that routes outward (no packet is actually sent)."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"
+    finally:
+        s.close()
 
 
 # ---------- API ----------

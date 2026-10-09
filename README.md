@@ -17,12 +17,12 @@ Run a Modern Warfare 2 (IW4x) dedicated server on a Mac with CrossOver, and mana
 
 ## Requirements
 
-- macOS with [CrossOver](https://www.codeweavers.com/crossover)
-- A CrossOver bottle with MW2 and the [IW4x](https://iw4x.io) client installed
+- **macOS** with [CrossOver](https://www.codeweavers.com/crossover) and a bottle with MW2 + [IW4x](https://iw4x.io), or **Windows** with MW2 + IW4x installed natively
 - [uv](https://docs.astral.sh/uv/) and [go-task](https://taskfile.dev)
 
 ```sh
-brew install uv go-task
+brew install uv go-task                          # macOS
+winget install astral-sh.uv Task.Task            # Windows
 ```
 
 ## New Mac: install the game
@@ -64,6 +64,36 @@ What it does:
 
 Needs about 36 GB free disk space, or 20 GB if `mw.zip` is already downloaded. From the repo you can also run `task setup` (options after `--`, for example `task setup -- --force`).
 
+## New Windows PC: install the game
+
+`scripts/setup-windows.ps1` does the same for Windows, without CrossOver: the game runs natively. Copy the file over and run it in PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File setup-windows.ps1
+```
+
+1. Finds or downloads `mw.zip` (resumes if interrupted), the same Google Drive package as the Mac
+2. Extracts **only the game folder** from it to `C:\Games\Call of Duty Modern Warfare 2`
+3. Installs the **DirectX 9 runtime** if missing (IW4x needs `d3dx9_43.dll`, which Windows 10/11 don't ship). Windows asks for permission
+4. Removes the copied profile, sets fullscreen at the screen's resolution and installs the shared game settings
+5. Creates an **IW4x** shortcut on the Desktop that skips the update check
+
+Options: `-InstallDir <path>`, `-Zip <path>`, `-KeepZip`, `-Force`. Safe to re-run, like the Mac script. Allow `iw4x.exe` through Windows Firewall when asked, at least when hosting.
+
+## Shared game settings
+
+`config/client.cfg` is the one place for the game settings everyone gets: lowest graphics, and the fixes for FPS drops when hit (damage audio filter, blood and damage overlays, scripted vision effects off).
+
+- Every launcher starts the game with `+exec client_tweaks.cfg`, a copy of this file in the game's `main/` folder. That reapplies it on **every start**, including settings the game itself never saves to its config.
+- `task game` copies the current `config/client.cfg` into the game before starting, so edits apply to your own game right away.
+- The setup scripts are standalone files, so each carries its own copy. After editing the file, run:
+
+  ```sh
+  task sync-config
+  ```
+
+  CI (`.github/workflows/check.yml`) fails if a setup script is out of sync, and also checks that all scripts parse.
+
 ## Server setup
 
 ```sh
@@ -77,7 +107,8 @@ task config              # copies server.cfg.example into the game's main/ folde
 |---|---|---|
 | `IW4X_SERVER_BOTTLE` | dedicated server, web UI, `task server` | `mw` |
 | `IW4X_GAME_BOTTLE` | `task game`, `task game:update` | `mw` |
-| `IW4X_SERVER_DIR` / `IW4X_GAME_DIR` | override the MW2 folder inside those bottles | standard path |
+| `IW4X_SERVER_DIR` / `IW4X_GAME_DIR` | MW2 folder of the server / game. On Windows these are the only ones that matter (no bottles) | inside the bottle; Windows: `C:\Games\Call of Duty Modern Warfare 2` |
+| `UI_PASSWORD` | web UI login (any username); restart the UI after changing it | empty = no login |
 
 **Run the server in its own bottle** if you also play on the same Mac. Two Windows programs in one bottle share a single `wineserver`, and under load (getting hit, explosions) the game and server wait on each other, which shows up as stutter. Create a second bottle (for example `zsh scripts/setup-mac.sh --bottle mw-server`), copy `usermaps/`, `userraw/` and `main/server.cfg` into it, and set `IW4X_SERVER_BOTTLE=mw-server`.
 
@@ -162,13 +193,14 @@ With `--skip-remote` you get no IW4x updates. Run `task game:update` now and the
 - **Each player needs a unique identity.** If you copy a bottle to another Mac, delete `drive_c/users/crossover/AppData/Local/iw4x/guid.dat` there. Otherwise the server sees both as the same player and kicks one.
 - **Custom maps** go in `usermaps/<mapname>/` in the game folder. Every player needs the same files.
 - **Change `rcon_password`** from `changeme` if other people are on your network.
-- The web UI has no login and is reachable from your whole LAN.
+- The web UI is reachable from your whole LAN. Set `UI_PASSWORD` in `.env` to require a login.
+- **Game password**: set it under Settings → Game password and press Save & apply. Players type `password <pw>` in the console before `connect`.
 
 ## Project layout
 
 ```
 .
-├── Taskfile.yml
+├── Taskfile.yml           # every task runs on macOS and Windows
 ├── .env.example
 ├── server.cfg.example
 ├── scripts/
@@ -176,8 +208,13 @@ With `--skip-remote` you get no IW4x updates. Run `task game:update` now and the
 │   ├── start-server.sh
 │   ├── start-game.sh      # game client, optional update check
 │   ├── setup-mac.sh       # new Mac: CrossOver + bottle + config
+│   ├── setup-windows.ps1  # new Windows PC: game folder + DirectX + config
+│   ├── sync-config.py     # copies config/client.cfg into both setup scripts
 │   ├── kill-game.sh       # stop stuck client processes
-│   └── install-config.sh
+│   ├── install-config.sh
+│   └── windows/           # PowerShell versions of the helper scripts
+├── config/
+│   └── client.cfg         # shared game settings (the one place to edit them)
 └── services/
     └── ui/
         ├── app.py         # FastAPI backend (uv inline script)

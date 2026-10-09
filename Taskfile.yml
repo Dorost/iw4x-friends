@@ -2,6 +2,9 @@ version: "3"
 
 dotenv: [".env"]
 
+vars:
+  PS: powershell -NoProfile -ExecutionPolicy Bypass -File
+
 tasks:
   ui:
     desc: Start the web UI (http://localhost:8080)
@@ -12,34 +15,60 @@ tasks:
   server:
     desc: Start the dedicated server in the foreground (console in terminal)
     cmds:
-      - ./scripts/start-server.sh
+      - cmd: ./scripts/start-server.sh
+        platforms: [darwin]
+      - cmd: '{{.PS}} scripts/windows/start-server.ps1'
+        platforms: [windows]
 
   stop:
     desc: Stop the dedicated server
     cmds:
-      - curl -s -X POST localhost:${UI_PORT:-8080}/api/server/stop || pkill -f "^C:.*iw4x.exe -dedicated" || true
+      - cmd: curl -sf -u ":${UI_PASSWORD}" -X POST localhost:${UI_PORT:-8080}/api/server/stop || pkill -f "^C:.*iw4x.exe -dedicated" || true
+        platforms: [darwin]
+      - cmd: 'powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name = ''iw4x.exe''\" | Where-Object CommandLine -match ''-dedicated'' | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"'
+        platforms: [windows]
 
   config:
     desc: Install server.cfg.example into the game folder (skips if one exists)
     cmds:
-      - ./scripts/install-config.sh
+      - cmd: ./scripts/install-config.sh
+        platforms: [darwin]
+      - cmd: 'powershell -NoProfile -Command ". scripts/windows/env.ps1; $t = Join-Path $ServerDir ''main\server.cfg''; if (Test-Path $t) { ''exists, not touching: '' + $t } else { Copy-Item server.cfg.example $t; ''installed: '' + $t }"'
+        platforms: [windows]
 
   game:
-    desc: Start the IW4x game, skipping the launcher update check (use when it does not open)
+    desc: Start the IW4x game with the shared settings, skipping the update check (use when it does not open)
     cmds:
-      - ./scripts/start-game.sh
+      - cmd: ./scripts/start-game.sh
+        platforms: [darwin]
+      - cmd: '{{.PS}} scripts/windows/start-game.ps1'
+        platforms: [windows]
 
   game:update:
-    desc: Run the IW4x launcher normally (checks GitHub for updates, then starts the game)
+    desc: Run the IW4x launcher with its update check, then start the game
     cmds:
-      - ./scripts/start-game.sh --update
+      - cmd: ./scripts/start-game.sh --update
+        platforms: [darwin]
+      - cmd: '{{.PS}} scripts/windows/start-game.ps1 -Update'
+        platforms: [windows]
 
   game:kill:
     desc: Stop stuck IW4x launcher/game processes (leaves the dedicated server running)
     cmds:
-      - ./scripts/kill-game.sh
+      - cmd: ./scripts/kill-game.sh
+        platforms: [darwin]
+      - cmd: '{{.PS}} scripts/windows/kill-game.ps1'
+        platforms: [windows]
 
   setup:
-    desc: Set up a new Mac (CrossOver + game bottle + config). Pass options after --, e.g. task setup -- --force
+    desc: Set up this machine (game + config; CrossOver on macOS). Pass options after --, e.g. task setup -- --force
     cmds:
-      - ./scripts/setup-mac.sh {{.CLI_ARGS}}
+      - cmd: ./scripts/setup-mac.sh {{.CLI_ARGS}}
+        platforms: [darwin]
+      - cmd: '{{.PS}} scripts/setup-windows.ps1 {{.CLI_ARGS}}'
+        platforms: [windows]
+
+  sync-config:
+    desc: Copy config/client.cfg into the standalone setup scripts
+    cmds:
+      - uv run scripts/sync-config.py

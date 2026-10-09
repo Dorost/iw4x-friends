@@ -1,0 +1,35 @@
+name: check
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Setup scripts carry the current config/client.cfg
+        run: uv run scripts/sync-config.py --check
+
+      - name: Lint web UI
+        run: uvx ruff check services/ui
+
+      - name: Shell scripts parse
+        run: |
+          sudo apt-get install -y -qq zsh
+          for f in scripts/*.sh; do zsh -n "$f" && echo "ok $f"; done
+
+      - name: PowerShell scripts parse
+        shell: pwsh
+        run: |
+          $failed = $false
+          Get-ChildItem scripts -Recurse -Filter *.ps1 | ForEach-Object {
+            $errors = $null; $tokens = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors) { $errors | ForEach-Object { Write-Host "::error file=$($_.Extent.File),line=$($_.Extent.StartLineNumber)::$($_.Message)" }; $failed = $true }
+            else { Write-Host "ok $($_.Name)" }
+          }
+          if ($failed) { exit 1 }
