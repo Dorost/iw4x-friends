@@ -97,6 +97,6 @@ tasks:
         platforms: [linux]
 
   sync-config:
-    desc: Copy config/client.cfg into the standalone setup scripts
+    desc: Copy config/client.cfg and config/classes.cfg into the standalone setup scripts
     cmds:
       - uv run scripts/sync-config.py

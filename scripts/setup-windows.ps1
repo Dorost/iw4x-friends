@@ -302,10 +302,179 @@ seta r_filmUseTweaks "0"
 seta snd_volume "0.6"
 seta winvoice_mic_scaler "2"
 seta winvoice_mic_reclevel "65535"
+
+// F9 at the main menu loads the ready-made classes (classes.cfg). They can't load
+// automatically at startup: the game reads your stats a few seconds later.
+bind F9 "exec classes.cfg"
 '@
 # END client.cfg
 Set-Content -Path (Join-Path $game "main\client_tweaks.cfg") -Value $ClientCfg -Encoding ascii
 Ok "game settings installed (lowest graphics, no FPS drops when hit)"
+
+# Ready-made classes, loaded by pressing F9 at the main menu (bound in client.cfg)
+# BEGIN classes.cfg (generated from config/classes.cfg by scripts/sync-config.py, don't edit here)
+$ClassesCfg = @'
+// Ten custom classes: agile run-and-gun SMGs and light assault rifles (no LMGs),
+// a quickscope sniper (5) and a stealth class for Search & Destroy (10).
+// Load them at the main menu: press ~ and type  exec classes.cfg
+// (run unlockstats first so every weapon, attachment and perk is unlocked).
+// They replace your custom class slots 1 to 10.
+
+// 1. UMP Rush: UMP45 keeps full damage with a silencer: sprint, flank, knife
+setPlayerData customClasses 0 name "UMP Rush"
+setPlayerData customClasses 0 weaponSetups 0 weapon ump45
+setPlayerData customClasses 0 weaponSetups 0 attachment 0 silencer
+setPlayerData customClasses 0 weaponSetups 0 attachment 1 none
+setPlayerData customClasses 0 weaponSetups 1 weapon usp
+setPlayerData customClasses 0 weaponSetups 1 attachment 0 tactical
+setPlayerData customClasses 0 weaponSetups 1 attachment 1 none
+setPlayerData customClasses 0 perks 0 semtex_mp
+setPlayerData customClasses 0 perks 1 specialty_marathon
+setPlayerData customClasses 0 perks 2 specialty_lightweight
+setPlayerData customClasses 0 perks 3 specialty_extendedmelee
+setPlayerData customClasses 0 perks 4 specialty_painkiller
+setPlayerData customClasses 0 specialGrenade flash_grenade
+
+// 2. Vector Ghost: invisible to UAV and thermal, silent footsteps
+setPlayerData customClasses 1 name "Vector Ghost"
+setPlayerData customClasses 1 weaponSetups 0 weapon kriss
+setPlayerData customClasses 1 weaponSetups 0 attachment 0 silencer
+setPlayerData customClasses 1 weaponSetups 0 attachment 1 none
+setPlayerData customClasses 1 weaponSetups 1 weapon pp2000
+setPlayerData customClasses 1 weaponSetups 1 attachment 0 silencer
+setPlayerData customClasses 1 weaponSetups 1 attachment 1 none
+setPlayerData customClasses 1 perks 0 throwingknife_mp
+setPlayerData customClasses 1 perks 1 specialty_marathon
+setPlayerData customClasses 1 perks 2 specialty_coldblooded
+setPlayerData customClasses 1 perks 3 specialty_heartbreaker
+setPlayerData customClasses 1 perks 4 specialty_copycat
+setPlayerData customClasses 1 specialGrenade concussion_grenade
+
+// 3. ACR Runner: almost no recoil, fast assault rifle
+setPlayerData customClasses 2 name "ACR Runner"
+setPlayerData customClasses 2 weaponSetups 0 weapon masada
+setPlayerData customClasses 2 weaponSetups 0 attachment 0 silencer
+setPlayerData customClasses 2 weaponSetups 0 attachment 1 none
+setPlayerData customClasses 2 weaponSetups 1 weapon usp
+setPlayerData customClasses 2 weaponSetups 1 attachment 0 tactical
+setPlayerData customClasses 2 weaponSetups 1 attachment 1 none
+setPlayerData customClasses 2 perks 0 semtex_mp
+setPlayerData customClasses 2 perks 1 specialty_marathon
+setPlayerData customClasses 2 perks 2 specialty_lightweight
+setPlayerData customClasses 2 perks 3 specialty_extendedmelee
+setPlayerData customClasses 2 perks 4 specialty_painkiller
+setPlayerData customClasses 2 specialGrenade flash_grenade
+
+// 4. FAMAS Burst: one-burst kills, quick reloads
+setPlayerData customClasses 3 name "FAMAS Burst"
+setPlayerData customClasses 3 weaponSetups 0 weapon famas
+setPlayerData customClasses 3 weaponSetups 0 attachment 0 fmj
+setPlayerData customClasses 3 weaponSetups 0 attachment 1 none
+setPlayerData customClasses 3 weaponSetups 1 weapon usp
+setPlayerData customClasses 3 weaponSetups 1 attachment 0 tactical
+setPlayerData customClasses 3 weaponSetups 1 attachment 1 none
+setPlayerData customClasses 3 perks 0 throwingknife_mp
+setPlayerData customClasses 3 perks 1 specialty_fastreload
+setPlayerData customClasses 3 perks 2 specialty_lightweight
+setPlayerData customClasses 3 perks 3 specialty_extendedmelee
+setPlayerData customClasses 3 perks 4 specialty_painkiller
+setPlayerData customClasses 3 specialGrenade flash_grenade
+
+// 5. Quickscope: the classic Intervention quickscope setup
+setPlayerData customClasses 4 name "Quickscope"
+setPlayerData customClasses 4 weaponSetups 0 weapon cheytac
+setPlayerData customClasses 4 weaponSetups 0 attachment 0 fmj
+setPlayerData customClasses 4 weaponSetups 0 attachment 1 none
+setPlayerData customClasses 4 weaponSetups 1 weapon usp
+setPlayerData customClasses 4 weaponSetups 1 attachment 0 tactical
+setPlayerData customClasses 4 weaponSetups 1 attachment 1 none
+setPlayerData customClasses 4 perks 0 throwingknife_mp
+setPlayerData customClasses 4 perks 1 specialty_fastreload
+setPlayerData customClasses 4 perks 2 specialty_lightweight
+setPlayerData customClasses 4 perks 3 specialty_bulletaccuracy
+setPlayerData customClasses 4 perks 4 specialty_painkiller
+setPlayerData customClasses 4 specialGrenade flash_grenade
+
+// 6. Shotgun Blitz: close range: rapid MP5K, akimbo 1887s as backup
+setPlayerData customClasses 5 name "Shotgun Blitz"
+setPlayerData customClasses 5 weaponSetups 0 weapon mp5k
+setPlayerData customClasses 5 weaponSetups 0 attachment 0 rof
+setPlayerData customClasses 5 weaponSetups 0 attachment 1 none
+setPlayerData customClasses 5 weaponSetups 1 weapon model1887
+setPlayerData customClasses 5 weaponSetups 1 attachment 0 akimbo
+setPlayerData customClasses 5 weaponSetups 1 attachment 1 none
+setPlayerData customClasses 5 perks 0 semtex_mp
+setPlayerData customClasses 5 perks 1 specialty_marathon
+setPlayerData customClasses 5 perks 2 specialty_lightweight
+setPlayerData customClasses 5 perks 3 specialty_extendedmelee
+setPlayerData customClasses 5 perks 4 specialty_painkiller
+setPlayerData customClasses 5 specialGrenade flash_grenade
+
+// 7. P90 Ninja: huge magazine, silent, killstreaks one kill earlier
+setPlayerData customClasses 6 name "P90 Ninja"
+setPlayerData customClasses 6 weaponSetups 0 weapon p90
+setPlayerData customClasses 6 weaponSetups 0 attachment 0 silencer
+setPlayerData customClasses 6 weaponSetups 0 attachment 1 none
+setPlayerData customClasses 6 weaponSetups 1 weapon pp2000
+setPlayerData customClasses 6 weaponSetups 1 attachment 0 none
+setPlayerData customClasses 6 weaponSetups 1 attachment 1 none
+setPlayerData customClasses 6 perks 0 throwingknife_mp
+setPlayerData customClasses 6 perks 1 specialty_marathon
+setPlayerData customClasses 6 perks 2 specialty_hardline
+setPlayerData customClasses 6 perks 3 specialty_heartbreaker
+setPlayerData customClasses 6 perks 4 specialty_copycat
+setPlayerData customClasses 6 specialGrenade flash_grenade
+
+// 8. TAR Sprinter: fast-handling TAR-21, AA-12 for rooms, never runs out of ammo
+setPlayerData customClasses 7 name "TAR Sprinter"
+setPlayerData customClasses 7 weaponSetups 0 weapon tavor
+setPlayerData customClasses 7 weaponSetups 0 attachment 0 reflex
+setPlayerData customClasses 7 weaponSetups 0 attachment 1 none
+setPlayerData customClasses 7 weaponSetups 1 weapon aa12
+setPlayerData customClasses 7 weaponSetups 1 attachment 0 grip
+setPlayerData customClasses 7 weaponSetups 1 attachment 1 none
+setPlayerData customClasses 7 perks 0 semtex_mp
+setPlayerData customClasses 7 perks 1 specialty_scavenger
+setPlayerData customClasses 7 perks 2 specialty_lightweight
+setPlayerData customClasses 7 perks 3 specialty_extendedmelee
+setPlayerData customClasses 7 perks 4 specialty_painkiller
+setPlayerData customClasses 7 specialGrenade flash_grenade
+
+// 9. M4 Stopper: all-round M4 with Stopping Power
+setPlayerData customClasses 8 name "M4 Stopper"
+setPlayerData customClasses 8 weaponSetups 0 weapon m4
+setPlayerData customClasses 8 weaponSetups 0 attachment 0 reflex
+setPlayerData customClasses 8 weaponSetups 0 attachment 1 none
+setPlayerData customClasses 8 weaponSetups 1 weapon usp
+setPlayerData customClasses 8 weaponSetups 1 attachment 0 tactical
+setPlayerData customClasses 8 weaponSetups 1 attachment 1 none
+setPlayerData customClasses 8 perks 0 frag_grenade_mp
+setPlayerData customClasses 8 perks 1 specialty_marathon
+setPlayerData customClasses 8 perks 2 specialty_bulletdamage
+setPlayerData customClasses 8 perks 3 specialty_extendedmelee
+setPlayerData customClasses 8 perks 4 specialty_painkiller
+setPlayerData customClasses 8 specialGrenade flash_grenade
+
+// 10. S&D Stealth: one life, so stay off the radar: silent SCAR, claymore to guard the bomb, smoke to plant/defuse
+setPlayerData customClasses 9 name "S&D Stealth"
+setPlayerData customClasses 9 weaponSetups 0 weapon scar
+setPlayerData customClasses 9 weaponSetups 0 attachment 0 silencer
+setPlayerData customClasses 9 weaponSetups 0 attachment 1 none
+setPlayerData customClasses 9 weaponSetups 1 weapon usp
+setPlayerData customClasses 9 weaponSetups 1 attachment 0 tactical
+setPlayerData customClasses 9 weaponSetups 1 attachment 1 none
+setPlayerData customClasses 9 perks 0 claymore_mp
+setPlayerData customClasses 9 perks 1 specialty_fastreload
+setPlayerData customClasses 9 perks 2 specialty_coldblooded
+setPlayerData customClasses 9 perks 3 specialty_heartbreaker
+setPlayerData customClasses 9 perks 4 specialty_null
+setPlayerData customClasses 9 specialGrenade smoke_grenade
+
+say "Loaded 10 custom classes"
+'@
+# END classes.cfg
+Set-Content -Path (Join-Path $game "main\classes.cfg") -Value $ClassesCfg -Encoding ascii
+Ok "ready-made classes installed (press F9 at the main menu to load them)"
 
 # ---------------------------------------------------------------- custom maps + bots
 # Separate pack, also installable on its own with install-maps.ps1. The local copy is
