@@ -24,6 +24,7 @@
   <symbol id="i-term" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m7 9 3 3-3 3M12 15h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
   <symbol id="i-bot" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 8V4M9 13h.01M15 13h.01M2 13v2M22 13v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
   <symbol id="i-send" viewBox="0 0 24 24"><path d="M4 12 20 4l-6 16-3-7z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
 </svg>
 
@@ -69,6 +70,14 @@
           <label class="lbl">Skill<select id="bots_skill" class="inp"></select></label>
         </div>
         <p class="text-[11px] text-slate-400 mt-1">0 = no bots. "players + bots" keeps the server at that many players, removing bots as people join.</p>
+      </div>
+      <div>
+        <span class="text-xs font-medium text-slate-600 flex items-center gap-1 mb-1.5"><svg class="w-3.5 h-3.5"><use href="#i-mic"/></svg>Voice chat</span>
+        <div class="grid grid-cols-3 gap-3 items-end">
+          <label class="flex items-center gap-2 text-xs pb-1.5"><input id="voice" type="checkbox" class="accent-sky-600">Voice on</label>
+          <label class="lbl">Who hears whom<select id="alltalk" class="inp"><option value="0">own team only</option><option value="1">everyone (all talk)</option></select></label>
+          <label class="flex items-center gap-2 text-xs pb-1.5"><input id="deadchat" type="checkbox" class="accent-sky-600">Dead can talk to living</label>
+        </div>
       </div>
       <div class="flex gap-2 pt-1">
         <button onclick="save(false)" class="btn bg-slate-100 hover:bg-slate-200"><svg class="w-3.5 h-3.5"><use href="#i-save"/></svg>Save</button>
@@ -149,6 +158,7 @@ function fillForm(c) {
   $('bots_skill').innerHTML = Object.entries(S.bot_skills).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
   for (const k of ['hostname','password','rcon_password','maxclients','scorelimit','timelimit','bots_fill','bots_fill_mode','bots_skill']) $(k).value = c[k];
   $('lan_only').checked = c.lan_only;
+  $('voice').checked = c.voice; $('alltalk').value = c.alltalk ? '1' : '0'; $('deadchat').checked = c.deadchat;
   const tag = m => m.custom ? ' <span class="text-[10px] text-violet-500 bg-violet-50 px-1 rounded">custom</span>' : '';
   const opts = Object.entries(S.gametypes).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
   $('gametype').innerHTML = opts; $('gametype').value = c.gametype;
@@ -246,6 +256,7 @@ async function save(restart) {
   const body = {
     hostname: $('hostname').value, password: $('password').value, rcon_password: $('rcon_password').value,
     maxclients: +$('maxclients').value, lan_only: $('lan_only').checked, gametype: $('gametype').value,
+    voice: $('voice').checked, alltalk: $('alltalk').value === '1', deadchat: $('deadchat').checked,
     scorelimit: $('scorelimit').value, timelimit: $('timelimit').value,
     bots_fill: +$('bots_fill').value, bots_fill_mode: $('bots_fill_mode').value, bots_skill: $('bots_skill').value,
     maps: S.maps.map(m => m.id).filter(id => sel.has(id)),

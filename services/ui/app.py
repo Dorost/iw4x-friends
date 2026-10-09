@@ -213,6 +213,9 @@ def config_view() -> dict:
         "bots_fill": int(v.get("bots_manage_fill", "0")),
         "bots_fill_mode": v.get("bots_manage_fill_mode", "0"),
         "bots_skill": v.get("bots_skill", "0"),
+        "voice": v.get("sv_voice", "1") == "1",
+        "alltalk": v.get("sv_alltalk", "0") == "1",
+        "deadchat": v.get("g_deadChat", "0") == "1",
     }
 
 
@@ -228,6 +231,9 @@ class Config(BaseModel):
     maps: list[str]
     bots_fill: int
     bots_fill_mode: str
+    voice: bool = True
+    alltalk: bool = False
+    deadchat: bool = False
     bots_skill: str
 
 
@@ -257,6 +263,9 @@ def write_cfg(c: Config) -> None:
         "bots_manage_fill": str(max(0, min(c.bots_fill, 17))),
         "bots_manage_fill_mode": c.bots_fill_mode,
         "bots_skill": c.bots_skill,
+        "sv_voice": "1" if c.voice else "0",          # voice chat on/off
+        "sv_alltalk": "1" if c.alltalk else "0",      # 1: everyone hears everyone, 0: own team only
+        "g_deadChat": "1" if c.deadchat else "0",     # dead players can talk to the living
     })
     for key, val in ((f"scr_{c.gametype}_scorelimit", c.scorelimit),
                      (f"scr_{c.gametype}_timelimit", c.timelimit)):
