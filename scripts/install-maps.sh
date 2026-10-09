@@ -45,17 +45,18 @@ fi
 
 step "Custom maps + bots pack (~1 GB)"
 
+# already installed: done, without contacting Google Drive (use --force to reinstall)
+if (( ! FORCE )) && [[ -f "$DIR/$MARK" ]]; then
+  ok "already installed"
+  exit 0
+fi
+
 # Drive answers with an HTML page instead of the file when its daily download quota is used up
 head=$(curl -sIL --max-time 20 "$DRIVE_URL" || true)
 remote_size=$(awk 'tolower($1)=="content-length:" {s=$2} END {gsub("\r","",s); print s}' <<< "$head")
 blocked=0
 if grep -qi '^content-type: text/html' <<< "$head" || [[ "$remote_size" == "0" ]]; then
   blocked=1 remote_size=""
-fi
-
-if (( ! FORCE )) && [[ -f "$DIR/$MARK" ]] && { [[ -z "$remote_size" ]] || [[ "$(cat "$DIR/$MARK")" == "$remote_size" ]]; }; then
-  ok "already installed"
-  exit 0
 fi
 
 if [[ -z "$ZIP" ]]; then

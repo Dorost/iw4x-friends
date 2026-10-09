@@ -33,17 +33,18 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 Write-Host "`n==> Custom maps + bots pack (~1 GB)" -ForegroundColor Cyan
 if (-not (Test-Path (Join-Path $InstallDir "iw4x.exe"))) { Die "no MW2 + IW4x install found in: $InstallDir" }
 
+# already installed: done, without contacting Google Drive (use -Force to reinstall)
+if (-not $Force -and (Test-Path $Mark)) {
+    Ok "already installed"
+    return
+}
+
 # Drive answers with an HTML page instead of the file when its daily download quota is used up
 $head = (& curl.exe -sIL --max-time 20 $DriveUrl) -join "`n"
 $lengths = [regex]::Matches($head, '(?im)^content-length:\s*(\d+)')
 $remoteSize = if ($lengths.Count) { $lengths[$lengths.Count - 1].Groups[1].Value } else { "" }
 $blocked = ($head -match '(?im)^content-type:\s*text/html') -or ($remoteSize -eq "0")
 if ($blocked) { $remoteSize = "" }
-
-if (-not $Force -and (Test-Path $Mark) -and (-not $remoteSize -or (Get-Content $Mark) -eq $remoteSize)) {
-    Ok "already installed"
-    return
-}
 
 $download = Join-Path $HOME "Downloads\$ZipName"
 if (-not $Zip) {
