@@ -20,7 +20,12 @@ jobs:
       - name: Shell scripts parse
         run: |
           sudo apt-get install -y -qq zsh
-          for f in scripts/*.sh; do zsh -n "$f" && echo "ok $f"; done
+          for f in scripts/*.sh; do
+            if head -1 "$f" | grep -q bash; then bash -n "$f"; else zsh -n "$f"; fi && echo "ok $f"
+          done
+
+      - name: Docker compose config valid
+        run: DOMAIN=example.com UI_PASSWORD=x docker compose config -q
 
       - name: PowerShell scripts parse
         shell: pwsh

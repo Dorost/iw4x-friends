@@ -1,0 +1,27 @@
+# Linux / VPS: dedicated server + web UI, with Caddy serving the UI over HTTPS.
+# Host networking: no Docker NAT on the game's UDP traffic (lower latency, and
+# the server sees real player addresses).
+services:
+  server:
+    build: services/ui
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      IW4X_SERVER_DIR: /game
+      IW4X_PORT: ${IW4X_PORT:-28960}
+      UI_PORT: ${UI_PORT:-8080}
+      UI_HOST: 127.0.0.1 # only reachable through Caddy
+      UI_PASSWORD: ${UI_PASSWORD:?set UI_PASSWORD in .env}
+    volumes:
+      - ./game:/game
+
+  caddy:
+    image: caddy:2.8.4
+    network_mode: host
+    restart: unless-stopped
+    command: caddy reverse-proxy --from ${DOMAIN:?set DOMAIN in .env} --to 127.0.0.1:${UI_PORT:-8080}
+    volumes:
+      - caddy-data:/data
+
+volumes:
+  caddy-data:

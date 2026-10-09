@@ -20,11 +20,23 @@ tasks:
       - cmd: '{{.PS}} scripts/windows/start-server.ps1'
         platforms: [windows]
 
+  up:
+    desc: "Linux: start the server, web UI and Caddy (HTTPS) in Docker"
+    platforms: [linux]
+    cmds:
+      - docker compose up -d --build
+
+  down:
+    desc: "Linux: stop the Docker services"
+    platforms: [linux]
+    cmds:
+      - docker compose down
+
   stop:
     desc: Stop the dedicated server
     cmds:
-      - cmd: curl -sf -u ":${UI_PASSWORD}" -X POST localhost:${UI_PORT:-8080}/api/server/stop || pkill -f "^C:.*iw4x.exe -dedicated" || true
-        platforms: [darwin]
+      - cmd: curl -sf -u ":${UI_PASSWORD}" -X POST localhost:${UI_PORT:-8080}/api/server/stop || pkill -f "^[A-Z]:.*iw4x.exe -dedicated" || true
+        platforms: [darwin, linux]
       - cmd: 'powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name = ''iw4x.exe''\" | Where-Object CommandLine -match ''-dedicated'' | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"'
         platforms: [windows]
 
@@ -61,12 +73,14 @@ tasks:
         platforms: [windows]
 
   setup:
-    desc: Set up this machine (game + config; CrossOver on macOS). Pass options after --, e.g. task setup -- --force
+    desc: Set up this machine (game + config; CrossOver on macOS, Docker on Linux). Pass options after --, e.g. task setup -- --force
     cmds:
       - cmd: ./scripts/setup-mac.sh {{.CLI_ARGS}}
         platforms: [darwin]
       - cmd: '{{.PS}} scripts/setup-windows.ps1 {{.CLI_ARGS}}'
         platforms: [windows]
+      - cmd: bash scripts/setup-linux.sh {{.CLI_ARGS}}
+        platforms: [linux]
 
   sync-config:
     desc: Copy config/client.cfg into the standalone setup scripts

@@ -1,0 +1,192 @@
+#!/usr/bin/env bash
+# Set up a Linux machine (e.g. a VPS) to host the IW4x server with Docker:
+#   1. installs Docker and unzip (if missing)
+#   2. downloads the prepared game package (mw.zip) from Google Drive
+#   3. extracts only the MW2 game folder into game/
+#   4. installs a public server.cfg with a random rcon password
+#   5. fills in .env (domain for the web UI, UI password)
+#   6. opens the firewall (ufw) for the game and the web UI
+#
+# Run from the repo:   task setup     (or: bash scripts/setup-linux.sh)
+# Safe to re-run: every step skips what is already done, and an interrupted
+# download resumes where it stopped.
+# Options:
+#   --zip <path>   use this mw.zip (otherwise it looks for mw.zip in the repo and ~)
+#   --keep-zip     keep mw.zip after installing (default: delete it if this script downloaded it)
+
+set -euo pipefail
+
+DRIVE_ID="REDACTED"
+DRIVE_URL="https://drive.usercontent.google.com/download?id=${DRIVE_ID}&export=download&confirm=t"
+GAME_REL="drive_c/Program Files (x86)/Call of Duty Modern Warfare 2"
+
+cd "$(dirname "$0")/.."
+REPO="$PWD"
+GAME="$REPO/game"
+DOWNLOAD_ZIP="$REPO/mw.zip"
+
+KEEP_ZIP=0 ZIP=""
+while (( $# )); do
+  case "$1" in
+    --keep-zip) KEEP_ZIP=1 ;;
+    --zip) ZIP="$2"; KEEP_ZIP=1; shift ;;
+    *) echo "unknown option: $1"; exit 1 ;;
+  esac
+  shift
+done
+
+step() { printf '\n\033[36m==> %s\033[0m\n' "$1"; }
+ok()   { printf '    \033[32m✓\033[0m %s\n' "$1"; }
+warn() { printf '    \033[33m!\033[0m %s\n' "$1"; }
+die()  { printf '    \033[31m✗ %s\033[0m\n' "$1"; exit 1; }
+
+SUDO=""; (( EUID )) && SUDO="sudo"
+size_of() { [[ -f "$1" ]] && stat -c%s "$1" || echo 0; }
+free_gb() { echo $(( $(df -Pk "$1" | awk 'NR==2 {print $4}') / 1024 / 1024 )); }
+random() { tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "$1"; }
+
+# set KEY=value in .env, appending it if missing
+setenv() {
+  if grep -q "^$1=" .env; then sed -i "s|^$1=.*|$1=$2|" .env; else echo "$1=$2" >> .env; fi
+}
+
+# ---------------------------------------------------------------- packages
+step "Checking this machine"
+[[ "$(uname)" == "Linux" ]] || die "this script is for Linux"
+[[ "$(uname -m)" == "x86_64" ]] || die "needs an x86_64 machine (Wine runs the 32-bit Windows server)"
+
+if command -v docker >/dev/null && docker compose version >/dev/null 2>&1; then
+  ok "Docker installed"
+else
+  warn "installing Docker (official get.docker.com script)"
+  curl -fsSL https://get.docker.com | $SUDO sh
+  if (( EUID )); then
+    $SUDO usermod -aG docker "$USER"
+    warn "added $USER to the docker group: log out and back in before 'task up'"
+  fi
+  ok "Docker installed"
+fi
+if ! command -v unzip >/dev/null; then
+  command -v apt-get >/dev/null || die "install unzip and re-run"
+  $SUDO apt-get install -y -qq unzip
+fi
+ok "unzip installed"
+
+# ---------------------------------------------------------------- game files
+step "Game folder"
+if [[ -f "$GAME/iw4x.exe" ]]; then
+  ok "already installed in $GAME"
+else
+  # Drive answers with an HTML page instead of the file when the share's download
+  # quota is used up ("Quota exceeded") or the link stopped working
+  head=$(curl -sIL --max-time 20 "$DRIVE_URL" || true)
+  remote_size=$(awk 'tolower($1)=="content-length:" {s=$2} END {gsub("\r","",s); print s}' <<< "$head")
+  drive_blocked=0
+  if grep -qi '^content-type: text/html' <<< "$head" || [[ "$remote_size" == "0" ]]; then
+    drive_blocked=1 remote_size=""
+  fi
+
+  if [[ -z "$ZIP" ]]; then
+    # reuse a complete copy if one is lying around
+    for candidate in "$DOWNLOAD_ZIP" "$HOME/mw.zip"; do
+      [[ -f "$candidate" ]] || continue
+      if { [[ -n "$remote_size" && "$(size_of "$candidate")" == "$remote_size" ]]; } \
+         || { [[ -z "$remote_size" ]] && unzip -l "$candidate" >/dev/null 2>&1; }; then
+        ZIP="$candidate"
+        [[ "$candidate" == "$DOWNLOAD_ZIP" ]] || KEEP_ZIP=1   # never delete a copy we didn't download
+        break
+      fi
+    done
+  fi
+
+  if [[ -n "$ZIP" ]]; then
+    [[ -f "$ZIP" ]] || die "zip not found: $ZIP"
+    ok "using existing $ZIP"
+  else
+    ZIP="$DOWNLOAD_ZIP"
+    # a partial file that is really an HTML error page can't be resumed
+    [[ -f "$ZIP" ]] && [[ "$(head -c 1 "$ZIP")" == "<" ]] && rm -f "$ZIP"
+    if (( drive_blocked )); then
+      die "Google Drive refused the download (usually 'Quota exceeded': too many downloads of this file today).
+      Try again later, or download mw.zip elsewhere while logged in to Google
+      (https://drive.google.com/file/d/$DRIVE_ID/view), copy it to $DOWNLOAD_ZIP and re-run."
+    elif [[ -z "$remote_size" ]]; then
+      die "can't reach Google Drive and no mw.zip found. Check the connection, or pass --zip <path>."
+    fi
+    have=$(size_of "$ZIP")
+    need_gb=$(( (remote_size - have) / 1024 / 1024 / 1024 + 18 ))   # rest of download + game folder
+    (( $(free_gb "$REPO") >= need_gb )) || die "need about ${need_gb} GB free disk space, only $(free_gb "$REPO") GB available"
+    (( have > 0 )) && echo "    Resuming download ($(( have / 1024 / 1024 )) MB of $(( remote_size / 1024 / 1024 )) MB done)" \
+                   || echo "    Downloading to $ZIP"
+    echo "    (if it stops, just re-run the script and it continues)"
+    curl -fL -C - --retry 5 --retry-delay 5 --progress-bar "$DRIVE_URL" -o "$ZIP"
+    [[ "$(size_of "$ZIP")" == "$remote_size" ]] || die "download incomplete, re-run to resume"
+    ok "downloaded"
+  fi
+
+  # The zip holds a whole CrossOver bottle; only the MW2 folder inside it is needed.
+  # Extract next to the target, then rename: game/ only appears once it's complete.
+  echo "    Extracting the game folder (takes a few minutes)..."
+  tmp="$REPO/.setup-tmp"
+  rm -rf "$tmp"
+  trap 'rm -rf "$tmp"' EXIT
+  unzip -q "$ZIP" "*/$GAME_REL/*" -d "$tmp" || die "zip does not contain the MW2 game folder"
+  src=$(find "$tmp" -mindepth 1 -maxdepth 1 -type d | head -1)
+  [[ -f "$src/$GAME_REL/iw4x.exe" ]] || die "zip does not contain the MW2 game folder"
+  mv "$src/$GAME_REL" "$GAME"
+  rm -rf "$tmp" "$GAME/players"   # players/: the copied client profile, a server doesn't need it
+  ok "installed to $GAME"
+  (( KEEP_ZIP )) || { rm -f "$ZIP"; ok "removed mw.zip"; }
+fi
+
+# ---------------------------------------------------------------- server.cfg
+step "Server config"
+cfg="$GAME/main/server.cfg"
+if [[ -f "$cfg" ]]; then
+  ok "exists, not touching: $cfg"
+else
+  # public server: listed outside the LAN, and an rcon password nobody can guess,
+  # since rcon goes over the public game port
+  sed -e 's|^set sv_lanOnly .*|set sv_lanOnly "0"|' \
+      -e "s|^set rcon_password .*|set rcon_password \"$(random 20)\"|" \
+      server.cfg.example > "$cfg"
+  ok "installed $cfg (public, random rcon password)"
+fi
+
+# ---------------------------------------------------------------- .env
+step "Settings (.env)"
+[[ -f .env ]] || cp .env.example .env
+set -a; . ./.env; set +a
+if [[ -z "${DOMAIN:-}" ]]; then
+  echo "    The web UI is served over HTTPS on a domain (Caddy gets the certificate)."
+  echo "    Point an A record at this machine's public IP first."
+  read -rp "    Domain for the web UI (e.g. iw4x.example.com): " DOMAIN
+  [[ -n "$DOMAIN" ]] || die "a domain is needed for the web UI"
+  setenv DOMAIN "$DOMAIN"
+fi
+ok "web UI domain: $DOMAIN"
+if [[ -z "${UI_PASSWORD:-}" ]]; then
+  UI_PASSWORD=$(random 16)
+  setenv UI_PASSWORD "$UI_PASSWORD"
+  ok "web UI password generated: $UI_PASSWORD (any username, change it in .env)"
+else
+  ok "web UI password set"
+fi
+
+# ---------------------------------------------------------------- firewall
+step "Firewall"
+port="${IW4X_PORT:-28960}"
+if command -v ufw >/dev/null && $SUDO ufw status | grep -q "Status: active"; then
+  $SUDO ufw allow "$port/udp" >/dev/null
+  $SUDO ufw allow 80/tcp >/dev/null
+  $SUDO ufw allow 443/tcp >/dev/null
+  ok "ufw: opened $port/udp (game), 80 and 443/tcp (web UI)"
+else
+  ok "no active ufw"
+fi
+warn "if your provider has its own firewall (security group), open $port/udp and 80, 443/tcp there too"
+
+step "Done"
+echo "    Start it:   task up"
+echo "    Web UI:     https://$DOMAIN"
+echo "    Players:    connect $(curl -s --max-time 5 https://api.ipify.org || echo '<server-ip>'):$port"

@@ -26,11 +26,15 @@ from PIL import Image
 from pydantic import BaseModel
 
 IS_WINDOWS = sys.platform == "win32"
+IS_LINUX = sys.platform.startswith("linux")
 # macOS: the server runs inside a CrossOver bottle (IW4X_BOTTLE is the older name of
 # IW4X_SERVER_BOTTLE). Windows: it runs natively from the game folder.
+# Linux: plain Wine (WINEPREFIX from the environment), game folder in game/ of the repo.
 BOTTLE = os.environ.get("IW4X_SERVER_BOTTLE") or os.environ.get("IW4X_BOTTLE", "mw")
 if IS_WINDOWS:
     DEFAULT_GAME_DIR = Path(r"C:\Games\Call of Duty Modern Warfare 2")
+elif IS_LINUX:
+    DEFAULT_GAME_DIR = Path(__file__).resolve().parents[2] / "game"
 else:
     DEFAULT_GAME_DIR = (Path.home() / "Library/Application Support/CrossOver/Bottles" / BOTTLE
                         / "drive_c/Program Files (x86)/Call of Duty Modern Warfare 2")
@@ -38,9 +42,10 @@ GAME_DIR = Path(os.environ.get("IW4X_SERVER_DIR", DEFAULT_GAME_DIR))
 CFG = GAME_DIR / "main" / "server.cfg"
 LOG = Path(__file__).resolve().parent / "server.log"
 THUMBS = Path(__file__).resolve().parent / "thumbs"
-WINE = os.environ.get("WINE", "/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wine")
+WINE = os.environ.get("WINE", "wine" if IS_LINUX else "/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wine")
 PORT = int(os.environ.get("IW4X_PORT", "28960"))
 UI_PORT = int(os.environ.get("UI_PORT", "8080"))
+UI_HOST = os.environ.get("UI_HOST", "0.0.0.0")
 UI_PASSWORD = os.environ.get("UI_PASSWORD", "")
 
 GAMETYPE_NAMES = {
@@ -265,7 +270,8 @@ def write_cfg(c: Config) -> None:
 # ---------- process control ----------
 
 def server_procs() -> list[psutil.Process]:
-    """The dedicated server (and on macOS its wine wrapper); never shells that merely mention it."""
+    """The dedicated server (and on macOS its wine wrapper); never shells that merely mention it.
+    Under Wine the server's command line starts with its Windows path (C:\\... or Z:\\...)."""
     found = []
     for proc in psutil.process_iter(["name", "cmdline"]):
         try:
@@ -277,7 +283,7 @@ def server_procs() -> list[psutil.Process]:
         if IS_WINDOWS:
             real = (proc.info["name"] or "").lower() == "iw4x.exe"
         else:
-            real = cmd.startswith("C:\\") or "winewrapper" in cmd
+            real = bool(re.match(r"[A-Z]:\\", cmd)) or "winewrapper" in cmd
         if real:
             found.append(proc)
     return found
@@ -294,6 +300,9 @@ def start_server() -> None:
     if IS_WINDOWS:
         cmd = [str(GAME_DIR / "iw4x.exe"), *args]
         detach = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS}
+    elif IS_LINUX:
+        cmd = [WINE, "iw4x.exe", *args]
+        detach = {"start_new_session": True}
     else:
         cmd = [WINE, "--bottle", BOTTLE, "--cx-app", "iw4x.exe", *args]
         detach = {"start_new_session": True}
@@ -489,4 +498,4 @@ def index():
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=UI_PORT)
+    uvicorn.run(app, host=UI_HOST, port=UI_PORT)
