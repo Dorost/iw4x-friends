@@ -280,6 +280,12 @@ seta snd_enableReverb "0"
 seta r_glow_allowed_script_forced "0"
 seta r_blur "0"
 seta r_filmUseTweaks "0"
+
+// sound: game effects a bit quieter, voices louder. There's no setting for the
+// volume of other players' voices, so everyone boosts their own microphone instead
+seta snd_volume "0.6"
+seta winvoice_mic_scaler "2"
+seta winvoice_mic_reclevel "65535"
 '@
 # END client.cfg
 Set-Content -Path (Join-Path $game "main\client_tweaks.cfg") -Value $ClientCfg -Encoding ascii
