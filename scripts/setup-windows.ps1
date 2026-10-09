@@ -18,6 +18,9 @@ download resumes where it stopped.
 
 Options:
   -InstallDir <path>  where to install (default: C:\Games\Call of Duty Modern Warfare 2)
+  -GameUrl <link>     download link of mw.zip (a Google Drive share link works); also
+                      MW_GAME_URL. Asked for when a download is needed and it's not given
+  -MapsUrl <link>     same for the custom maps + bots pack (MW_MAPS_URL)
   -Zip <path>         use this mw.zip (otherwise it looks in Downloads and the current folder)
   -KeepZip            keep mw.zip after installing (default: delete it if this script downloaded it)
   -Force              reinstall even if the folder exists (old one is renamed, not deleted)
@@ -25,6 +28,8 @@ Options:
 param(
     [string]$InstallDir = "C:\Games\Call of Duty Modern Warfare 2",
     [string]$Zip = "",
+    [string]$GameUrl = $env:MW_GAME_URL,
+    [string]$MapsUrl = $env:MW_MAPS_URL,
     [switch]$KeepZip,
     [switch]$Force
 )
@@ -32,8 +37,6 @@ param(
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
-$DriveId = "REDACTED"
-$DriveUrl = "https://drive.usercontent.google.com/download?id=$DriveId&export=download&confirm=t"
 $DxUrl = "https://download.microsoft.com/download/1/7/1/1718CCC4-6315-4D8E-9543-8E28A4E18C4C/dxwebsetup.exe"
 $GamePrefix = "drive_c/Program Files (x86)/Call of Duty Modern Warfare 2/"
 $DownloadZip = Join-Path $HOME "Downloads\mw.zip"
@@ -50,6 +53,35 @@ function FreeGB($path) {
     $root = [IO.Path]::GetPathRoot([IO.Path]::GetFullPath($path))
     [math]::Floor((Get-PSDrive -Name $root.Substring(0, 1)).Free / 1GB)
 }
+
+# A Google Drive share link becomes its direct download URL; other links are used as-is.
+function Get-DownloadUrl($link) {
+    if ($link -match '/d/([A-Za-z0-9_-]{20,})' -or $link -match '[?&]id=([A-Za-z0-9_-]{20,})') {
+        return "https://drive.usercontent.google.com/download?id=$($Matches[1])&export=download&confirm=t"
+    }
+    return $link
+}
+
+# Size of the file behind $url, or "" when the server answers with a web page instead
+# (Google Drive does that when its daily quota is used up or the link isn't shared).
+function Get-RemoteSize($url) {
+    $head = (& curl.exe -sIL --max-time 20 $url) -join "`n"
+    if ($head -match '(?im)^content-type:\s*text/html') { return "" }
+    $lengths = [regex]::Matches($head, '(?im)^content-length:\s*(\d+)')
+    if ($lengths.Count -and $lengths[$lengths.Count - 1].Groups[1].Value -ne "0") { return $lengths[$lengths.Count - 1].Groups[1].Value }
+    return ""
+}
+
+function Remove-HtmlPartial($path) {
+    if ((Test-Path $path) -and (Get-Item $path).Length -gt 0) {
+        $fs = [IO.File]::OpenRead($path); $first = $fs.ReadByte(); $fs.Dispose()
+        if ($first -eq 60) { Remove-Item $path }   # "<": an error page, not the zip
+    }
+}
+
+$Refused = ("the download was refused. With Google Drive that's usually 'Quota exceeded'`n" +
+            "      (too many downloads today), or the link isn't shared. Try again later, or open`n" +
+            "      the link in a browser, save the file to your Downloads folder and run this again.")
 
 # A zip whose central directory can be read is complete; a partial download isn't.
 function Test-ZipComplete($path) {
@@ -90,19 +122,10 @@ if ((Test-Path $InstallDir) -and -not $Force) {
 if (-not $Installed) {
     # -------------------------------------------------------------- download
     Step "Game package (mw.zip, ~16 GB)"
-    # Drive answers with an HTML page instead of the file when the share's download
-    # quota is used up ("Quota exceeded") or the link stopped working
-    $head = (& curl.exe -sIL --max-time 20 $DriveUrl) -join "`n"
-    $lengths = [regex]::Matches($head, '(?im)^content-length:\s*(\d+)')
-    $remoteSize = if ($lengths.Count) { $lengths[$lengths.Count - 1].Groups[1].Value } else { "" }
-    $driveBlocked = ($head -match '(?im)^content-type:\s*text/html') -or ($remoteSize -eq "0")
-    if ($driveBlocked) { $remoteSize = "" }
-
     if (-not $Zip) {
+        # reuse a complete copy if one is lying around (a partial download has no zip index yet)
         foreach ($candidate in @($DownloadZip, (Join-Path $PWD "mw.zip"))) {
-            if (-not (Test-Path $candidate)) { continue }
-            $size = (Get-Item $candidate).Length
-            if (($remoteSize -and "$size" -eq $remoteSize) -or (-not $remoteSize -and (Test-ZipComplete $candidate))) {
+            if ((Test-Path $candidate) -and (Test-ZipComplete $candidate)) {
                 $Zip = $candidate
                 if ($candidate -ne $DownloadZip) { $KeepZip = $true }   # never delete a copy we didn't download
                 break
@@ -112,37 +135,30 @@ if (-not $Installed) {
         $KeepZip = $true
     }
 
+    # a file path works too (drag mw.zip into the PowerShell window)
+    if (-not $Zip -and -not $GameUrl) { $GameUrl = (Read-Host "    Paste the game download link, or the path to mw.zip").Trim().Trim('"') }
+    if (-not $Zip -and $GameUrl -and (Test-Path -LiteralPath $GameUrl -PathType Leaf)) { $Zip = $GameUrl; $KeepZip = $true }
+
     if ($Zip) {
         if (-not (Test-Path $Zip)) { Die "zip not found: $Zip" }
         Ok "using existing $Zip"
     } else {
+        if (-not $GameUrl) { Die "no download link given. Pass -GameUrl <link>, or put mw.zip in your Downloads folder" }
+        $url = Get-DownloadUrl $GameUrl
+        $remoteSize = Get-RemoteSize $url
+        if (-not $remoteSize) { Die $Refused }
         $Zip = $DownloadZip
-        # a partial file that is really an HTML error page can't be resumed
-        if ((Test-Path $Zip) -and (Get-Item $Zip).Length -gt 0) {
-            $fs = [IO.File]::OpenRead($Zip); $first = $fs.ReadByte(); $fs.Dispose()
-            if ($first -eq 60) { Remove-Item $Zip }   # "<"
-        }
-        if ($driveBlocked) {
-            Die ("Google Drive refused the download (usually 'Quota exceeded': too many downloads of this file today).`n" +
-                 "      Try again later, or open this link in a browser while logged in to Google,`n" +
-                 "      save mw.zip to your Downloads folder and re-run this script (it picks it up automatically):`n" +
-                 "      https://drive.google.com/file/d/$DriveId/view")
-        }
-        if (-not $remoteSize) {
-            if (-not (Test-Path $Zip)) { Die "can't reach Google Drive and no mw.zip found. Check the connection, or pass -Zip <path>." }
-            Warn "can't reach Google Drive to check the size, using $Zip as is"
-        } else {
-            $have = if (Test-Path $Zip) { (Get-Item $Zip).Length } else { 0 }
-            $needGB = [math]::Ceiling(([int64]$remoteSize - $have) / 1GB) + 18
-            if ((FreeGB $Zip) -lt $needGB) { Die "need about $needGB GB free on $([IO.Path]::GetPathRoot($Zip)), only $(FreeGB $Zip) GB available" }
-            if ($have -gt 0) { Write-Host "    Resuming download ($([math]::Floor($have / 1MB)) MB of $([math]::Floor([int64]$remoteSize / 1MB)) MB done)" }
-            else { Write-Host "    Downloading to $Zip" }
-            Write-Host "    (if it stops, just re-run the script and it continues)"
-            New-Item -ItemType Directory -Force -Path (Split-Path $Zip) | Out-Null
-            & curl.exe -fL -C - --retry 5 --retry-delay 5 --progress-bar -o $Zip $DriveUrl
-            if ("$((Get-Item $Zip).Length)" -ne $remoteSize) { Die "download incomplete, re-run to resume" }
-            Ok "downloaded"
-        }
+        Remove-HtmlPartial $Zip
+        $have = if (Test-Path $Zip) { (Get-Item $Zip).Length } else { 0 }
+        $needGB = [math]::Ceiling(([int64]$remoteSize - $have) / 1GB) + 18
+        if ((FreeGB $Zip) -lt $needGB) { Die "need about $needGB GB free on $([IO.Path]::GetPathRoot($Zip)), only $(FreeGB $Zip) GB available" }
+        if ($have -gt 0) { Write-Host "    Resuming download ($([math]::Floor($have / 1MB)) MB of $([math]::Floor([int64]$remoteSize / 1MB)) MB done)" }
+        else { Write-Host "    Downloading to $Zip" }
+        Write-Host "    (if it stops, just re-run the script and it continues)"
+        New-Item -ItemType Directory -Force -Path (Split-Path $Zip) | Out-Null
+        & curl.exe -fL -C - --retry 5 --retry-delay 5 --progress-bar -o $Zip $url
+        if ("$((Get-Item $Zip).Length)" -ne $remoteSize) { Die "download incomplete, re-run to resume" }
+        Ok "downloaded"
     }
 
     # -------------------------------------------------------------- install game folder
@@ -296,8 +312,8 @@ Ok "game settings installed (lowest graphics, no FPS drops when hit)"
 # used when running from the repo, otherwise it's fetched from GitHub.
 $mapsScript = if ($PSCommandPath) { Join-Path (Split-Path $PSCommandPath) "install-maps.ps1" } else { "" }
 try {
-    if ($mapsScript -and (Test-Path $mapsScript)) { & $mapsScript -InstallDir $game }
-    else { & ([scriptblock]::Create((irm https://raw.githubusercontent.com/dorostanian/iw4x-lan-server/main/scripts/install-maps.ps1))) -InstallDir $game }
+    if ($mapsScript -and (Test-Path $mapsScript)) { & $mapsScript -InstallDir $game -MapsUrl $MapsUrl }
+    else { & ([scriptblock]::Create((irm https://raw.githubusercontent.com/dorostanian/iw4x-lan-server/main/scripts/install-maps.ps1))) -InstallDir $game -MapsUrl $MapsUrl }
 } catch {
     Warn "custom maps not installed. Later, run: & ([scriptblock]::Create((irm https://raw.githubusercontent.com/dorostanian/iw4x-lan-server/main/scripts/install-maps.ps1)))"
 }

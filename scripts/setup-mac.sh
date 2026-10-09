@@ -16,14 +16,15 @@
 # Options:
 #   --bottle <name>  bottle name to install as (default: mw)
 #   --force          reinstall even if the bottle exists (old one is renamed, not deleted)
+#   --game-url <link>  download link of mw.zip (a Google Drive share link works); also
+#                    MW_GAME_URL. Asked for when a download is needed and it's not given
+#   --maps-url <link>  same for the custom maps + bots pack (MW_MAPS_URL)
 #   --zip <path>     use this mw.zip (otherwise it looks in ~/Downloads, the Bottles
 #                    folder and the current folder before downloading)
 #   --keep-zip       keep mw.zip after installing (default: delete it if this script downloaded it)
 
 set -euo pipefail
 
-DRIVE_ID="REDACTED"
-DRIVE_URL="https://drive.usercontent.google.com/download?id=${DRIVE_ID}&export=download&confirm=t"
 CROSSOVER_URL="https://media.codeweavers.com/pub/crossover/cxmac/demo/crossover-26.3.0.zip"
 BOTTLE="mw"
 BOTTLES="$HOME/Library/Application Support/CrossOver/Bottles"
@@ -33,13 +34,15 @@ DOWNLOAD_ZIP="$HOME/Downloads/mw.zip"
 MARK_INSTALLED=".iw4x-setup-installed"
 MARK_CONFIGURED=".iw4x-setup-configured"
 
-FORCE=0 KEEP_ZIP=0 ZIP=""
+FORCE=0 KEEP_ZIP=0 ZIP="" GAME_LINK="${MW_GAME_URL:-}" MAPS_LINK="${MW_MAPS_URL:-}"
 while (( $# )); do
   case "$1" in
     --bottle) BOTTLE="$2"; shift ;;
     --force) FORCE=1 ;;
     --keep-zip) KEEP_ZIP=1 ;;
     --zip) ZIP="$2"; KEEP_ZIP=1; shift ;;
+    --game-url) GAME_LINK="$2"; shift ;;
+    --maps-url) MAPS_LINK="$2"; shift ;;
     *) echo "unknown option: $1"; exit 1 ;;
   esac
   shift
@@ -51,6 +54,15 @@ step() { print -P "\n%F{cyan}==> $1%f"; }
 ok()   { print -P "    %F{green}✓%f $1"; }
 warn() { print -P "    %F{yellow}!%f $1"; }
 die()  { print -P "    %F{red}✗ $1%f"; exit 1; }
+
+# a Google Drive share link becomes its direct download URL; other links are used as-is
+download_url() {
+  if [[ "$1" =~ '/d/([A-Za-z0-9_-]{20,})' ]] || [[ "$1" =~ '[?&]id=([A-Za-z0-9_-]{20,})' ]]; then
+    print -r -- "https://drive.usercontent.google.com/download?id=${match[1]}&export=download&confirm=t"
+  else
+    print -r -- "$1"
+  fi
+}
 
 # set a "seta key value" line in a .cfg file, appending it if missing
 setcfg() {
@@ -128,24 +140,12 @@ osascript -e 'quit app "CrossOver"' 2>/dev/null || true
 if (( ! INSTALLED )); then
   # -------------------------------------------------------------- download
   step "Game bottle (mw.zip, ~16 GB)"
-  # Drive answers with an HTML page instead of the file when the share's download
-  # quota is used up ("Quota exceeded") or the link stopped working
-  head=$(curl -sIL --max-time 20 "$DRIVE_URL" || true)
-  remote_size=$(awk 'tolower($1)=="content-length:" {s=$2} END {gsub("\r","",s); print s}' <<< "$head")
-  drive_blocked=0
-  if grep -qi '^content-type: text/html' <<< "$head" || [[ "$remote_size" == "0" ]]; then
-    drive_blocked=1 remote_size=""
-  fi
   size_of() { [[ -f "$1" ]] && stat -f%z "$1" || echo 0; }
 
   if [[ -z "$ZIP" ]]; then
-    # reuse a complete copy if one is lying around
+    # reuse a complete copy if one is lying around (a partial download has no zip index yet)
     for candidate in "$DOWNLOAD_ZIP" "$BOTTLES/mw.zip" "$PWD/mw.zip"; do
-      [[ -f "$candidate" ]] || continue
-      # complete = same size as on Drive, or (size unknown) a readable zip index,
-      # which a partial download doesn't have yet
-      if [[ -n "$remote_size" && "$(size_of "$candidate")" == "$remote_size" ]] \
-         || [[ -z "$remote_size" ]] && unzip -l "$candidate" >/dev/null 2>&1; then
+      if [[ -f "$candidate" ]] && unzip -l "$candidate" >/dev/null 2>&1; then
         ZIP="$candidate"
         [[ "$candidate" == "$DOWNLOAD_ZIP" ]] || KEEP_ZIP=1   # never delete a copy we didn't download
         break
@@ -153,33 +153,43 @@ if (( ! INSTALLED )); then
     done
   fi
 
+  # ask only when needed and there's a terminal to ask on; a file path works too
+  # (drag mw.zip into the Terminal window)
+  if [[ -z "$ZIP" && -z "$GAME_LINK" ]] && { : < /dev/tty; } 2>/dev/null; then
+    read -r "GAME_LINK?    Paste the game download link, or the path to mw.zip: " < /dev/tty || true
+  fi
+  GAME_LINK="${GAME_LINK//\\ / }"; GAME_LINK="${GAME_LINK% }"   # drag-and-drop escapes spaces, adds a space
+  GAME_LINK="${GAME_LINK/#\~/$HOME}"
+  if [[ -z "$ZIP" && -f "$GAME_LINK" ]]; then ZIP="$GAME_LINK"; KEEP_ZIP=1; fi
+
   if [[ -n "$ZIP" ]]; then
     [[ -f "$ZIP" ]] || die "zip not found: $ZIP"
     ok "using existing $ZIP"
   else
+    [[ -n "$GAME_LINK" ]] || die "no download link given. Pass --game-url <link>, or put mw.zip in ~/Downloads"
+    url=$(download_url "$GAME_LINK")
+    # Google Drive answers with an HTML page instead of the file when its daily download
+    # quota is used up ("Quota exceeded") or the link isn't shared
+    head=$(curl -sIL --max-time 20 "$url" || true)
+    remote_size=$(awk 'tolower($1)=="content-length:" {s=$2} END {gsub("\r","",s); print s}' <<< "$head")
+    if grep -qi '^content-type: text/html' <<< "$head" || [[ -z "$remote_size" || "$remote_size" == "0" ]]; then
+      die "the download was refused. With Google Drive that's usually 'Quota exceeded'
+      (too many downloads today), or the link isn't shared. Try again later, or open
+      the link in a browser, save mw.zip to ~/Downloads and re-run the script."
+    fi
     ZIP="$DOWNLOAD_ZIP"
     # a partial file that is really an HTML error page can't be resumed
     [[ -f "$ZIP" ]] && [[ "$(head -c 1 "$ZIP")" == "<" ]] && rm -f "$ZIP"
-    if (( drive_blocked )); then
-      die "Google Drive refused the download (usually 'Quota exceeded': too many downloads of this file today).
-      Try again later, or open this link in a browser while logged in to Google,
-      save mw.zip to ~/Downloads and re-run the script (it picks it up automatically):
-      https://drive.google.com/file/d/$DRIVE_ID/view"
-    elif [[ -z "$remote_size" ]]; then
-      [[ -f "$ZIP" ]] || die "can't reach Google Drive and no mw.zip found. Check the connection, or pass --zip <path>."
-      warn "can't reach Google Drive to check the size, using $ZIP as is"
-    else
-      have=$(size_of "$ZIP")
-      need_gb=$(( (remote_size - have) / 1024 / 1024 / 1024 + 18 ))   # rest of download + extracted bottle
-      free_gb=$(( $(df -k "$HOME" | awk 'NR==2 {print $4}') / 1024 / 1024 ))
-      (( free_gb >= need_gb )) || die "need about ${need_gb} GB free disk space, only ${free_gb} GB available"
-      (( have > 0 )) && echo "    Resuming download ($(( have / 1024 / 1024 )) MB of $(( remote_size / 1024 / 1024 )) MB done)" \
-                     || echo "    Downloading to $ZIP"
-      echo "    (if it stops, just re-run the script and it continues)"
-      curl -fL -C - --retry 5 --retry-delay 5 --progress-bar "$DRIVE_URL" -o "$ZIP"
-      [[ "$(size_of "$ZIP")" == "$remote_size" ]] || die "download incomplete, re-run to resume"
-      ok "downloaded"
-    fi
+    have=$(size_of "$ZIP")
+    need_gb=$(( (remote_size - have) / 1024 / 1024 / 1024 + 18 ))   # rest of download + extracted bottle
+    free_gb=$(( $(df -k "$HOME" | awk 'NR==2 {print $4}') / 1024 / 1024 ))
+    (( free_gb >= need_gb )) || die "need about ${need_gb} GB free disk space, only ${free_gb} GB available"
+    (( have > 0 )) && echo "    Resuming download ($(( have / 1024 / 1024 )) MB of $(( remote_size / 1024 / 1024 )) MB done)" \
+                   || echo "    Downloading to $ZIP"
+    echo "    (if it stops, just re-run the script and it continues)"
+    curl -fL -C - --retry 5 --retry-delay 5 --progress-bar "$url" -o "$ZIP"
+    [[ "$(size_of "$ZIP")" == "$remote_size" ]] || die "download incomplete, re-run to resume"
+    ok "downloaded"
   fi
 
   # -------------------------------------------------------------- install bottle
@@ -336,9 +346,9 @@ ok "game settings installed (lowest graphics, no FPS drops when hit)"
 # used when running from the repo, otherwise it's fetched from GitHub.
 maps_script="${0:A:h}/install-maps.sh"
 if [[ -f "$maps_script" ]]; then
-  bash "$maps_script" --bottle "$BOTTLE" || warn "custom maps not installed, run scripts/install-maps.sh later"
+  bash "$maps_script" --bottle "$BOTTLE" ${MAPS_LINK:+--maps-url "$MAPS_LINK"} || warn "custom maps not installed, run scripts/install-maps.sh later"
 else
-  bash -c "$(curl -fsSL https://raw.githubusercontent.com/dorostanian/iw4x-lan-server/main/scripts/install-maps.sh)" install-maps --bottle "$BOTTLE" \
+  bash -c "$(curl -fsSL https://raw.githubusercontent.com/dorostanian/iw4x-lan-server/main/scripts/install-maps.sh)" install-maps --bottle "$BOTTLE" ${MAPS_LINK:+--maps-url "$MAPS_LINK"} \
     || warn "custom maps not installed. Later, run: bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/dorostanian/iw4x-lan-server/main/scripts/install-maps.sh)\""
 fi
 
