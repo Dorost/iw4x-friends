@@ -336,7 +336,8 @@ seta snd_volume "0.6"
 seta winvoice_mic_scaler "2"
 seta winvoice_mic_reclevel "65535"
 
-// F9 at the main menu loads the ready-made classes (classes.cfg). They can't load
+// F9 during a match loads the ready-made classes (classes.cfg). Key bindings don't work
+// in menus; at the main menu use the console instead: exec classes.cfg. They can't load
 // automatically at startup: the game reads your stats a few seconds later.
 bind F9 "exec classes.cfg"
 CFG
@@ -345,7 +346,7 @@ CFG
 print -r -- "$CLIENT_CFG" > "$GAME/main/client_tweaks.cfg"
 ok "game settings installed (lowest graphics, no FPS drops when hit)"
 
-# Ready-made classes, loaded by pressing F9 at the main menu (bound in client.cfg)
+# Ready-made classes, loaded with F9 during a match (bound in client.cfg) or exec classes.cfg
 # BEGIN classes.cfg (generated from config/classes.cfg by scripts/sync-config.py, don't edit here)
 CLASSES_CFG=$(cat <<'CFG'
 // Ten custom classes: agile run-and-gun SMGs and light assault rifles (no LMGs),
@@ -509,7 +510,7 @@ CFG
 )
 # END classes.cfg
 print -r -- "$CLASSES_CFG" > "$GAME/main/classes.cfg"
-ok "ready-made classes installed (press F9 at the main menu to load them)"
+ok "ready-made classes installed (load them: F9 during a match, or ~ then exec classes.cfg)"
 
 # ---------------------------------------------------------------- custom maps + bots
 # Separate pack, also installable on its own with install-maps.sh. The local copy is
