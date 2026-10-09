@@ -315,22 +315,24 @@ Ok "game settings installed (lowest graphics, no FPS drops when hit)"
 # Ready-made classes, loaded with F9 during a match (bound in client.cfg) or exec classes.cfg
 # BEGIN classes.cfg (generated from config/classes.cfg by scripts/sync-config.py, don't edit here)
 $ClassesCfg = @'
-// Ten custom classes: agile run-and-gun SMGs and light assault rifles (no LMGs),
+// Ten custom classes: agile SMGs and light rifles (no LMGs), two M16 classes,
 // a quickscope sniper (5) and a stealth class for Search & Destroy (10).
-// Load them at the main menu: press ~ and type  exec classes.cfg
-// (run unlockstats first so every weapon, attachment and perk is unlocked).
+// Most use Bling (two attachments, Pro also on the secondary) to stack FMJ with
+// a silencer or red dot; Lightweight and Commando keep them fast.
+// Load them at the main menu: press ~ and type  exec classes.cfg  (or F9 during a match).
+// Run unlockstats first so every weapon, attachment and perk is unlocked.
 // They replace your custom class slots 1 to 10.
 
-// 1. UMP Rush: UMP45 keeps full damage with a silencer: sprint, flank, knife
+// 1. UMP Rush: UMP45 keeps full damage silenced, FMJ shoots through cover: sprint, flank, knife
 setPlayerData customClasses 0 name "UMP Rush"
 setPlayerData customClasses 0 weaponSetups 0 weapon ump45
 setPlayerData customClasses 0 weaponSetups 0 attachment 0 silencer
-setPlayerData customClasses 0 weaponSetups 0 attachment 1 none
+setPlayerData customClasses 0 weaponSetups 0 attachment 1 fmj
 setPlayerData customClasses 0 weaponSetups 1 weapon usp
 setPlayerData customClasses 0 weaponSetups 1 attachment 0 tactical
-setPlayerData customClasses 0 weaponSetups 1 attachment 1 none
+setPlayerData customClasses 0 weaponSetups 1 attachment 1 fmj
 setPlayerData customClasses 0 perks 0 semtex_mp
-setPlayerData customClasses 0 perks 1 specialty_marathon
+setPlayerData customClasses 0 perks 1 specialty_bling
 setPlayerData customClasses 0 perks 2 specialty_lightweight
 setPlayerData customClasses 0 perks 3 specialty_extendedmelee
 setPlayerData customClasses 0 perks 4 specialty_painkiller
@@ -340,42 +342,42 @@ setPlayerData customClasses 0 specialGrenade flash_grenade
 setPlayerData customClasses 1 name "Vector Ghost"
 setPlayerData customClasses 1 weaponSetups 0 weapon kriss
 setPlayerData customClasses 1 weaponSetups 0 attachment 0 silencer
-setPlayerData customClasses 1 weaponSetups 0 attachment 1 none
+setPlayerData customClasses 1 weaponSetups 0 attachment 1 fmj
 setPlayerData customClasses 1 weaponSetups 1 weapon pp2000
 setPlayerData customClasses 1 weaponSetups 1 attachment 0 silencer
-setPlayerData customClasses 1 weaponSetups 1 attachment 1 none
+setPlayerData customClasses 1 weaponSetups 1 attachment 1 fmj
 setPlayerData customClasses 1 perks 0 throwingknife_mp
-setPlayerData customClasses 1 perks 1 specialty_marathon
+setPlayerData customClasses 1 perks 1 specialty_bling
 setPlayerData customClasses 1 perks 2 specialty_coldblooded
 setPlayerData customClasses 1 perks 3 specialty_heartbreaker
 setPlayerData customClasses 1 perks 4 specialty_copycat
 setPlayerData customClasses 1 specialGrenade concussion_grenade
 
-// 3. ACR Runner: almost no recoil, fast assault rifle
+// 3. ACR Runner: almost no recoil, silenced with full penetration
 setPlayerData customClasses 2 name "ACR Runner"
 setPlayerData customClasses 2 weaponSetups 0 weapon masada
 setPlayerData customClasses 2 weaponSetups 0 attachment 0 silencer
-setPlayerData customClasses 2 weaponSetups 0 attachment 1 none
+setPlayerData customClasses 2 weaponSetups 0 attachment 1 fmj
 setPlayerData customClasses 2 weaponSetups 1 weapon usp
 setPlayerData customClasses 2 weaponSetups 1 attachment 0 tactical
-setPlayerData customClasses 2 weaponSetups 1 attachment 1 none
+setPlayerData customClasses 2 weaponSetups 1 attachment 1 fmj
 setPlayerData customClasses 2 perks 0 semtex_mp
-setPlayerData customClasses 2 perks 1 specialty_marathon
+setPlayerData customClasses 2 perks 1 specialty_bling
 setPlayerData customClasses 2 perks 2 specialty_lightweight
 setPlayerData customClasses 2 perks 3 specialty_extendedmelee
 setPlayerData customClasses 2 perks 4 specialty_painkiller
 setPlayerData customClasses 2 specialGrenade flash_grenade
 
-// 4. FAMAS Burst: one-burst kills, quick reloads
+// 4. FAMAS Burst: one-burst kills with a clear red dot
 setPlayerData customClasses 3 name "FAMAS Burst"
 setPlayerData customClasses 3 weaponSetups 0 weapon famas
-setPlayerData customClasses 3 weaponSetups 0 attachment 0 fmj
-setPlayerData customClasses 3 weaponSetups 0 attachment 1 none
+setPlayerData customClasses 3 weaponSetups 0 attachment 0 reflex
+setPlayerData customClasses 3 weaponSetups 0 attachment 1 fmj
 setPlayerData customClasses 3 weaponSetups 1 weapon usp
 setPlayerData customClasses 3 weaponSetups 1 attachment 0 tactical
-setPlayerData customClasses 3 weaponSetups 1 attachment 1 none
+setPlayerData customClasses 3 weaponSetups 1 attachment 1 fmj
 setPlayerData customClasses 3 perks 0 throwingknife_mp
-setPlayerData customClasses 3 perks 1 specialty_fastreload
+setPlayerData customClasses 3 perks 1 specialty_bling
 setPlayerData customClasses 3 perks 2 specialty_lightweight
 setPlayerData customClasses 3 perks 3 specialty_extendedmelee
 setPlayerData customClasses 3 perks 4 specialty_painkiller
@@ -400,12 +402,12 @@ setPlayerData customClasses 4 specialGrenade flash_grenade
 setPlayerData customClasses 5 name "Shotgun Blitz"
 setPlayerData customClasses 5 weaponSetups 0 weapon mp5k
 setPlayerData customClasses 5 weaponSetups 0 attachment 0 rof
-setPlayerData customClasses 5 weaponSetups 0 attachment 1 none
+setPlayerData customClasses 5 weaponSetups 0 attachment 1 fmj
 setPlayerData customClasses 5 weaponSetups 1 weapon model1887
 setPlayerData customClasses 5 weaponSetups 1 attachment 0 akimbo
-setPlayerData customClasses 5 weaponSetups 1 attachment 1 none
+setPlayerData customClasses 5 weaponSetups 1 attachment 1 fmj
 setPlayerData customClasses 5 perks 0 semtex_mp
-setPlayerData customClasses 5 perks 1 specialty_marathon
+setPlayerData customClasses 5 perks 1 specialty_bling
 setPlayerData customClasses 5 perks 2 specialty_lightweight
 setPlayerData customClasses 5 perks 3 specialty_extendedmelee
 setPlayerData customClasses 5 perks 4 specialty_painkiller
@@ -415,57 +417,57 @@ setPlayerData customClasses 5 specialGrenade flash_grenade
 setPlayerData customClasses 6 name "P90 Ninja"
 setPlayerData customClasses 6 weaponSetups 0 weapon p90
 setPlayerData customClasses 6 weaponSetups 0 attachment 0 silencer
-setPlayerData customClasses 6 weaponSetups 0 attachment 1 none
+setPlayerData customClasses 6 weaponSetups 0 attachment 1 fmj
 setPlayerData customClasses 6 weaponSetups 1 weapon pp2000
-setPlayerData customClasses 6 weaponSetups 1 attachment 0 none
-setPlayerData customClasses 6 weaponSetups 1 attachment 1 none
+setPlayerData customClasses 6 weaponSetups 1 attachment 0 silencer
+setPlayerData customClasses 6 weaponSetups 1 attachment 1 fmj
 setPlayerData customClasses 6 perks 0 throwingknife_mp
-setPlayerData customClasses 6 perks 1 specialty_marathon
+setPlayerData customClasses 6 perks 1 specialty_bling
 setPlayerData customClasses 6 perks 2 specialty_hardline
 setPlayerData customClasses 6 perks 3 specialty_heartbreaker
 setPlayerData customClasses 6 perks 4 specialty_copycat
 setPlayerData customClasses 6 specialGrenade flash_grenade
 
-// 8. TAR Sprinter: fast-handling TAR-21, AA-12 for rooms, never runs out of ammo
-setPlayerData customClasses 7 name "TAR Sprinter"
-setPlayerData customClasses 7 weaponSetups 0 weapon tavor
-setPlayerData customClasses 7 weaponSetups 0 attachment 0 reflex
-setPlayerData customClasses 7 weaponSetups 0 attachment 1 none
-setPlayerData customClasses 7 weaponSetups 1 weapon aa12
-setPlayerData customClasses 7 weaponSetups 1 attachment 0 grip
-setPlayerData customClasses 7 weaponSetups 1 attachment 1 none
-setPlayerData customClasses 7 perks 0 semtex_mp
-setPlayerData customClasses 7 perks 1 specialty_scavenger
-setPlayerData customClasses 7 perks 2 specialty_lightweight
-setPlayerData customClasses 7 perks 3 specialty_extendedmelee
+// 8. M16 Ghost: silent M16 bursts, off the radar
+setPlayerData customClasses 7 name "M16 Ghost"
+setPlayerData customClasses 7 weaponSetups 0 weapon m16
+setPlayerData customClasses 7 weaponSetups 0 attachment 0 silencer
+setPlayerData customClasses 7 weaponSetups 0 attachment 1 fmj
+setPlayerData customClasses 7 weaponSetups 1 weapon usp
+setPlayerData customClasses 7 weaponSetups 1 attachment 0 tactical
+setPlayerData customClasses 7 weaponSetups 1 attachment 1 fmj
+setPlayerData customClasses 7 perks 0 throwingknife_mp
+setPlayerData customClasses 7 perks 1 specialty_bling
+setPlayerData customClasses 7 perks 2 specialty_coldblooded
+setPlayerData customClasses 7 perks 3 specialty_heartbreaker
 setPlayerData customClasses 7 perks 4 specialty_painkiller
 setPlayerData customClasses 7 specialGrenade flash_grenade
 
-// 9. M4 Stopper: all-round M4 with Stopping Power
-setPlayerData customClasses 8 name "M4 Stopper"
-setPlayerData customClasses 8 weaponSetups 0 weapon m4
+// 9. M16 Power: M16 with Stopping Power: one-burst kills at range
+setPlayerData customClasses 8 name "M16 Power"
+setPlayerData customClasses 8 weaponSetups 0 weapon m16
 setPlayerData customClasses 8 weaponSetups 0 attachment 0 reflex
-setPlayerData customClasses 8 weaponSetups 0 attachment 1 none
+setPlayerData customClasses 8 weaponSetups 0 attachment 1 fmj
 setPlayerData customClasses 8 weaponSetups 1 weapon usp
 setPlayerData customClasses 8 weaponSetups 1 attachment 0 tactical
-setPlayerData customClasses 8 weaponSetups 1 attachment 1 none
+setPlayerData customClasses 8 weaponSetups 1 attachment 1 fmj
 setPlayerData customClasses 8 perks 0 frag_grenade_mp
-setPlayerData customClasses 8 perks 1 specialty_marathon
+setPlayerData customClasses 8 perks 1 specialty_bling
 setPlayerData customClasses 8 perks 2 specialty_bulletdamage
 setPlayerData customClasses 8 perks 3 specialty_extendedmelee
 setPlayerData customClasses 8 perks 4 specialty_painkiller
 setPlayerData customClasses 8 specialGrenade flash_grenade
 
-// 10. S&D Stealth: one life, so stay off the radar: silent SCAR, claymore to guard the bomb, smoke to plant/defuse
+// 10. S&D Stealth: one life, so stay off the radar: claymore guards the bomb, smoke covers plant/defuse
 setPlayerData customClasses 9 name "S&D Stealth"
 setPlayerData customClasses 9 weaponSetups 0 weapon scar
 setPlayerData customClasses 9 weaponSetups 0 attachment 0 silencer
-setPlayerData customClasses 9 weaponSetups 0 attachment 1 none
+setPlayerData customClasses 9 weaponSetups 0 attachment 1 fmj
 setPlayerData customClasses 9 weaponSetups 1 weapon usp
 setPlayerData customClasses 9 weaponSetups 1 attachment 0 tactical
-setPlayerData customClasses 9 weaponSetups 1 attachment 1 none
+setPlayerData customClasses 9 weaponSetups 1 attachment 1 fmj
 setPlayerData customClasses 9 perks 0 claymore_mp
-setPlayerData customClasses 9 perks 1 specialty_fastreload
+setPlayerData customClasses 9 perks 1 specialty_bling
 setPlayerData customClasses 9 perks 2 specialty_coldblooded
 setPlayerData customClasses 9 perks 3 specialty_heartbreaker
 setPlayerData customClasses 9 perks 4 specialty_null

@@ -52,7 +52,7 @@ If the server has a password, type `password <password>` first.
 
 **Max level and all unlocks:** at the main menu, press `~`, type `unlockstats` and press Enter, then restart the game. Progress is stored on each player's own computer, so everyone does this once on their machine.
 
-**Ready-made classes:** ten agile classes (SMGs and light rifles, a quickscope sniper, a Search & Destroy stealth class), see [`config/classes.cfg`](config/classes.cfg). Load them at the main menu: press `~` and type `exec classes.cfg`. Or press **F9** during a match (key bindings don't work in menus). They replace your custom class slots, so run `unlockstats` first.
+**Ready-made classes:** ten agile classes (SMGs and light rifles, two M16 classes, a quickscope sniper, a Search & Destroy stealth class), most with silencer or red dot plus FMJ, see [`config/classes.cfg`](config/classes.cfg). Load them at the main menu: press `~` and type `exec classes.cfg`. Or press **F9** during a match (key bindings don't work in menus). They replace your custom class slots, so run `unlockstats` first.
 
 ## Server
 
