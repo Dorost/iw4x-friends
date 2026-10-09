@@ -23,3 +23,23 @@ tasks:
     desc: Install server.cfg.example into the game folder (skips if one exists)
     cmds:
       - ./scripts/install-config.sh
+
+  game:
+    desc: Start the IW4x game, skipping the launcher update check (use when it does not open)
+    cmds:
+      - ./scripts/start-game.sh
+
+  game:update:
+    desc: Run the IW4x launcher normally (checks GitHub for updates, then starts the game)
+    cmds:
+      - ./scripts/start-game.sh --update
+
+  game:kill:
+    desc: Stop stuck IW4x launcher/game processes (leaves the dedicated server running)
+    cmds:
+      - ./scripts/kill-game.sh
+
+  setup:
+    desc: Set up a new Mac (CrossOver + game bottle + config). Pass options after --, e.g. task setup -- --force
+    cmds:
+      - ./scripts/setup-mac.sh {{.CLI_ARGS}}
