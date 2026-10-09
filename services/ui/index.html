@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IW4x Server</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-size: 13px; }
+  input, select { outline: none; }
+  ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+</style>
+</head>
+<body class="bg-slate-100 text-slate-700 min-h-screen">
+
+<svg style="display:none">
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5v14l11-7z" fill="currentColor"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></symbol>
+  <symbol id="i-restart" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-save" viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5zM8 4v5h7V4M8 20v-6h8v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM2 21a7 7 0 0 1 14 0M17 11a3 3 0 1 0 0-6M22 21a5 5 0 0 0-4-4.9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-map" viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2zM9 4v14M15 6v14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="i-cog" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-term" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m7 9 3 3-3 3M12 15h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-bot" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 8V4M9 13h.01M15 13h.01M2 13v2M22 13v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M4 12 20 4l-6 16-3-7z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+</svg>
+
+<div class="max-w-6xl mx-auto p-4 space-y-4">
+
+  <!-- header -->
+  <header class="bg-white rounded-xl shadow-sm p-4 flex flex-wrap items-center gap-3">
+    <div class="flex items-center gap-2">
+      <span id="dot" class="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
+      <h1 class="text-base font-semibold text-slate-800">IW4x LAN Server</h1>
+      <span id="statusText" class="text-xs text-slate-400">checking...</span>
+    </div>
+    <div class="text-xs text-slate-500">join: <code id="addr" class="bg-slate-100 px-1.5 py-0.5 rounded">-</code></div>
+    <div class="ml-auto flex gap-2">
+      <button onclick="act('start')" class="btn bg-emerald-50 text-emerald-700 hover:bg-emerald-100"><svg class="w-3.5 h-3.5"><use href="#i-play"/></svg>Start</button>
+      <button onclick="act('restart')" title="Restarts the server process: disconnects everyone" class="btn bg-sky-50 text-sky-700 hover:bg-sky-100"><svg class="w-3.5 h-3.5"><use href="#i-restart"/></svg>Restart</button>
+      <button onclick="act('stop')" class="btn bg-rose-50 text-rose-700 hover:bg-rose-100"><svg class="w-3.5 h-3.5"><use href="#i-stop"/></svg>Stop</button>
+    </div>
+  </header>
+
+  <div id="toast" class="hidden fixed bottom-4 right-4 bg-slate-800 text-white text-xs px-3 py-2 rounded-lg shadow"></div>
+
+  <div class="grid lg:grid-cols-2 gap-4">
+
+    <!-- settings -->
+    <section class="bg-white rounded-xl shadow-sm p-4 space-y-3">
+      <h2 class="title"><svg class="w-4 h-4"><use href="#i-cog"/></svg>Settings <span class="text-[11px] font-normal text-slate-400">(Save & apply loads them with a map change, players stay)</span></h2>
+      <div class="grid grid-cols-2 gap-3">
+        <label class="col-span-2 lbl">Server name <span class="text-slate-400">(^1-^9 = colors)</span><input id="hostname" class="inp"></label>
+        <label class="lbl">Game password<input id="password" class="inp" placeholder="none"></label>
+        <label class="lbl">Rcon password<input id="rcon_password" class="inp"></label>
+        <label class="lbl">Game mode<select id="gametype" class="inp"></select></label>
+        <label class="lbl">Max players<input id="maxclients" type="number" min="1" max="18" class="inp"></label>
+        <label class="lbl">Score limit<input id="scorelimit" class="inp" placeholder="default"></label>
+        <label class="lbl">Time limit (min)<input id="timelimit" class="inp" placeholder="default"></label>
+        <label class="col-span-2 flex items-center gap-2 text-xs"><input id="lan_only" type="checkbox" class="accent-sky-600">LAN only (don't list on internet master server)</label>
+      </div>
+      <div>
+        <span class="text-xs font-medium text-slate-600 flex items-center gap-1 mb-1.5"><svg class="w-3.5 h-3.5"><use href="#i-bot"/></svg>Bots</span>
+        <div class="grid grid-cols-3 gap-3">
+          <label class="lbl">Fill to<input id="bots_fill" type="number" min="0" max="17" class="inp"></label>
+          <label class="lbl">Count<select id="bots_fill_mode" class="inp"><option value="0">players + bots</option><option value="1">bots only</option></select></label>
+          <label class="lbl">Skill<select id="bots_skill" class="inp"></select></label>
+        </div>
+        <p class="text-[11px] text-slate-400 mt-1">0 = no bots. "players + bots" keeps the server at that many players, removing bots as people join.</p>
+      </div>
+      <div class="flex gap-2 pt-1">
+        <button onclick="save(false)" class="btn bg-slate-100 hover:bg-slate-200"><svg class="w-3.5 h-3.5"><use href="#i-save"/></svg>Save</button>
+        <button onclick="save(true)" class="btn bg-sky-600 text-white hover:bg-sky-700" title="Players stay connected, server loads the first map of the new rotation"><svg class="w-3.5 h-3.5"><use href="#i-restart"/></svg>Save & apply</button>
+      </div>
+    </section>
+
+    <div class="space-y-4">
+      <!-- live -->
+      <section class="bg-white rounded-xl shadow-sm p-4 space-y-3">
+        <h2 class="title"><svg class="w-4 h-4"><use href="#i-map"/></svg>Now playing</h2>
+        <div id="now" class="text-xs text-slate-500">-</div>
+        <div class="flex gap-2">
+          <select id="liveMode" class="inp flex-1"></select>
+          <select id="liveMap" class="inp flex-1"></select>
+          <button onclick="changeMap()" class="btn bg-sky-50 text-sky-700 hover:bg-sky-100 whitespace-nowrap">Change now</button>
+        </div>
+      </section>
+
+      <!-- players -->
+      <section class="bg-white rounded-xl shadow-sm p-4">
+        <h2 class="title mb-2"><svg class="w-4 h-4"><use href="#i-users"/></svg>Players <span id="pcount" class="text-xs font-normal text-slate-400"></span></h2>
+        <table class="w-full text-xs">
+          <thead class="text-slate-400 text-left"><tr><th class="py-1">#</th><th>Name</th><th>Score</th><th>Ping</th><th>ID</th><th>Address</th><th></th></tr></thead>
+          <tbody id="players"></tbody>
+        </table>
+      </section>
+    </div>
+  </div>
+
+  <!-- maps -->
+  <section class="bg-white rounded-xl shadow-sm p-4 space-y-3">
+    <div class="flex flex-wrap items-center gap-3">
+      <h2 class="title"><svg class="w-4 h-4"><use href="#i-map"/></svg>Map rotation <span id="mapcount" class="text-xs font-normal text-slate-400"></span></h2>
+      <span class="text-[11px] text-slate-400">click to add/remove, <svg class="w-3 h-3 inline"><use href="#i-play"/></svg> to play now</span>
+      <div class="ml-auto flex items-center gap-2">
+        <input id="mapsearch" oninput="filterMaps()" placeholder="search" class="inp !mt-0 w-36">
+        <select id="mapfilter" onchange="filterMaps()" class="inp !mt-0 w-28"><option value="all">all maps</option><option value="on">in rotation</option><option value="custom">custom</option></select>
+        <button onclick="allMaps(true)" class="btn bg-slate-100 hover:bg-slate-200">All</button>
+        <button onclick="allMaps(false)" class="btn bg-slate-100 hover:bg-slate-200">None</button>
+        <button onclick="save(false)" class="btn bg-sky-600 text-white hover:bg-sky-700"><svg class="w-3.5 h-3.5"><use href="#i-save"/></svg>Save</button>
+      </div>
+    </div>
+    <div id="maps" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3"></div>
+  </section>
+
+  <!-- console -->
+  <section class="bg-white rounded-xl shadow-sm p-4 space-y-2">
+    <h2 class="title"><svg class="w-4 h-4"><use href="#i-term"/></svg>Console</h2>
+    <pre id="log" class="bg-slate-800 text-slate-200 text-[11px] leading-snug rounded-lg p-3 h-64 overflow-y-auto whitespace-pre-wrap"></pre>
+    <form onsubmit="sendRcon(event)" class="flex gap-2">
+      <input id="cmd" class="inp flex-1 font-mono" placeholder="rcon command, e.g. say hello  /  map_rotate  /  fast_restart">
+      <button class="btn bg-slate-100 hover:bg-slate-200"><svg class="w-3.5 h-3.5"><use href="#i-send"/></svg>Send</button>
+    </form>
+  </section>
+</div>
+
+<style type="text/tailwindcss">
+  .btn { @apply inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition; }
+  .inp { @apply mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:border-sky-400; }
+  .lbl { @apply text-xs text-slate-600; }
+  .title { @apply text-sm font-semibold text-slate-700 flex items-center gap-1.5; }
+</style>
+
+<script>
+let S = null, rconOut = [], sel = new Set();
+const $ = id => document.getElementById(id);
+const api = async (path, body) => {
+  const r = await fetch(path, body === undefined ? {} : {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+  return r.json();
+};
+const toast = msg => { const t = $('toast'); t.textContent = msg; t.classList.remove('hidden'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.add('hidden'), 2500); };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const mapName = id => (S.maps.find(m => m.id === id) || {name: id}).name;
+
+function fillForm(c) {
+  $('bots_skill').innerHTML = Object.entries(S.bot_skills).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+  for (const k of ['hostname','password','rcon_password','maxclients','scorelimit','timelimit','bots_fill','bots_fill_mode','bots_skill']) $(k).value = c[k];
+  $('lan_only').checked = c.lan_only;
+  const tag = m => m.custom ? ' <span class="text-[10px] text-violet-500 bg-violet-50 px-1 rounded">custom</span>' : '';
+  const opts = Object.entries(S.gametypes).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+  $('gametype').innerHTML = opts; $('gametype').value = c.gametype;
+  $('liveMode').innerHTML = opts;
+  $('liveMap').innerHTML = S.maps.map(m => `<option value="${m.id}">${esc(m.name)}${m.custom ? ' (custom)' : ''}</option>`).join('');
+  sel = new Set(c.maps);
+  $('maps').innerHTML = S.maps.map(m => `
+    <div data-id="${m.id}" data-name="${esc(m.name.toLowerCase())}" data-custom="${m.custom}" onclick="toggleMap('${m.id}')"
+         class="mapcard group relative cursor-pointer rounded-lg overflow-hidden bg-slate-200 ring-2 ring-transparent transition select-none">
+      ${m.image
+        ? `<img src="/api/mapimg/${m.id}" loading="lazy" class="w-full aspect-video object-cover transition">`
+        : `<div class="w-full aspect-video bg-gradient-to-br from-slate-300 to-slate-400 flex items-center justify-center text-2xl font-bold text-white/70">${esc(m.name.slice(0, 2).toUpperCase())}</div>`}
+      <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2 pt-6 pb-1.5 text-white text-xs font-medium flex items-center gap-1">
+        ${esc(m.name)}${tag(m)}
+      </div>
+      <span class="check absolute top-1.5 left-1.5 w-5 h-5 rounded-full bg-sky-500 text-white text-[11px] flex items-center justify-center">&#10003;</span>
+      <span class="nowbadge hidden absolute top-1.5 left-8 text-[10px] bg-emerald-500 text-white px-1.5 py-0.5 rounded">now</span>
+      <button onclick="event.stopPropagation(); playMap('${m.id}')" title="Play now"
+              class="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-white/90 text-sky-700 shadow flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-white transition">
+        <svg class="w-3.5 h-3.5"><use href="#i-play"/></svg></button>
+    </div>`).join('');
+  paintMaps();
+}
+
+function paintMaps() {
+  const now = S.live && S.live.map;
+  document.querySelectorAll('.mapcard').forEach(el => {
+    const on = sel.has(el.dataset.id);
+    el.classList.toggle('ring-sky-500', on);
+    el.querySelector('.check').classList.toggle('hidden', !on);
+    const img = el.querySelector('img, div');
+    img.classList.toggle('opacity-50', !on);
+    img.classList.toggle('grayscale', !on);
+    el.querySelector('.nowbadge').classList.toggle('hidden', el.dataset.id !== now);
+  });
+  $('mapcount').textContent = `(${sel.size} of ${S.maps.length})`;
+  filterMaps();
+}
+
+function filterMaps() {
+  const q = $('mapsearch').value.toLowerCase(), f = $('mapfilter').value;
+  document.querySelectorAll('.mapcard').forEach(el => {
+    const show = el.dataset.name.includes(q) &&
+      (f === 'all' || (f === 'on' && sel.has(el.dataset.id)) || (f === 'custom' && el.dataset.custom === 'true'));
+    el.classList.toggle('hidden', !show);
+  });
+}
+
+function toggleMap(id) { sel.has(id) ? sel.delete(id) : sel.add(id); paintMaps(); }
+
+async function playMap(id) {
+  $('liveMap').value = id;
+  await changeMap();
+}
+
+function render() {
+  const run = S.running, live = S.live;
+  $('dot').className = 'w-2.5 h-2.5 rounded-full ' + (live ? 'bg-emerald-400' : run ? 'bg-amber-400' : 'bg-slate-300');
+  $('statusText').textContent = live ? `running ${live.version}` : run ? 'starting...' : 'stopped';
+  $('addr').textContent = S.address;
+  $('now').innerHTML = live ? `<span class="text-slate-700 font-medium">${esc(mapName(live.map))}</span> · ${esc(S.gametypes[live.gametype] || live.gametype)} · ${esc(live.hostname)}` : 'server not running';
+  const ps = live ? live.players : [];
+  $('pcount').textContent = live ? `(${ps.length})` : '';
+  $('players').innerHTML = ps.length ? ps.map(p => `<tr class="border-t border-slate-100">
+      <td class="py-1.5">${p.num}</td><td class="font-medium text-slate-700">${esc(p.name)}${p.bot ? ' <span class="text-[10px] text-amber-600 bg-amber-50 px-1 rounded">bot</span>' : ''}</td><td>${p.score}</td><td>${p.bot ? '-' : p.ping}</td>
+      <td class="font-mono text-[10px] text-slate-400">${p.guid}</td><td class="text-slate-400">${esc(p.address)}</td>
+      <td class="text-right"><button onclick="kick(${p.num}, '${esc(p.name)}')" title="Kick" class="text-rose-400 hover:text-rose-600"><svg class="w-3.5 h-3.5"><use href="#i-x"/></svg></button></td></tr>`).join('')
+    : `<tr><td colspan="7" class="py-3 text-center text-slate-400">no players</td></tr>`;
+}
+
+async function refresh(first) {
+  try {
+    S = await api('/api/state');
+    if (first) { fillForm(S.config); $('liveMode').value = S.config.gametype; }
+    render(); paintMaps();
+  } catch (e) { $('statusText').textContent = 'ui backend unreachable'; }
+}
+
+async function refreshLog() {
+  const {lines} = await api('/api/log');
+  const el = $('log'), atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 20;
+  el.textContent = lines.concat(rconOut).join('\n');
+  if (atBottom) el.scrollTop = el.scrollHeight;
+}
+
+async function act(a) {
+  const n = S && S.live ? S.live.players.length : 0;
+  if (n && a !== 'start' && !confirm(`${a} disconnects all ${n} player(s). Use "Save & apply" to keep them. Continue?`)) return;
+  toast(a + '...');
+  try { await api('/api/server/' + a, {}); toast(a + ' done'); } catch (e) { toast('error: ' + e.message); }
+  refresh();
+}
+
+async function save(restart) {
+  const body = {
+    hostname: $('hostname').value, password: $('password').value, rcon_password: $('rcon_password').value,
+    maxclients: +$('maxclients').value, lan_only: $('lan_only').checked, gametype: $('gametype').value,
+    scorelimit: $('scorelimit').value, timelimit: $('timelimit').value,
+    bots_fill: +$('bots_fill').value, bots_fill_mode: $('bots_fill_mode').value, bots_skill: $('bots_skill').value,
+    maps: S.maps.map(m => m.id).filter(id => sel.has(id)),
+  };
+  try {
+    await api('/api/config', body); toast('saved');
+    if (restart) { const r = await api('/api/apply', {}); toast(r.started ? 'server started' : 'applied, loading new rotation...'); setTimeout(refresh, 4000); }
+  }
+  catch (e) { toast('error: ' + e.message); }
+}
+
+function allMaps(on) { sel = new Set(on ? S.maps.map(m => m.id) : []); paintMaps(); }
+
+async function kick(num, name) {
+  await api('/api/kick', {num}); toast('kicked ' + name); refresh();
+}
+
+async function changeMap() {
+  try { await api('/api/map', {map: $('liveMap').value, gametype: $('liveMode').value}); toast('changing map...'); }
+  catch (e) { toast('error: ' + e.message); }
+  setTimeout(refresh, 4000);
+}
+
+async function sendRcon(e) {
+  e.preventDefault();
+  const cmd = $('cmd').value.trim(); if (!cmd) return;
+  const {output} = await api('/api/rcon', {cmd});
+  rconOut.push('> ' + cmd, output.trim() || '(no output)');
+  $('cmd').value = '';
+  await refreshLog(); $('log').scrollTop = $('log').scrollHeight;
+}
+
+refresh(true); refreshLog();
+setInterval(refresh, 3000); setInterval(refreshLog, 3000);
+</script>
+</body>
+</html>

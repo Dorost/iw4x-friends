@@ -1,0 +1,5 @@
+.env
+services/ui/server.log
+services/ui/thumbs/
+__pycache__/
+.DS_Store

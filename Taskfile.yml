@@ -1,0 +1,25 @@
+version: "3"
+
+dotenv: [".env"]
+
+tasks:
+  ui:
+    desc: Start the web UI (http://localhost:8080)
+    dir: services/ui
+    cmds:
+      - uv run app.py
+
+  server:
+    desc: Start the dedicated server in the foreground (console in terminal)
+    cmds:
+      - ./scripts/start-server.sh
+
+  stop:
+    desc: Stop the dedicated server
+    cmds:
+      - pkill -f "iw4x.exe -dedicated" || true
+
+  config:
+    desc: Install server.cfg.example into the game folder (skips if one exists)
+    cmds:
+      - ./scripts/install-config.sh
