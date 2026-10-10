@@ -1,5 +1,5 @@
 // IW4x LAN dedicated server
-set sv_hostname "^2LAN Server"
+set sv_hostname "^2IW4x Server"
 set sv_lanOnly "1"
 set sv_maxclients "18"
 set party_maxplayers "18"
