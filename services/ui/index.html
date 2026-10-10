@@ -64,10 +64,10 @@
         <span class="text-xs font-medium text-slate-600 flex items-center gap-1 mb-1.5"><svg class="w-3.5 h-3.5"><use href="#i-bot"/></svg>Bots</span>
         <div class="grid grid-cols-3 gap-3">
           <label class="lbl">Fill to<input id="bots_fill" type="number" min="0" max="17" class="inp"></label>
-          <label class="lbl">Count<select id="bots_fill_mode" class="inp"><option value="0">players + bots</option><option value="1">bots only</option></select></label>
+          <label class="lbl">Count<select id="bots_fill_mode" class="inp"><option value="0">fill up with bots</option><option value="1">always add bots</option></select></label>
           <label class="lbl">Skill<select id="bots_skill" class="inp"></select></label>
         </div>
-        <p class="text-[11px] text-slate-400 mt-1">0 = no bots. "players + bots" keeps the server at that many players, removing bots as people join.</p>
+        <p class="text-[11px] text-slate-400 mt-1">0 = no bots. "fill up with bots" tops the match up to that many players (8 players, fill to 10 = 2 bots) and removes bots as people join. "always add bots" adds that many bots on top of the players. Changes apply within seconds, also mid-match.</p>
       </div>
       <div>
         <span class="text-xs font-medium text-slate-600 flex items-center gap-1 mb-1.5"><svg class="w-3.5 h-3.5"><use href="#i-mic"/></svg>Voice chat</span>
