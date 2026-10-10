@@ -52,15 +52,12 @@
 
     <!-- settings -->
     <section class="bg-white rounded-xl shadow-sm p-4 space-y-3">
-      <h2 class="title"><svg class="w-4 h-4"><use href="#i-cog"/></svg>Settings <span class="text-[11px] font-normal text-slate-400">(Save & apply loads them with a map change, players stay)</span></h2>
+      <h2 class="title"><svg class="w-4 h-4"><use href="#i-cog"/></svg>Settings <span class="text-[11px] font-normal text-slate-400">(Save applies them right away, players stay)</span></h2>
       <div class="grid grid-cols-2 gap-3">
         <label class="col-span-2 lbl">Server name <span class="text-slate-400">(^1-^9 = colors)</span><input id="hostname" class="inp"></label>
         <label class="lbl">Game password<input id="password" class="inp" placeholder="none"></label>
         <label class="lbl">Rcon password<input id="rcon_password" class="inp"></label>
-        <label class="lbl">Game mode<select id="gametype" class="inp"></select></label>
         <label class="lbl">Max players<input id="maxclients" type="number" min="1" max="18" class="inp"></label>
-        <label class="lbl">Score limit<input id="scorelimit" class="inp" placeholder="default"></label>
-        <label class="lbl">Time limit (min)<input id="timelimit" class="inp" placeholder="default"></label>
         <label class="col-span-2 flex items-center gap-2 text-xs"><input id="lan_only" type="checkbox" class="accent-sky-600">LAN only (don't list on internet master server)</label>
       </div>
       <div>
@@ -80,30 +77,27 @@
           <label class="flex items-center gap-2 text-xs pb-1.5"><input id="deadchat" type="checkbox" class="accent-sky-600">Dead can talk to living</label>
         </div>
       </div>
-      <div>
-        <span class="text-xs font-medium text-slate-600 flex items-center gap-1 mb-1.5"><svg class="w-3.5 h-3.5"><use href="#i-lobby"/></svg>Lobby</span>
-        <div class="grid grid-cols-3 gap-3 items-end">
-          <label class="flex items-center gap-2 text-xs pb-1.5"><input id="lobby" type="checkbox" onchange="lobbyForm()" class="accent-sky-600">Lobby mode</label>
-          <label class="col-span-2 lbl">Playlist<select id="lobby_playlist" class="inp"></select></label>
-        </div>
-        <p class="text-[11px] text-slate-400 mt-1">Players wait in a lobby (edit classes, vote to skip) and go back to it after every match. The playlist picks maps, so game mode and map rotation don't apply. Applying restarts the server: players reconnect and land in the lobby.</p>
-      </div>
       <div class="flex gap-2 pt-1">
-        <button onclick="save(false)" class="btn bg-slate-100 hover:bg-slate-200"><svg class="w-3.5 h-3.5"><use href="#i-save"/></svg>Save</button>
-        <button onclick="save(true)" class="btn bg-sky-600 text-white hover:bg-sky-700" title="Players stay connected, server loads the first map of the new rotation"><svg class="w-3.5 h-3.5"><use href="#i-restart"/></svg>Save & apply</button>
+        <button onclick="save()" class="btn bg-sky-600 text-white hover:bg-sky-700"><svg class="w-3.5 h-3.5"><use href="#i-save"/></svg>Save</button>
       </div>
     </section>
 
     <div class="space-y-4">
       <!-- live -->
       <section class="bg-white rounded-xl shadow-sm p-4 space-y-3">
-        <h2 class="title"><svg class="w-4 h-4"><use href="#i-map"/></svg>Now playing</h2>
+        <h2 class="title"><svg class="w-4 h-4"><use href="#i-map"/></svg>Game</h2>
         <div id="now" class="text-xs text-slate-500">-</div>
-        <div class="flex gap-2">
-          <select id="liveMode" class="inp flex-1"></select>
-          <select id="liveMap" class="inp flex-1"></select>
-          <button onclick="changeMap()" class="btn bg-sky-50 text-sky-700 hover:bg-sky-100 whitespace-nowrap">Change now</button>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="lbl">Game mode<select id="gametype" onchange="modeChanged()" class="inp"></select></label>
+          <label class="lbl">Map<select id="liveMap" onchange="paintMaps()" class="inp"></select></label>
+          <label class="lbl">Score limit<input id="scorelimit" class="inp" placeholder="default"></label>
+          <label class="lbl">Time limit (min)<input id="timelimit" class="inp" placeholder="default"></label>
         </div>
+        <div class="flex gap-2">
+          <button id="btnGame" onclick="startGame()" class="btn bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:pointer-events-none"><svg class="w-3.5 h-3.5"><use href="#i-play"/></svg>Start game</button>
+          <button id="btnLobby" onclick="toLobby()" class="btn bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-40 disabled:pointer-events-none"><svg class="w-3.5 h-3.5"><use href="#i-lobby"/></svg>Back to lobby</button>
+        </div>
+        <p class="text-[11px] text-slate-400">Players stay connected both ways. When a match ends everyone goes back to the lobby and waits for the next Start game.</p>
       </section>
 
       <!-- players -->
@@ -120,14 +114,11 @@
   <!-- maps -->
   <section class="bg-white rounded-xl shadow-sm p-4 space-y-3">
     <div class="flex flex-wrap items-center gap-3">
-      <h2 class="title"><svg class="w-4 h-4"><use href="#i-map"/></svg>Map rotation <span id="mapcount" class="text-xs font-normal text-slate-400"></span></h2>
-      <span class="text-[11px] text-slate-400">click to add/remove, <svg class="w-3 h-3 inline"><use href="#i-play"/></svg> to play now</span>
+      <h2 class="title"><svg class="w-4 h-4"><use href="#i-map"/></svg>Maps <span id="mapcount" class="text-xs font-normal text-slate-400"></span></h2>
+      <span class="text-[11px] text-slate-400">click to pick the map, <svg class="w-3 h-3 inline"><use href="#i-play"/></svg> to start a game on it</span>
       <div class="ml-auto flex items-center gap-2">
         <input id="mapsearch" oninput="filterMaps()" placeholder="search" class="inp !mt-0 w-36">
-        <select id="mapfilter" onchange="filterMaps()" class="inp !mt-0 w-28"><option value="all">all maps</option><option value="on">in rotation</option><option value="custom">custom</option></select>
-        <button onclick="allMaps(true)" class="btn bg-slate-100 hover:bg-slate-200">All</button>
-        <button onclick="allMaps(false)" class="btn bg-slate-100 hover:bg-slate-200">None</button>
-        <button onclick="save(false)" class="btn bg-sky-600 text-white hover:bg-sky-700"><svg class="w-3.5 h-3.5"><use href="#i-save"/></svg>Save</button>
+        <select id="mapfilter" onchange="filterMaps()" class="inp !mt-0 w-28"><option value="all">all maps</option><option value="custom">custom</option></select>
       </div>
     </div>
     <div id="maps" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3"></div>
@@ -138,7 +129,7 @@
     <h2 class="title"><svg class="w-4 h-4"><use href="#i-term"/></svg>Console</h2>
     <pre id="log" class="bg-slate-800 text-slate-200 text-[11px] leading-snug rounded-lg p-3 h-64 overflow-y-auto whitespace-pre-wrap"></pre>
     <form onsubmit="sendRcon(event)" class="flex gap-2">
-      <input id="cmd" class="inp flex-1 font-mono" placeholder="rcon command, e.g. say hello  /  map_rotate  /  fast_restart">
+      <input id="cmd" class="inp flex-1 font-mono" placeholder="rcon command, e.g. say hello  /  fast_restart">
       <button class="btn bg-slate-100 hover:bg-slate-200"><svg class="w-3.5 h-3.5"><use href="#i-send"/></svg>Send</button>
     </form>
   </section>
@@ -152,7 +143,7 @@
 </style>
 
 <script>
-let S = null, rconOut = [], sel = new Set();
+let S = null, rconOut = [];
 const $ = id => document.getElementById(id);
 const api = async (path, body) => {
   const r = await fetch(path, body === undefined ? {} : {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
@@ -167,17 +158,14 @@ function fillForm(c) {
   $('bots_skill').innerHTML = Object.entries(S.bot_skills).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
   for (const k of ['hostname','password','rcon_password','maxclients','scorelimit','timelimit','bots_fill','bots_fill_mode','bots_skill']) $(k).value = c[k];
   $('lan_only').checked = c.lan_only;
-  $('lobby_playlist').innerHTML = Object.entries(S.lobby_playlists).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
-  $('lobby').checked = c.lobby; $('lobby_playlist').value = c.lobby_playlist; lobbyForm();
   $('voice').checked = c.voice; $('alltalk').value = c.alltalk ? '1' : '0'; $('deadchat').checked = c.deadchat;
   const tag = m => m.custom ? ' <span class="text-[10px] text-violet-500 bg-violet-50 px-1 rounded">custom</span>' : '';
   const opts = Object.entries(S.gametypes).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
   $('gametype').innerHTML = opts; $('gametype').value = c.gametype;
-  $('liveMode').innerHTML = opts;
   $('liveMap').innerHTML = S.maps.map(m => `<option value="${m.id}">${esc(m.name)}${m.custom ? ' (custom)' : ''}</option>`).join('');
-  sel = new Set(c.maps);
+  if (S.maps.some(m => m.id === c.map)) $('liveMap').value = c.map;
   $('maps').innerHTML = S.maps.map(m => `
-    <div data-id="${m.id}" data-name="${esc(m.name.toLowerCase())}" data-custom="${m.custom}" onclick="toggleMap('${m.id}')"
+    <div data-id="${m.id}" data-name="${esc(m.name.toLowerCase())}" data-custom="${m.custom}" onclick="pickMap('${m.id}')"
          class="mapcard group relative cursor-pointer rounded-lg overflow-hidden bg-slate-200 ring-2 ring-transparent transition select-none">
       ${m.image
         ? `<img src="/api/mapimg/${m.id}" loading="lazy" class="w-full aspect-video object-cover transition">`
@@ -187,31 +175,29 @@ function fillForm(c) {
       </div>
       <span class="check absolute top-1.5 left-1.5 w-5 h-5 rounded-full bg-sky-500 text-white text-[11px] flex items-center justify-center">&#10003;</span>
       <span class="nowbadge hidden absolute top-1.5 left-8 text-[10px] bg-emerald-500 text-white px-1.5 py-0.5 rounded">now</span>
-      <button onclick="event.stopPropagation(); playMap('${m.id}')" title="Play now"
+      <button onclick="event.stopPropagation(); playMap('${m.id}')" title="Start game"
               class="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-white/90 text-sky-700 shadow flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-white transition">
         <svg class="w-3.5 h-3.5"><use href="#i-play"/></svg></button>
     </div>`).join('');
   paintMaps();
 }
 
-function lobbyForm() {
-  const on = $('lobby').checked;
-  $('lobby_playlist').disabled = !on;
-  for (const k of ['gametype', 'scorelimit', 'timelimit']) $(k).disabled = on;
+// the saved limits belong to the saved mode: another mode starts from its defaults
+function modeChanged() {
+  const same = $('gametype').value === S.config.gametype;
+  $('scorelimit').value = same ? S.config.scorelimit : '';
+  $('timelimit').value = same ? S.config.timelimit : '';
 }
 
 function paintMaps() {
-  const now = S.live && S.live.map;
+  const now = S.live && S.live.in_game && S.live.map;
   document.querySelectorAll('.mapcard').forEach(el => {
-    const on = sel.has(el.dataset.id);
+    const on = el.dataset.id === $('liveMap').value;
     el.classList.toggle('ring-sky-500', on);
     el.querySelector('.check').classList.toggle('hidden', !on);
-    const img = el.querySelector('img, div');
-    img.classList.toggle('opacity-50', !on);
-    img.classList.toggle('grayscale', !on);
     el.querySelector('.nowbadge').classList.toggle('hidden', el.dataset.id !== now);
   });
-  $('mapcount').textContent = `(${sel.size} of ${S.maps.length})`;
+  $('mapcount').textContent = `(${S.maps.length})`;
   filterMaps();
 }
 
@@ -219,37 +205,41 @@ function filterMaps() {
   const q = $('mapsearch').value.toLowerCase(), f = $('mapfilter').value;
   document.querySelectorAll('.mapcard').forEach(el => {
     const show = el.dataset.name.includes(q) &&
-      (f === 'all' || (f === 'on' && sel.has(el.dataset.id)) || (f === 'custom' && el.dataset.custom === 'true'));
+      (f === 'all' || (f === 'custom' && el.dataset.custom === 'true'));
     el.classList.toggle('hidden', !show);
   });
 }
 
-function toggleMap(id) { sel.has(id) ? sel.delete(id) : sel.add(id); paintMaps(); }
+function pickMap(id) { $('liveMap').value = id; paintMaps(); }
 
 async function playMap(id) {
-  $('liveMap').value = id;
-  await changeMap();
+  pickMap(id);
+  await startGame();
 }
 
 function render() {
   const run = S.running, live = S.live;
   $('dot').className = 'w-2.5 h-2.5 rounded-full ' + (live ? 'bg-emerald-400' : run ? 'bg-amber-400' : 'bg-slate-300');
-  $('statusText').textContent = live ? `running ${live.version}${S.lobby ? ' · lobby' : ''}` : run ? 'starting...' : 'stopped';
+  $('statusText').textContent = live ? `running ${live.version} · ${live.in_game ? 'in game' : 'lobby'}` : run ? 'starting...' : 'stopped';
   $('addr').textContent = S.address;
-  $('now').innerHTML = live ? `<span class="text-slate-700 font-medium">${esc(mapName(live.map))}</span> · ${esc(S.gametypes[live.gametype] || live.gametype)} · ${esc(live.hostname)}` : 'server not running';
+  $('now').innerHTML = !live ? 'server not running'
+    : live.in_game ? `<span class="text-slate-700 font-medium">${esc(mapName(live.map))}</span> · ${esc(S.gametypes[live.gametype] || live.gametype)} · ${esc(live.hostname)}`
+    : `<span class="text-slate-700 font-medium">In the lobby</span>, waiting for Start game · ${esc(live.hostname)}`;
+  $('btnGame').disabled = !live || live.in_game;
+  $('btnLobby').disabled = !live || !live.in_game;
   const ps = live ? live.players : [];
   $('pcount').textContent = live ? `(${ps.length})` : '';
   $('players').innerHTML = ps.length ? ps.map(p => `<tr class="border-t border-slate-100">
       <td class="py-1.5">${p.num}</td><td class="font-medium text-slate-700">${esc(p.name)}${p.bot ? ' <span class="text-[10px] text-amber-600 bg-amber-50 px-1 rounded">bot</span>' : ''}</td><td>${p.score}</td><td>${p.bot ? '-' : p.ping}</td>
       <td class="font-mono text-[10px] text-slate-400">${p.guid}</td><td class="text-slate-400">${esc(p.address)}</td>
       <td class="text-right"><button onclick="kick(${p.num}, '${esc(p.name)}')" title="Kick" class="text-rose-400 hover:text-rose-600"><svg class="w-3.5 h-3.5"><use href="#i-x"/></svg></button></td></tr>`).join('')
-    : `<tr><td colspan="7" class="py-3 text-center text-slate-400">no players</td></tr>`;
+    : `<tr><td colspan="7" class="py-3 text-center text-slate-400">${live && !live.in_game ? 'players in the lobby show up here once a game starts' : 'no players'}</td></tr>`;
 }
 
 async function refresh(first) {
   try {
     S = await api('/api/state');
-    if (first) { fillForm(S.config); $('liveMode').value = S.config.gametype; }
+    if (first) fillForm(S.config);
     render(); paintMaps();
   } catch (e) { $('statusText').textContent = 'ui backend unreachable'; }
 }
@@ -263,43 +253,39 @@ async function refreshLog() {
 
 async function act(a) {
   const n = S && S.live ? S.live.players.length : 0;
-  if (n && a !== 'start' && !confirm(`${a} disconnects all ${n} player(s). Use "Save & apply" to keep them. Continue?`)) return;
+  if (n && a !== 'start' && !confirm(`${a} disconnects all ${n} player(s). Continue?`)) return;
   toast(a + '...');
   try { await api('/api/server/' + a, {}); toast(a + ' done'); } catch (e) { toast('error: ' + e.message); }
   refresh();
 }
 
-async function save(restart) {
+async function save() {
   const body = {
     hostname: $('hostname').value, password: $('password').value, rcon_password: $('rcon_password').value,
-    maxclients: +$('maxclients').value, lan_only: $('lan_only').checked, gametype: $('gametype').value,
+    maxclients: +$('maxclients').value, lan_only: $('lan_only').checked,
     voice: $('voice').checked, alltalk: $('alltalk').value === '1', deadchat: $('deadchat').checked,
-    scorelimit: $('scorelimit').value, timelimit: $('timelimit').value,
     bots_fill: +$('bots_fill').value, bots_fill_mode: $('bots_fill_mode').value, bots_skill: $('bots_skill').value,
-    lobby: $('lobby').checked, lobby_playlist: $('lobby_playlist').value,
-    maps: S.maps.map(m => m.id).filter(id => sel.has(id)),
   };
-  const n = S.live ? S.live.players.filter(p => !p.bot).length : 0;
-  if (restart && n && (body.lobby || S.lobby) && !confirm(`Lobby mode restarts the server: ${n} player(s) get disconnected and need to reconnect. Continue?`)) return;
-  try {
-    await api('/api/config', body); toast('saved');
-    if (restart) {
-      const r = await api('/api/apply', {});
-      toast(r.started ? 'server started' : r.restarted ? 'server restarting...' : 'applied, loading new rotation...');
-      setTimeout(refresh, 4000);
-    }
-  }
+  try { await api('/api/config', body); toast('saved'); }
   catch (e) { toast('error: ' + e.message); }
 }
-
-function allMaps(on) { sel = new Set(on ? S.maps.map(m => m.id) : []); paintMaps(); }
 
 async function kick(num, name) {
   await api('/api/kick', {num}); toast('kicked ' + name); refresh();
 }
 
-async function changeMap() {
-  try { await api('/api/map', {map: $('liveMap').value, gametype: $('liveMode').value}); toast('changing map...'); }
+async function startGame() {
+  const body = {map: $('liveMap').value, gametype: $('gametype').value, scorelimit: $('scorelimit').value, timelimit: $('timelimit').value};
+  try {
+    await api('/api/game', body); toast(`starting ${mapName(body.map)}...`);
+    Object.assign(S.config, {gametype: body.gametype, scorelimit: body.scorelimit, timelimit: body.timelimit, map: body.map});
+  }
+  catch (e) { toast('error: ' + e.message); }
+  setTimeout(refresh, 4000);
+}
+
+async function toLobby() {
+  try { await api('/api/lobby', {}); toast('ending the match, everyone goes back to the lobby...'); }
   catch (e) { toast('error: ' + e.message); }
   setTimeout(refresh, 4000);
 }

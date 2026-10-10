@@ -84,12 +84,11 @@ BOT_SKILLS = {
     "0": "Mixed", "1": "1 (easiest)", "2": "2", "3": "3", "4": "4", "5": "5", "6": "6",
     "7": "7 (hardest)", "9": "Completely random",
 }
-# playlists in IW4x's playlists_default.info, by the index "+playlist" takes
-LOBBY_PLAYLISTS = {
-    "0": "Team Deathmatch", "1": "Free-for-all", "2": "Domination", "3": "Demolition",
-    "4": "Sabotage", "5": "Headquarters Pro", "6": "Search & Destroy",
-    "7": "Hardcore Team Deathmatch", "8": "Capture the Flag",
-}
+# The server always runs as a lobby (party) server: players wait in the lobby and the UI
+# picks the map and mode and starts each match. The lobby never starts one by itself.
+LOBBY_ARGS = ["+set", "party_enable", "1", "+set", "party_minLobbyTime", "2147483", "+playlist", "0"]
+# ends the match on "sv_tolobby 1", sending everyone back to the lobby
+LOBBY_GSC = Path(__file__).resolve().parent / "lobby.gsc"
 
 app = FastAPI()
 
@@ -204,8 +203,6 @@ def read_cfg() -> dict[str, str]:
 def config_view() -> dict:
     v = read_cfg()
     gt = v.get("g_gametype", "war")
-    tokens = v.get("sv_mapRotation", "").split()
-    maps = [tokens[i + 1] for i in range(len(tokens) - 1) if tokens[i] == "map"]
     return {
         "hostname": v.get("sv_hostname", ""),
         "password": v.get("g_password", ""),
@@ -215,15 +212,13 @@ def config_view() -> dict:
         "gametype": gt,
         "scorelimit": v.get(f"scr_{gt}_scorelimit", ""),
         "timelimit": v.get(f"scr_{gt}_timelimit", ""),
-        "maps": maps,
+        "map": v.get("ui_mapname", ""),
         "bots_fill": int(v.get("bots_manage_fill", "0")),
         "bots_fill_mode": v.get("bots_manage_fill_mode", "0"),
         "bots_skill": v.get("bots_skill", "0"),
         "voice": v.get("sv_voice", "0") == "1",  # off on dedicated servers unless set
         "alltalk": v.get("sv_alltalk", "0") == "1",
         "deadchat": v.get("g_deadChat", "0") == "1",
-        "lobby": v.get("party_enable", "0") == "1",
-        "lobby_playlist": v.get("lobby_playlist", "0"),
     }
 
 
@@ -233,18 +228,12 @@ class Config(BaseModel):
     rcon_password: str
     maxclients: int
     lan_only: bool
-    gametype: str
-    scorelimit: str
-    timelimit: str
-    maps: list[str]
     bots_fill: int
     bots_fill_mode: str
     voice: bool = True
     alltalk: bool = False
     deadchat: bool = False
     bots_skill: str
-    lobby: bool = False
-    lobby_playlist: str = "0"
 
 
 def clean(s: str) -> str:
@@ -252,16 +241,8 @@ def clean(s: str) -> str:
 
 
 def write_cfg(c: Config) -> None:
-    valid = {m["id"] for m in installed_maps()}
-    if c.gametype not in gametypes():
-        raise HTTPException(400, "unknown gametype")
-    maps = [m for m in c.maps if m in valid]
-    if not maps:
-        raise HTTPException(400, "pick at least one map")
     if c.bots_skill not in BOT_SKILLS or c.bots_fill_mode not in ("0", "1"):
         raise HTTPException(400, "invalid bot settings")
-    if c.lobby_playlist not in LOBBY_PLAYLISTS:
-        raise HTTPException(400, "unknown lobby playlist")
     v = read_cfg()
     v.update({
         "sv_hostname": clean(c.hostname),
@@ -270,23 +251,21 @@ def write_cfg(c: Config) -> None:
         "party_maxplayers": str(max(1, min(c.maxclients, 18))),
         "g_password": clean(c.password),
         "rcon_password": clean(c.rcon_password),
-        "g_gametype": c.gametype,
-        "sv_mapRotation": f"gametype {c.gametype} " + " ".join(f"map {m}" for m in maps),
         "bots_manage_fill": str(max(0, min(c.bots_fill, 17))),
         "bots_manage_fill_mode": c.bots_fill_mode,
         "bots_skill": c.bots_skill,
         "sv_voice": "1" if c.voice else "0",          # voice chat on/off
         "sv_alltalk": "1" if c.alltalk else "0",      # 1: everyone hears everyone, 0: own team only
         "g_deadChat": "1" if c.deadchat else "0",     # dead players can talk to the living
-        "party_enable": "1" if c.lobby else "0",      # lobby: players wait between matches
-        "lobby_playlist": c.lobby_playlist,           # our own dvar, read by start_server
     })
-    for key, val in ((f"scr_{c.gametype}_scorelimit", c.scorelimit),
-                     (f"scr_{c.gametype}_timelimit", c.timelimit)):
-        if clean(val):
-            v[key] = clean(val)
-        else:
-            v.pop(key, None)
+    save_cfg(v)
+
+
+def save_cfg(v: dict[str, str]) -> None:
+    # always a lobby server: an old "party_enable 0" would end the lobby on "exec server.cfg"
+    v["party_enable"] = "1"
+    for key in ("sv_mapRotation", "lobby_playlist"):  # left over from rotation / playlist mode
+        v.pop(key, None)
     lines = ["// IW4x LAN dedicated server (edited by server-ui)"]
     lines += [f'set {k} "{val}"' for k, val in v.items()]
     CFG.write_text("\n".join(lines) + "\n")
@@ -320,23 +299,19 @@ def server_pids() -> list[int]:
     return [p.pid for p in server_procs()]
 
 
-def lobby_running() -> bool:
-    try:
-        return any("+playlist" in " ".join(p.cmdline()) for p in server_procs())
-    except psutil.Error:
-        return False
+def install_lobby_gsc() -> None:
+    """The server loads custom scripts on every map load, so this also reaches a running server."""
+    dest = GAME_DIR / "userraw" / "scripts" / "mp" / "lobby.gsc"
+    if GAME_DIR.exists() and (not dest.exists() or dest.read_bytes() != LOBBY_GSC.read_bytes()):
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(LOBBY_GSC.read_bytes())
 
 
 def start_server() -> None:
     if server_pids():
         return
-    # lobby mode is fixed at startup: playlists only load when the server starts
-    v = read_cfg()
-    args = ["-dedicated", "+set", "net_port", str(PORT), "+exec", "server.cfg"]
-    if v.get("party_enable") == "1":
-        args += ["+set", "party_enable", "1", "+playlist", v.get("lobby_playlist", "0")]
-    else:
-        args += ["+set", "party_enable", "0", "+map_rotate"]
+    install_lobby_gsc()
+    args = ["-dedicated", "+set", "net_port", str(PORT), "+exec", "server.cfg", *LOBBY_ARGS]
     if IS_WINDOWS:
         cmd = [str(GAME_DIR / "iw4x.exe"), *args]
         detach = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS}
@@ -409,7 +384,8 @@ def live_status() -> dict | None:
     kv = dict(zip(info[::2], info[1::2]))
     players = []
     row = re.compile(r"^\s*(\d+)\s+(-?\d+)\s+(\S+)\s+(\S+)\s+(.*?)\s+(\d+)\s+(\S+)\s+(-?\d+)\s+(\d+)\s*$")
-    for line in rcon("status").splitlines():
+    status = rcon("status")  # "map: ..." during a match, "Server is not running." in the lobby
+    for line in status.splitlines():
         m = row.match(line)
         if m:
             players.append({
@@ -421,6 +397,7 @@ def live_status() -> dict | None:
         "map": kv.get("mapname", ""),
         "gametype": kv.get("g_gametype", ""),
         "version": kv.get("shortversion", ""),
+        "in_game": status.lstrip().startswith("map:"),
         "players": players,
     }
 
@@ -443,20 +420,20 @@ def lan_ip() -> str:
 def state():
     return {
         "running": bool(server_pids()),
-        "lobby": lobby_running(),
         "live": live_status(),
         "address": f"{lan_ip()}:{PORT}",
         "config": config_view(),
         "maps": installed_maps(),
         "gametypes": gametypes(),
         "bot_skills": BOT_SKILLS,
-        "lobby_playlists": LOBBY_PLAYLISTS,
     }
 
 
 @app.post("/api/config")
 def save_config(c: Config):
     write_cfg(c)
+    if live_status():
+        rcon("exec server.cfg")
     return {"ok": True}
 
 
@@ -474,23 +451,6 @@ def server_action(action: str):
     return {"ok": True}
 
 
-@app.post("/api/apply")
-def apply_config():
-    """Reload server.cfg and start the new rotation via a map change, which keeps players connected.
-    Lobby mode only loads at startup, so switching to, from or within it restarts the server."""
-    if not live_status():
-        start_server()
-        return {"ok": True, "started": True}
-    if read_cfg().get("party_enable") == "1" or lobby_running():
-        stop_server()
-        start_server()
-        return {"ok": True, "restarted": True}
-    rcon("exec server.cfg")
-    rcon('sv_mapRotationCurrent ""')
-    rcon("map_rotate")
-    return {"ok": True, "started": False}
-
-
 class Kick(BaseModel):
     num: int
 
@@ -500,17 +460,44 @@ def kick(k: Kick):
     return {"output": rcon(f"clientkick {k.num}")}
 
 
-class MapChange(BaseModel):
+class Game(BaseModel):
     map: str
     gametype: str
+    scorelimit: str = ""
+    timelimit: str = ""
 
 
-@app.post("/api/map")
-def change_map(m: MapChange):
-    if m.gametype not in gametypes() or m.map not in {x["id"] for x in installed_maps()}:
+@app.post("/api/game")
+def start_game(g: Game):
+    """Lobby -> match on the chosen map and mode. Everyone in the lobby goes along, still connected."""
+    if g.gametype not in gametypes() or g.map not in {m["id"] for m in installed_maps()}:
         raise HTTPException(400, "invalid map or gametype")
-    rcon(f"g_gametype {m.gametype}")
-    return {"output": rcon(f"map {m.map}")}
+    live = live_status()
+    if not live:
+        raise HTTPException(409, "server not running")
+    if live["in_game"]:
+        raise HTTPException(409, "a match is running: send everyone to the lobby first")
+    v = read_cfg()
+    v.update({"g_gametype": g.gametype, "ui_gametype": g.gametype, "ui_mapname": g.map})
+    for key, val in ((f"scr_{g.gametype}_scorelimit", g.scorelimit),
+                     (f"scr_{g.gametype}_timelimit", g.timelimit)):
+        if clean(val):
+            v[key] = clean(val)
+        else:
+            v.pop(key, None)
+            rcon(f"reset {key}")  # back to the mode's default
+    save_cfg(v)
+    rcon("exec server.cfg")
+    return {"output": rcon("xpartygo")}
+
+
+@app.post("/api/lobby")
+def to_lobby():
+    """Match -> lobby: lobby.gsc ends the match, players stay connected and wait in the lobby."""
+    live = live_status()
+    if not live or not live["in_game"]:
+        raise HTTPException(409, "no match running")
+    return {"output": rcon("sv_tolobby 1")}
 
 
 class Command(BaseModel):
@@ -545,6 +532,7 @@ def index():
 
 
 if __name__ == "__main__":
+    install_lobby_gsc()
     if os.environ.get("AUTOSTART") == "1":
         start_server()
     uvicorn.run(app, host=UI_HOST, port=UI_PORT)

@@ -68,7 +68,7 @@ Runs on any Mac or Windows PC with the game installed (see above). No GPU needed
 2. Double-click **Start Server** (`Start Server.command` on Mac, `Start Server.cmd` on Windows). On a Mac the first time: right-click → Open
 3. The control page opens in your browser: press **Start**
 
-In the control page you can pick maps and game modes, add bots, kick players, set a game password and turn on lobby mode, where players wait in a lobby between matches like in vanilla MW2 (**Settings → Save & apply**). To protect the control page itself, set `UI_PASSWORD=yourpassword` in the `.env` file and start it again.
+The server runs as a lobby, like vanilla MW2: players join the lobby and wait there. In the control page you pick the map and mode and press **Start game** to take everyone into the match, and **Back to lobby** to end it early. When a match ends, everyone goes back to the lobby; no map starts on its own. Nobody gets disconnected in between. You can also add bots, kick players and set a game password. To protect the control page itself, set `UI_PASSWORD=yourpassword` in the `.env` file and start it again.
 
 The server needs the custom maps too: they come with the setup above. If the server runs from its own CrossOver bottle (for example `mw-server`), add them there:
 
