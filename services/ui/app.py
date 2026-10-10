@@ -86,9 +86,16 @@ BOT_SKILLS = {
 }
 # The server always runs as a lobby (party) server: players wait in the lobby and the UI
 # picks the map and mode and starts each match. The lobby never starts one by itself.
-LOBBY_ARGS = ["+set", "party_enable", "1", "+set", "party_minLobbyTime", "2147483", "+playlist", "0"]
+LOBBY_ARGS = ["+set", "party_enable", "1", "+playlist", "0"]
 # ends the match on "sv_tolobby 1", sending everyone back to the lobby
 LOBBY_GSC = Path(__file__).resolve().parent / "lobby.gsc"
+# Our own playlist file: the stock playlists set "rule party_minplayers 4" (re-applied on
+# every return to the lobby), so with enough players the lobby starts the next playlist
+# map by itself, and that list includes DLC maps that aren't installed.
+LOBBY_PLAYLIST = "playlists_lobby.info"
+STOCK_MAPS = ["mp_afghan", "mp_boneyard", "mp_brecourt", "mp_checkpoint", "mp_derail", "mp_estate",
+              "mp_favela", "mp_highrise", "mp_invasion", "mp_nightshift", "mp_quarry", "mp_rundown",
+              "mp_rust", "mp_subbase", "mp_terminal", "mp_underpass"]
 
 app = FastAPI()
 
@@ -308,11 +315,41 @@ def install_lobby_gsc() -> None:
         dest.write_bytes(LOBBY_GSC.read_bytes())
 
 
+def install_lobby_playlist() -> bool:
+    """Writes userraw/playlists_lobby.info: the stock gametype definitions plus one playlist
+    whose rules never let the lobby start a match itself (needs 18 players and a 27 hour
+    countdown). The UI starts matches with xpartygo, which skips both."""
+    stock = GAME_DIR / "main" / "iw4x" / "x86" / "playlists_default.info"
+    if not stock.exists():
+        return False
+    data = stock.read_bytes()
+    gametypes_only = data[:m.start()] if (m := re.search(rb"^playlist ", data, re.MULTILINE)) else data
+    maxplayers = read_cfg().get("party_maxplayers", "18")
+    playlist = "\n".join([
+        "playlist 1",
+        'name english "Lobby"',
+        "rule party_minplayers 18",
+        f"rule party_maxplayers {maxplayers}",
+        "rule party_matchedplayercount 1",
+        "rule party_gameStartTimerLength 99999",
+        "",
+        *(f"{map_id},tdm,1" for map_id in STOCK_MAPS),
+        "",
+    ])
+    dest = GAME_DIR / "userraw" / LOBBY_PLAYLIST
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(gametypes_only + playlist.encode())
+    return True
+
+
 def start_server() -> None:
     if server_pids():
         return
     install_lobby_gsc()
-    args = ["-dedicated", "+set", "net_port", str(PORT), "+exec", "server.cfg", *LOBBY_ARGS]
+    args = ["-dedicated", "+set", "net_port", str(PORT), "+exec", "server.cfg"]
+    if install_lobby_playlist():
+        args += ["+set", "playlistFilename", LOBBY_PLAYLIST]
+    args += LOBBY_ARGS
     if IS_WINDOWS:
         cmd = [str(GAME_DIR / "iw4x.exe"), *args]
         detach = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS}
