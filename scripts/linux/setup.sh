@@ -88,7 +88,7 @@ fetch_parallel() {
 # bytes downloaded so far into the parts of $1
 parts_size() {
   local i total=0
-  for (( i = 0; i < 8; i++ )); do (( total += $(size_of "$1.parts/$i") )); done
+  for (( i = 0; i < 8; i++ )); do total=$(( total + $(size_of "$1.parts/$i") )); done   # (( total += 0 )) fails under set -e
   echo $total
 }
 
