@@ -3,6 +3,5 @@ game/
 mw.zip
 .setup-tmp/
 services/ui/server.log
-services/ui/thumbs/
 __pycache__/
 .DS_Store

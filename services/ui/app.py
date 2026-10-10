@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["fastapi", "uvicorn", "pillow", "psutil"]
+# dependencies = ["fastapi", "uvicorn", "psutil"]
 # ///
 """Small web UI to configure and control the IW4x LAN dedicated server."""
 
@@ -9,7 +9,6 @@ import os
 import re
 import secrets
 import socket
-import struct
 import subprocess
 import sys
 import threading
@@ -21,8 +20,7 @@ from pathlib import Path
 import psutil
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, Response
-from PIL import Image
+from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
 
 IS_WINDOWS = sys.platform == "win32"
@@ -40,10 +38,9 @@ else:
                         / "drive_c/Program Files (x86)/Call of Duty Modern Warfare 2")
 GAME_DIR = Path(os.environ.get("IW4X_SERVER_DIR", DEFAULT_GAME_DIR))
 CFG = GAME_DIR / "main" / "server.cfg"
-# server console log and map thumbnails (a volume in Docker, so they survive rebuilds)
+# server console log (a volume in Docker, so it survives rebuilds)
 DATA_DIR = Path(os.environ.get("UI_DATA_DIR", Path(__file__).resolve().parent))
 LOG = DATA_DIR / "server.log"
-THUMBS = DATA_DIR / "thumbs"
 WINE = os.environ.get("WINE", "wine" if IS_LINUX else "/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wine")
 PORT = int(os.environ.get("IW4X_PORT", "28960"))
 UI_PORT = int(os.environ.get("UI_PORT", "8080"))
@@ -84,6 +81,8 @@ BOT_SKILLS = {
     "0": "Mixed", "1": "1 (easiest)", "2": "2", "3": "3", "4": "4", "5": "5", "6": "6",
     "7": "7 (hardest)", "9": "Completely random",
 }
+# per-mode settings (scr_<mode>_<name>), set from the Game panel; empty = the mode's default
+MODE_LIMITS = ["scorelimit", "timelimit", "roundlimit", "winlimit", "roundswitch", "numlives"]
 # The server always runs as a lobby (party) server: players wait in the lobby and the UI
 # picks the map and mode and starts each match. The lobby never starts one by itself.
 LOBBY_ARGS = ["+set", "party_enable", "1", "+playlist", "0"]
@@ -123,8 +122,7 @@ def installed_maps() -> list[dict]:
         d.name for d in (GAME_DIR / "usermaps").glob("mp_*") if (d / f"{d.name}.ff").exists()
     }
     maps = [
-        {"id": n, "name": MAP_NAMES.get(n, n), "custom": n in custom and n not in names,
-         "image": n in image_index()}
+        {"id": n, "name": MAP_NAMES.get(n, n), "custom": n in custom and n not in names}
         for n in names | custom
     ]
     return sorted(maps, key=lambda m: m["name"])
@@ -143,56 +141,6 @@ def gametypes() -> dict[str, str]:
     ids |= {p.stem.lower() for p in GAME_DIR.glob("userraw/maps/mp/gametypes/*.gsc") if not p.stem.startswith("_")}
     names = {g: GAMETYPE_NAMES.get(g, g) for g in ids}
     return dict(sorted(names.items(), key=lambda kv: kv[1]))
-
-
-# ---------- map images ----------
-
-@cache
-def image_index() -> dict[str, tuple[Path, str]]:
-    """Map id -> (iwd, member) of its largest preview/loadscreen image."""
-    best: dict[str, tuple[int, Path, str]] = {}
-    for iwd in [*GAME_DIR.glob("main/**/*.iwd"), *GAME_DIR.glob("usermaps/*/*.iwd")]:
-        try:
-            z = zipfile.ZipFile(iwd)
-        except zipfile.BadZipFile:
-            continue
-        for name in z.namelist():
-            m = re.match(r"images/(?:loadscreen|preview)_(mp_\w+)\.iwi$", name)
-            if not m:
-                continue
-            with z.open(name) as f:
-                w, h = struct.unpack_from("<2H", f.read(14), 10)
-            if w >= 64 and w * h > best.get(m[1], (0,))[0]:
-                best[m[1]] = (w * h, iwd, name)
-    return {k: (v[1], v[2]) for k, v in best.items()}
-
-
-def iwi_to_image(data: bytes) -> Image.Image:
-    fmt = data[8]
-    w, h = struct.unpack_from("<2H", data, 10)
-    # mipmaps are stored smallest first, so the full-size image is at the end
-    if fmt == 0x2:
-        return Image.frombytes("RGB", (w, h), data[-w * h * 3:], "raw", "BGR")
-    if fmt == 0x1:
-        return Image.frombytes("RGBA", (w, h), data[-w * h * 4:], "raw", "BGRA").convert("RGB")
-    if fmt == 0xB:
-        return Image.frombytes("RGBA", (w, h), data[-w * h // 2:], "bcn", 1).convert("RGB")
-    if fmt in (0xC, 0xD):
-        return Image.frombytes("RGBA", (w, h), data[-w * h:], "bcn", fmt - 0xA).convert("RGB")
-    raise ValueError(f"unsupported iwi format {fmt:#x}")
-
-
-def map_thumb(map_id: str) -> Path | None:
-    out = THUMBS / f"{map_id}.jpg"
-    if out.exists():
-        return out
-    src = image_index().get(map_id)
-    if not src:
-        return None
-    img = iwi_to_image(zipfile.ZipFile(src[0]).read(src[1]))
-    THUMBS.mkdir(exist_ok=True)
-    img.resize((480, 270), Image.LANCZOS).save(out, "JPEG", quality=82)
-    return out
 
 
 # ---------- server.cfg ----------
@@ -217,8 +165,7 @@ def config_view() -> dict:
         "maxclients": int(v.get("sv_maxclients", "18")),
         "lan_only": v.get("sv_lanOnly", "1") == "1",
         "gametype": gt,
-        "scorelimit": v.get(f"scr_{gt}_scorelimit", ""),
-        "timelimit": v.get(f"scr_{gt}_timelimit", ""),
+        **{k: v.get(f"scr_{gt}_{k}", "") for k in MODE_LIMITS},
         "map": v.get("ui_mapname", ""),
         "bots_fill": int(v.get("bots_manage_fill", "0")),
         "bots_fill_mode": v.get("bots_manage_fill_mode", "0"),
@@ -553,6 +500,10 @@ def select(p: Pick):
 class Game(Pick):
     scorelimit: str = ""
     timelimit: str = ""
+    roundlimit: str = ""
+    winlimit: str = ""
+    roundswitch: str = ""
+    numlives: str = ""
 
 
 @app.post("/api/game")
@@ -564,8 +515,8 @@ def start_game(g: Game):
         raise HTTPException(409, "server not running")
     if live["in_game"]:
         raise HTTPException(409, "a match is running: send everyone to the lobby first")
-    for key, val in ((f"scr_{g.gametype}_scorelimit", g.scorelimit),
-                     (f"scr_{g.gametype}_timelimit", g.timelimit)):
+    for limit in MODE_LIMITS:
+        key, val = f"scr_{g.gametype}_{limit}", getattr(g, limit)
         if clean(val):
             v[key] = clean(val)
         else:
@@ -599,16 +550,6 @@ def log():
     if not LOG.exists():
         return {"lines": ["(no log yet: start the server from this page to capture its console)"]}
     return {"lines": LOG.read_text(errors="replace").splitlines()[-300:]}
-
-
-@app.get("/api/mapimg/{map_id}")
-def map_image(map_id: str):
-    if not re.fullmatch(r"mp_\w+", map_id):
-        raise HTTPException(400)
-    path = map_thumb(map_id)
-    if not path:
-        raise HTTPException(404)
-    return FileResponse(path, headers={"Cache-Control": "max-age=86400"})
 
 
 @app.get("/", response_class=HTMLResponse)

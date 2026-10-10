@@ -89,10 +89,17 @@
         <div id="now" class="text-xs text-slate-500">-</div>
         <div class="grid grid-cols-2 gap-3">
           <label class="lbl">Game mode<select id="gametype" onchange="modeChanged(); showPick()" class="inp"></select></label>
-          <label class="lbl">Map<select id="liveMap" onchange="paintMaps(); showPick()" class="inp"></select></label>
+          <label class="lbl">Map<select id="liveMap" onchange="showPick()" class="inp"></select></label>
+        </div>
+        <div class="grid grid-cols-3 gap-3">
           <label class="lbl">Score limit<input id="scorelimit" class="inp" placeholder="default"></label>
           <label class="lbl">Time limit (min)<input id="timelimit" class="inp" placeholder="default"></label>
+          <label class="lbl" title="Total rounds, 0 = no limit">Rounds<input id="roundlimit" class="inp" placeholder="default"></label>
+          <label class="lbl" title="Round wins needed to win, 0 = off">Win limit<input id="winlimit" class="inp" placeholder="default"></label>
+          <label class="lbl" title="Switch sides every N rounds, 0 = never">Switch sides every<input id="roundswitch" class="inp" placeholder="default"></label>
+          <label class="lbl" title="Lives per player per round, 0 = unlimited">Lives<input id="numlives" class="inp" placeholder="default"></label>
         </div>
+        <p class="text-[11px] text-slate-400">Saved per game mode, used from the next Start game. Empty = the mode's default.</p>
         <div class="flex gap-2">
           <button id="btnGame" onclick="startGame()" class="btn bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:pointer-events-none"><svg class="w-3.5 h-3.5"><use href="#i-play"/></svg>Start game</button>
           <button id="btnLobby" onclick="toLobby()" class="btn bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-40 disabled:pointer-events-none"><svg class="w-3.5 h-3.5"><use href="#i-lobby"/></svg>Back to lobby</button>
@@ -110,19 +117,6 @@
       </section>
     </div>
   </div>
-
-  <!-- maps -->
-  <section class="bg-white rounded-xl shadow-sm p-4 space-y-3">
-    <div class="flex flex-wrap items-center gap-3">
-      <h2 class="title"><svg class="w-4 h-4"><use href="#i-map"/></svg>Maps <span id="mapcount" class="text-xs font-normal text-slate-400"></span></h2>
-      <span class="text-[11px] text-slate-400">click to pick the map, <svg class="w-3 h-3 inline"><use href="#i-play"/></svg> to start a game on it</span>
-      <div class="ml-auto flex items-center gap-2">
-        <input id="mapsearch" oninput="filterMaps()" placeholder="search" class="inp !mt-0 w-36">
-        <select id="mapfilter" onchange="filterMaps()" class="inp !mt-0 w-28"><option value="all">all maps</option><option value="custom">custom</option></select>
-      </div>
-    </div>
-    <div id="maps" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3"></div>
-  </section>
 
   <!-- console -->
   <section class="bg-white rounded-xl shadow-sm p-4 space-y-2">
@@ -144,6 +138,7 @@
 
 <script>
 let S = null, rconOut = [];
+const LIMITS = ['scorelimit', 'timelimit', 'roundlimit', 'winlimit', 'roundswitch', 'numlives'];
 const $ = id => document.getElementById(id);
 const api = async (path, body) => {
   const r = await fetch(path, body === undefined ? {} : {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
@@ -156,65 +151,19 @@ const mapName = id => (S.maps.find(m => m.id === id) || {name: id}).name;
 
 function fillForm(c) {
   $('bots_skill').innerHTML = Object.entries(S.bot_skills).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
-  for (const k of ['hostname','password','rcon_password','maxclients','scorelimit','timelimit','bots_fill','bots_fill_mode','bots_skill']) $(k).value = c[k];
+  for (const k of ['hostname','password','rcon_password','maxclients','bots_fill','bots_fill_mode','bots_skill', ...LIMITS]) $(k).value = c[k];
   $('lan_only').checked = c.lan_only;
   $('voice').checked = c.voice; $('alltalk').value = c.alltalk ? '1' : '0'; $('deadchat').checked = c.deadchat;
-  const tag = m => m.custom ? ' <span class="text-[10px] text-violet-500 bg-violet-50 px-1 rounded">custom</span>' : '';
   const opts = Object.entries(S.gametypes).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
   $('gametype').innerHTML = opts; $('gametype').value = c.gametype;
   $('liveMap').innerHTML = S.maps.map(m => `<option value="${m.id}">${esc(m.name)}${m.custom ? ' (custom)' : ''}</option>`).join('');
   if (S.maps.some(m => m.id === c.map)) $('liveMap').value = c.map;
-  $('maps').innerHTML = S.maps.map(m => `
-    <div data-id="${m.id}" data-name="${esc(m.name.toLowerCase())}" data-custom="${m.custom}" onclick="pickMap('${m.id}')"
-         class="mapcard group relative cursor-pointer rounded-lg overflow-hidden bg-slate-200 ring-2 ring-transparent transition select-none">
-      ${m.image
-        ? `<img src="/api/mapimg/${m.id}" loading="lazy" class="w-full aspect-video object-cover transition">`
-        : `<div class="w-full aspect-video bg-gradient-to-br from-slate-300 to-slate-400 flex items-center justify-center text-2xl font-bold text-white/70">${esc(m.name.slice(0, 2).toUpperCase())}</div>`}
-      <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2 pt-6 pb-1.5 text-white text-xs font-medium flex items-center gap-1">
-        ${esc(m.name)}${tag(m)}
-      </div>
-      <span class="check absolute top-1.5 left-1.5 w-5 h-5 rounded-full bg-sky-500 text-white text-[11px] flex items-center justify-center">&#10003;</span>
-      <span class="nowbadge hidden absolute top-1.5 left-8 text-[10px] bg-emerald-500 text-white px-1.5 py-0.5 rounded">now</span>
-      <button onclick="event.stopPropagation(); playMap('${m.id}')" title="Start game"
-              class="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-white/90 text-sky-700 shadow flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-white transition">
-        <svg class="w-3.5 h-3.5"><use href="#i-play"/></svg></button>
-    </div>`).join('');
-  paintMaps();
 }
 
 // the saved limits belong to the saved mode: another mode starts from its defaults
 function modeChanged() {
   const same = $('gametype').value === S.config.gametype;
-  $('scorelimit').value = same ? S.config.scorelimit : '';
-  $('timelimit').value = same ? S.config.timelimit : '';
-}
-
-function paintMaps() {
-  const now = S.live && S.live.in_game && S.live.map;
-  document.querySelectorAll('.mapcard').forEach(el => {
-    const on = el.dataset.id === $('liveMap').value;
-    el.classList.toggle('ring-sky-500', on);
-    el.querySelector('.check').classList.toggle('hidden', !on);
-    el.querySelector('.nowbadge').classList.toggle('hidden', el.dataset.id !== now);
-  });
-  $('mapcount').textContent = `(${S.maps.length})`;
-  filterMaps();
-}
-
-function filterMaps() {
-  const q = $('mapsearch').value.toLowerCase(), f = $('mapfilter').value;
-  document.querySelectorAll('.mapcard').forEach(el => {
-    const show = el.dataset.name.includes(q) &&
-      (f === 'all' || (f === 'custom' && el.dataset.custom === 'true'));
-    el.classList.toggle('hidden', !show);
-  });
-}
-
-function pickMap(id, show = true) { $('liveMap').value = id; paintMaps(); if (show) showPick(); }
-
-async function playMap(id) {
-  pickMap(id, false);
-  await startGame();
+  for (const k of LIMITS) $(k).value = same ? S.config[k] : '';
 }
 
 // players in the lobby see the picked map and mode before Start game
@@ -248,7 +197,7 @@ async function refresh(first) {
   try {
     S = await api('/api/state');
     if (first) fillForm(S.config);
-    render(); paintMaps();
+    render();
   } catch (e) { $('statusText').textContent = 'ui backend unreachable'; }
 }
 
@@ -283,10 +232,10 @@ async function kick(num, name) {
 }
 
 async function startGame() {
-  const body = {map: $('liveMap').value, gametype: $('gametype').value, scorelimit: $('scorelimit').value, timelimit: $('timelimit').value};
+  const body = {map: $('liveMap').value, gametype: $('gametype').value, ...Object.fromEntries(LIMITS.map(k => [k, $(k).value]))};
   try {
     await api('/api/game', body); toast(`starting ${mapName(body.map)}...`);
-    Object.assign(S.config, {gametype: body.gametype, scorelimit: body.scorelimit, timelimit: body.timelimit, map: body.map});
+    Object.assign(S.config, body);
   }
   catch (e) { toast('error: ' + e.message); }
   setTimeout(refresh, 4000);
