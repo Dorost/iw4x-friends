@@ -25,6 +25,7 @@
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
   <symbol id="i-bot" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 8V4M9 13h.01M15 13h.01M2 13v2M22 13v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
   <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-lobby" viewBox="0 0 24 24"><path d="M4 11V8a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v3M3 11a2 2 0 0 1 2 2v2h14v-2a2 2 0 1 1 2 2v3H3v-3a2 2 0 0 1 0-4zM6 18v2M18 18v2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-send" viewBox="0 0 24 24"><path d="M4 12 20 4l-6 16-3-7z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
 </svg>
 
@@ -78,6 +79,14 @@
           <label class="lbl">Who hears whom<select id="alltalk" class="inp"><option value="0">own team only</option><option value="1">everyone (all talk)</option></select></label>
           <label class="flex items-center gap-2 text-xs pb-1.5"><input id="deadchat" type="checkbox" class="accent-sky-600">Dead can talk to living</label>
         </div>
+      </div>
+      <div>
+        <span class="text-xs font-medium text-slate-600 flex items-center gap-1 mb-1.5"><svg class="w-3.5 h-3.5"><use href="#i-lobby"/></svg>Lobby</span>
+        <div class="grid grid-cols-3 gap-3 items-end">
+          <label class="flex items-center gap-2 text-xs pb-1.5"><input id="lobby" type="checkbox" onchange="lobbyForm()" class="accent-sky-600">Lobby mode</label>
+          <label class="col-span-2 lbl">Playlist<select id="lobby_playlist" class="inp"></select></label>
+        </div>
+        <p class="text-[11px] text-slate-400 mt-1">Players wait in a lobby (edit classes, vote to skip) and go back to it after every match. The playlist picks maps, so game mode and map rotation don't apply. Applying restarts the server: players reconnect and land in the lobby.</p>
       </div>
       <div class="flex gap-2 pt-1">
         <button onclick="save(false)" class="btn bg-slate-100 hover:bg-slate-200"><svg class="w-3.5 h-3.5"><use href="#i-save"/></svg>Save</button>
@@ -137,7 +146,7 @@
 
 <style type="text/tailwindcss">
   .btn { @apply inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition; }
-  .inp { @apply mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:border-sky-400; }
+  .inp { @apply mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:border-sky-400 disabled:opacity-50; }
   .lbl { @apply text-xs text-slate-600; }
   .title { @apply text-sm font-semibold text-slate-700 flex items-center gap-1.5; }
 </style>
@@ -158,6 +167,8 @@ function fillForm(c) {
   $('bots_skill').innerHTML = Object.entries(S.bot_skills).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
   for (const k of ['hostname','password','rcon_password','maxclients','scorelimit','timelimit','bots_fill','bots_fill_mode','bots_skill']) $(k).value = c[k];
   $('lan_only').checked = c.lan_only;
+  $('lobby_playlist').innerHTML = Object.entries(S.lobby_playlists).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+  $('lobby').checked = c.lobby; $('lobby_playlist').value = c.lobby_playlist; lobbyForm();
   $('voice').checked = c.voice; $('alltalk').value = c.alltalk ? '1' : '0'; $('deadchat').checked = c.deadchat;
   const tag = m => m.custom ? ' <span class="text-[10px] text-violet-500 bg-violet-50 px-1 rounded">custom</span>' : '';
   const opts = Object.entries(S.gametypes).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
@@ -181,6 +192,12 @@ function fillForm(c) {
         <svg class="w-3.5 h-3.5"><use href="#i-play"/></svg></button>
     </div>`).join('');
   paintMaps();
+}
+
+function lobbyForm() {
+  const on = $('lobby').checked;
+  $('lobby_playlist').disabled = !on;
+  for (const k of ['gametype', 'scorelimit', 'timelimit']) $(k).disabled = on;
 }
 
 function paintMaps() {
@@ -217,7 +234,7 @@ async function playMap(id) {
 function render() {
   const run = S.running, live = S.live;
   $('dot').className = 'w-2.5 h-2.5 rounded-full ' + (live ? 'bg-emerald-400' : run ? 'bg-amber-400' : 'bg-slate-300');
-  $('statusText').textContent = live ? `running ${live.version}` : run ? 'starting...' : 'stopped';
+  $('statusText').textContent = live ? `running ${live.version}${S.lobby ? ' · lobby' : ''}` : run ? 'starting...' : 'stopped';
   $('addr').textContent = S.address;
   $('now').innerHTML = live ? `<span class="text-slate-700 font-medium">${esc(mapName(live.map))}</span> · ${esc(S.gametypes[live.gametype] || live.gametype)} · ${esc(live.hostname)}` : 'server not running';
   const ps = live ? live.players : [];
@@ -259,11 +276,18 @@ async function save(restart) {
     voice: $('voice').checked, alltalk: $('alltalk').value === '1', deadchat: $('deadchat').checked,
     scorelimit: $('scorelimit').value, timelimit: $('timelimit').value,
     bots_fill: +$('bots_fill').value, bots_fill_mode: $('bots_fill_mode').value, bots_skill: $('bots_skill').value,
+    lobby: $('lobby').checked, lobby_playlist: $('lobby_playlist').value,
     maps: S.maps.map(m => m.id).filter(id => sel.has(id)),
   };
+  const n = S.live ? S.live.players.filter(p => !p.bot).length : 0;
+  if (restart && n && (body.lobby || S.lobby) && !confirm(`Lobby mode restarts the server: ${n} player(s) get disconnected and need to reconnect. Continue?`)) return;
   try {
     await api('/api/config', body); toast('saved');
-    if (restart) { const r = await api('/api/apply', {}); toast(r.started ? 'server started' : 'applied, loading new rotation...'); setTimeout(refresh, 4000); }
+    if (restart) {
+      const r = await api('/api/apply', {});
+      toast(r.started ? 'server started' : r.restarted ? 'server restarting...' : 'applied, loading new rotation...');
+      setTimeout(refresh, 4000);
+    }
   }
   catch (e) { toast('error: ' + e.message); }
 }

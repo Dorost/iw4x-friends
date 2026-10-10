@@ -12,3 +12,4 @@ set sv_mapRotation "gametype war map mp_terminal map mp_rust map mp_highrise map
 set bots_manage_fill "0"
 set bots_manage_fill_mode "0"
 set bots_skill "0"
+set sv_voice "1"

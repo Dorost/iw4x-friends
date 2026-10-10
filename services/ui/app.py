@@ -84,6 +84,12 @@ BOT_SKILLS = {
     "0": "Mixed", "1": "1 (easiest)", "2": "2", "3": "3", "4": "4", "5": "5", "6": "6",
     "7": "7 (hardest)", "9": "Completely random",
 }
+# playlists in IW4x's playlists_default.info, by the index "+playlist" takes
+LOBBY_PLAYLISTS = {
+    "0": "Team Deathmatch", "1": "Free-for-all", "2": "Domination", "3": "Demolition",
+    "4": "Sabotage", "5": "Headquarters Pro", "6": "Search & Destroy",
+    "7": "Hardcore Team Deathmatch", "8": "Capture the Flag",
+}
 
 app = FastAPI()
 
@@ -213,9 +219,11 @@ def config_view() -> dict:
         "bots_fill": int(v.get("bots_manage_fill", "0")),
         "bots_fill_mode": v.get("bots_manage_fill_mode", "0"),
         "bots_skill": v.get("bots_skill", "0"),
-        "voice": v.get("sv_voice", "1") == "1",
+        "voice": v.get("sv_voice", "0") == "1",  # off on dedicated servers unless set
         "alltalk": v.get("sv_alltalk", "0") == "1",
         "deadchat": v.get("g_deadChat", "0") == "1",
+        "lobby": v.get("party_enable", "0") == "1",
+        "lobby_playlist": v.get("lobby_playlist", "0"),
     }
 
 
@@ -235,6 +243,8 @@ class Config(BaseModel):
     alltalk: bool = False
     deadchat: bool = False
     bots_skill: str
+    lobby: bool = False
+    lobby_playlist: str = "0"
 
 
 def clean(s: str) -> str:
@@ -250,6 +260,8 @@ def write_cfg(c: Config) -> None:
         raise HTTPException(400, "pick at least one map")
     if c.bots_skill not in BOT_SKILLS or c.bots_fill_mode not in ("0", "1"):
         raise HTTPException(400, "invalid bot settings")
+    if c.lobby_playlist not in LOBBY_PLAYLISTS:
+        raise HTTPException(400, "unknown lobby playlist")
     v = read_cfg()
     v.update({
         "sv_hostname": clean(c.hostname),
@@ -266,6 +278,8 @@ def write_cfg(c: Config) -> None:
         "sv_voice": "1" if c.voice else "0",          # voice chat on/off
         "sv_alltalk": "1" if c.alltalk else "0",      # 1: everyone hears everyone, 0: own team only
         "g_deadChat": "1" if c.deadchat else "0",     # dead players can talk to the living
+        "party_enable": "1" if c.lobby else "0",      # lobby: players wait between matches
+        "lobby_playlist": c.lobby_playlist,           # our own dvar, read by start_server
     })
     for key, val in ((f"scr_{c.gametype}_scorelimit", c.scorelimit),
                      (f"scr_{c.gametype}_timelimit", c.timelimit)):
@@ -306,10 +320,23 @@ def server_pids() -> list[int]:
     return [p.pid for p in server_procs()]
 
 
+def lobby_running() -> bool:
+    try:
+        return any("+playlist" in " ".join(p.cmdline()) for p in server_procs())
+    except psutil.Error:
+        return False
+
+
 def start_server() -> None:
     if server_pids():
         return
-    args = ["-dedicated", "+set", "net_port", str(PORT), "+exec", "server.cfg", "+map_rotate"]
+    # lobby mode is fixed at startup: playlists only load when the server starts
+    v = read_cfg()
+    args = ["-dedicated", "+set", "net_port", str(PORT), "+exec", "server.cfg"]
+    if v.get("party_enable") == "1":
+        args += ["+set", "party_enable", "1", "+playlist", v.get("lobby_playlist", "0")]
+    else:
+        args += ["+set", "party_enable", "0", "+map_rotate"]
     if IS_WINDOWS:
         cmd = [str(GAME_DIR / "iw4x.exe"), *args]
         detach = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS}
@@ -416,12 +443,14 @@ def lan_ip() -> str:
 def state():
     return {
         "running": bool(server_pids()),
+        "lobby": lobby_running(),
         "live": live_status(),
         "address": f"{lan_ip()}:{PORT}",
         "config": config_view(),
         "maps": installed_maps(),
         "gametypes": gametypes(),
         "bot_skills": BOT_SKILLS,
+        "lobby_playlists": LOBBY_PLAYLISTS,
     }
 
 
@@ -447,10 +476,15 @@ def server_action(action: str):
 
 @app.post("/api/apply")
 def apply_config():
-    """Reload server.cfg and start the new rotation via a map change, which keeps players connected."""
+    """Reload server.cfg and start the new rotation via a map change, which keeps players connected.
+    Lobby mode only loads at startup, so switching to, from or within it restarts the server."""
     if not live_status():
         start_server()
         return {"ok": True, "started": True}
+    if read_cfg().get("party_enable") == "1" or lobby_running():
+        stop_server()
+        start_server()
+        return {"ok": True, "restarted": True}
     rcon("exec server.cfg")
     rcon('sv_mapRotationCurrent ""')
     rcon("map_rotate")
