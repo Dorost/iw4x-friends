@@ -88,8 +88,8 @@
         <h2 class="title"><svg class="w-4 h-4"><use href="#i-map"/></svg>Game</h2>
         <div id="now" class="text-xs text-slate-500">-</div>
         <div class="grid grid-cols-2 gap-3">
-          <label class="lbl">Game mode<select id="gametype" onchange="modeChanged()" class="inp"></select></label>
-          <label class="lbl">Map<select id="liveMap" onchange="paintMaps()" class="inp"></select></label>
+          <label class="lbl">Game mode<select id="gametype" onchange="modeChanged(); showPick()" class="inp"></select></label>
+          <label class="lbl">Map<select id="liveMap" onchange="paintMaps(); showPick()" class="inp"></select></label>
           <label class="lbl">Score limit<input id="scorelimit" class="inp" placeholder="default"></label>
           <label class="lbl">Time limit (min)<input id="timelimit" class="inp" placeholder="default"></label>
         </div>
@@ -210,11 +210,18 @@ function filterMaps() {
   });
 }
 
-function pickMap(id) { $('liveMap').value = id; paintMaps(); }
+function pickMap(id, show = true) { $('liveMap').value = id; paintMaps(); if (show) showPick(); }
 
 async function playMap(id) {
-  pickMap(id);
+  pickMap(id, false);
   await startGame();
+}
+
+// players in the lobby see the picked map and mode before Start game
+async function showPick() {
+  if (!S.live || S.live.in_game) return;
+  try { await api('/api/select', {map: $('liveMap').value, gametype: $('gametype').value}); toast('lobby shows ' + mapName($('liveMap').value)); }
+  catch (e) { toast('error: ' + e.message); }
 }
 
 function render() {

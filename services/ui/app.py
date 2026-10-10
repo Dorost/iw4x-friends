@@ -459,13 +459,35 @@ def lan_ip() -> str:
         s.close()
 
 
+def show_pick() -> None:
+    """Lobby: shows the picked map and mode (saved in server.cfg) to everyone in the lobby.
+    Rcon runs one command per request, so these go one by one."""
+    v = read_cfg()
+    if v.get("ui_mapname") and v.get("ui_gametype"):
+        rcon(f"ui_mapname {v['ui_mapname']}")
+        rcon(f"ui_gametype {v['ui_gametype']}")
+        rcon("xupdatepartystate")
+
+
+# a match ending makes the lobby show a random playlist map: show the pick again once per lobby visit
+pick_shown = False
+
+
 # ---------- API ----------
 
 @app.get("/api/state")
 def state():
+    global pick_shown
+    live = live_status()
+    if live and not live["in_game"]:
+        if not pick_shown:
+            show_pick()
+            pick_shown = True
+    else:
+        pick_shown = False
     return {
         "running": bool(server_pids()),
-        "live": live_status(),
+        "live": live,
         "address": f"{lan_ip()}:{PORT}",
         "config": config_view(),
         "maps": installed_maps(),
@@ -505,9 +527,30 @@ def kick(k: Kick):
     return {"output": rcon(f"clientkick {k.num}")}
 
 
-class Game(BaseModel):
+class Pick(BaseModel):
     map: str
     gametype: str
+
+
+def save_pick(p: Pick) -> dict[str, str]:
+    if p.gametype not in gametypes() or p.map not in {m["id"] for m in installed_maps()}:
+        raise HTTPException(400, "invalid map or gametype")
+    v = read_cfg()
+    v.update({"g_gametype": p.gametype, "ui_gametype": p.gametype, "ui_mapname": p.map})
+    return v
+
+
+@app.post("/api/select")
+def select(p: Pick):
+    """Saves the picked map and mode and shows them in the lobby, so players see what's next."""
+    save_cfg(save_pick(p))
+    live = live_status()
+    if live and not live["in_game"]:
+        show_pick()
+    return {"ok": True}
+
+
+class Game(Pick):
     scorelimit: str = ""
     timelimit: str = ""
 
@@ -515,15 +558,12 @@ class Game(BaseModel):
 @app.post("/api/game")
 def start_game(g: Game):
     """Lobby -> match on the chosen map and mode. Everyone in the lobby goes along, still connected."""
-    if g.gametype not in gametypes() or g.map not in {m["id"] for m in installed_maps()}:
-        raise HTTPException(400, "invalid map or gametype")
+    v = save_pick(g)
     live = live_status()
     if not live:
         raise HTTPException(409, "server not running")
     if live["in_game"]:
         raise HTTPException(409, "a match is running: send everyone to the lobby first")
-    v = read_cfg()
-    v.update({"g_gametype": g.gametype, "ui_gametype": g.gametype, "ui_mapname": g.map})
     for key, val in ((f"scr_{g.gametype}_scorelimit", g.scorelimit),
                      (f"scr_{g.gametype}_timelimit", g.timelimit)):
         if clean(val):
