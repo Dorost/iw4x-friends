@@ -11,7 +11,7 @@ password and download from the decrypted links.
 Format is openssl's, so the scripts decrypt with:
   openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 -a -A
 
-  uv run scripts/encrypt-links.py
+  uv run scripts/tools/encrypt-links.py
 """
 
 import base64
@@ -25,15 +25,15 @@ from cryptography.hazmat.primitives import hashes, padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 ITERATIONS = 200_000
 # script -> the line holding the encrypted links
 TARGETS = {
-    "setup-mac.sh": re.compile(r'^LINKS_ENC=".*"$', re.MULTILINE),
-    "setup-linux.sh": re.compile(r'^LINKS_ENC=".*"$', re.MULTILINE),
-    "install-maps.sh": re.compile(r'^LINKS_ENC=".*"$', re.MULTILINE),
-    "setup-windows.ps1": re.compile(r'^\$LinksEnc = ".*"$', re.MULTILINE),
-    "install-maps.ps1": re.compile(r'^\$LinksEnc = ".*"$', re.MULTILINE),
+    "mac/setup.sh": re.compile(r'^LINKS_ENC=".*"$', re.MULTILINE),
+    "linux/setup.sh": re.compile(r'^LINKS_ENC=".*"$', re.MULTILINE),
+    "mac/install-maps.sh": re.compile(r'^LINKS_ENC=".*"$', re.MULTILINE),
+    "windows/setup.ps1": re.compile(r'^\$LinksEnc = ".*"$', re.MULTILINE),
+    "windows/install-maps.ps1": re.compile(r'^\$LinksEnc = ".*"$', re.MULTILINE),
 }
 
 

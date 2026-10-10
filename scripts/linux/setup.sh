@@ -7,7 +7,7 @@
 #   5. fills in .env (domain for the web UI, UI password)
 #   6. opens the firewall (ufw) for the game and the web UI
 #
-# Run from the repo:   task setup     (or: bash scripts/setup-linux.sh)
+# Run from the repo:   task setup     (or: bash scripts/linux/setup.sh)
 # Safe to re-run: every step skips what is already done, and an interrupted
 # download resumes where it stopped.
 # Options:
@@ -22,7 +22,7 @@ set -euo pipefail
 
 GAME_REL="drive_c/Program Files (x86)/Call of Duty Modern Warfare 2"
 
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 REPO="$PWD"
 GAME="$REPO/game"
 DOWNLOAD_ZIP="$REPO/mw.zip"
@@ -214,7 +214,7 @@ fi
 
 # ---------------------------------------------------------------- server.cfg
 step "Custom maps + bots"
-bash "$REPO/scripts/install-maps.sh" --dir "$GAME" ${MAPS_LINK:+--maps-url "$MAPS_LINK"} || warn "custom maps not installed, run: bash scripts/install-maps.sh --dir game"
+bash "$REPO/scripts/mac/install-maps.sh" --dir "$GAME" ${MAPS_LINK:+--maps-url "$MAPS_LINK"} || warn "custom maps not installed, run: bash scripts/mac/install-maps.sh --dir game"
 
 step "Server config"
 cfg="$GAME/main/server.cfg"

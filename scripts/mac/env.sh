@@ -1,5 +1,5 @@
 # Shared defaults for the helper scripts
-cd "$(dirname "$0")/.." || exit 1
+cd "$(dirname "$0")/../.." || exit 1
 [ -f .env ] && set -a && . ./.env && set +a
 BOTTLES_DIR="$HOME/Library/Application Support/CrossOver/Bottles"
 MW2_REL="drive_c/Program Files (x86)/Call of Duty Modern Warfare 2"

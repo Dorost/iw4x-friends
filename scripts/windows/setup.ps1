@@ -9,9 +9,9 @@ One-shot setup of MW2 + IW4x on a Windows PC:
   6. creates a Desktop shortcut that skips IW4x's remote update check
 
 Run it straight from GitHub, in PowerShell:
-  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/dorostanian/iw4x-lan-server/main/scripts/setup-windows.ps1)))
+  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/dorostanian/iw4x-friends/main/scripts/windows/setup.ps1)))
 or as a downloaded file:
-  powershell -ExecutionPolicy Bypass -File setup-windows.ps1
+  powershell -ExecutionPolicy Bypass -File setup.ps1
 
 Safe to re-run: every step skips what is already done, and an interrupted
 download resumes where it stopped.
@@ -318,7 +318,7 @@ if (Test-Path (Join-Path $game $MarkConfigured)) {
 
 # Shared game settings (lowest graphics, no hitches when hit). Loaded on every start via
 # "+exec client_tweaks.cfg", so they also cover settings the game itself never saves.
-# BEGIN client.cfg (generated from config/client.cfg by scripts/sync-config.py, don't edit here)
+# BEGIN client.cfg (generated from config/client.cfg by scripts/tools/sync-config.py, don't edit here)
 $ClientCfg = @'
 // Game settings for every player, applied on each game start (macOS and Windows).
 // The setup scripts install this as main/client_tweaks.cfg and the launchers start
@@ -390,7 +390,7 @@ Set-Content -Path (Join-Path $game "main\client_tweaks.cfg") -Value $ClientCfg -
 Ok "game settings installed (lowest graphics, no FPS drops when hit)"
 
 # Ready-made classes, loaded with F9 during a match (bound in client.cfg) or exec classes.cfg
-# BEGIN classes.cfg (generated from config/classes.cfg by scripts/sync-config.py, don't edit here)
+# BEGIN classes.cfg (generated from config/classes.cfg by scripts/tools/sync-config.py, don't edit here)
 $ClassesCfg = @'
 // Ten custom classes: agile SMGs and light rifles (no LMGs), two M16 classes,
 // a quickscope sniper (5) and a stealth class for Search & Destroy (10).
@@ -573,9 +573,9 @@ Ok "ready-made classes installed (load them: F9 during a match, or ~ then exec c
 $mapsScript = if ($PSCommandPath) { Join-Path (Split-Path $PSCommandPath) "install-maps.ps1" } else { "" }
 try {
     if ($mapsScript -and (Test-Path $mapsScript)) { & $mapsScript -InstallDir $game -MapsUrl $MapsUrl }
-    else { & ([scriptblock]::Create((irm https://raw.githubusercontent.com/dorostanian/iw4x-lan-server/main/scripts/install-maps.ps1))) -InstallDir $game -MapsUrl $MapsUrl }
+    else { & ([scriptblock]::Create((irm https://raw.githubusercontent.com/dorostanian/iw4x-friends/main/scripts/windows/install-maps.ps1))) -InstallDir $game -MapsUrl $MapsUrl }
 } catch {
-    Warn "custom maps not installed. Later, run: & ([scriptblock]::Create((irm https://raw.githubusercontent.com/dorostanian/iw4x-lan-server/main/scripts/install-maps.ps1)))"
+    Warn "custom maps not installed. Later, run: & ([scriptblock]::Create((irm https://raw.githubusercontent.com/dorostanian/iw4x-friends/main/scripts/windows/install-maps.ps1)))"
 }
 
 # ---------------------------------------------------------------- shortcut

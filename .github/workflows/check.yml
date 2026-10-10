@@ -12,7 +12,7 @@ jobs:
       - uses: astral-sh/setup-uv@v6
 
       - name: Setup scripts carry the current config/client.cfg
-        run: uv run scripts/sync-config.py --check
+        run: uv run scripts/tools/sync-config.py --check
 
       - name: Lint web UI
         run: uvx ruff check services/ui
@@ -20,7 +20,7 @@ jobs:
       - name: Shell scripts parse
         run: |
           sudo apt-get install -y -qq zsh
-          for f in scripts/*.sh; do
+          for f in scripts/*/*.sh scripts/*.sh; do
             if head -1 "$f" | grep -q bash; then bash -n "$f"; else zsh -n "$f"; fi && echo "ok $f"
           done
 

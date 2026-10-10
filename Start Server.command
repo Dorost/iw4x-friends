@@ -9,7 +9,7 @@ if ! command -v uv >/dev/null; then
   curl -LsSf https://astral.sh/uv/install.sh | sh
   export PATH="$HOME/.local/bin:$PATH"
 fi
-./scripts/install-config.sh
+./scripts/mac/install-config.sh
 url="http://localhost:${UI_PORT:-8080}"
 if curl -s -o /dev/null "$url"; then open "$url"; exit 0; fi   # already running
 echo "Web UI: $url  (close this window to stop the UI; the game server keeps running)"

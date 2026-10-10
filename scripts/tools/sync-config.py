@@ -7,17 +7,17 @@ The setup scripts must work as single files on a friend's machine, so each carri
 its own copy of these files between BEGIN/END markers. This keeps those copies
 identical to the files in config/.
 
-  uv run scripts/sync-config.py           update the scripts
-  uv run scripts/sync-config.py --check   exit 1 if any script is out of date (CI)
+  uv run scripts/tools/sync-config.py           update the scripts
+  uv run scripts/tools/sync-config.py --check   exit 1 if any script is out of date (CI)
 """
 
 import re
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-MAC = ROOT / "scripts" / "setup-mac.sh"
-WINDOWS = ROOT / "scripts" / "setup-windows.ps1"
+ROOT = Path(__file__).resolve().parent.parent.parent
+MAC = ROOT / "scripts" / "mac" / "setup.sh"
+WINDOWS = ROOT / "scripts" / "windows" / "setup.ps1"
 # config file -> {script: (opening line of the embedded block, closing line)}
 BLOCKS = {
     "client.cfg": {MAC: ("CLIENT_CFG=$(cat <<'CFG'", "CFG"), WINDOWS: ("$ClientCfg = @'", "'@")},

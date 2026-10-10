@@ -15,7 +15,7 @@ tasks:
   server:
     desc: Start the dedicated server in the foreground (console in terminal)
     cmds:
-      - cmd: ./scripts/start-server.sh
+      - cmd: ./scripts/mac/start-server.sh
         platforms: [darwin]
       - cmd: '{{.PS}} scripts/windows/start-server.ps1'
         platforms: [windows]
@@ -43,7 +43,7 @@ tasks:
   config:
     desc: Install server.cfg.example into the game folder (skips if one exists)
     cmds:
-      - cmd: ./scripts/install-config.sh
+      - cmd: ./scripts/mac/install-config.sh
         platforms: [darwin]
       - cmd: 'powershell -NoProfile -Command ". scripts/windows/env.ps1; $t = Join-Path $ServerDir ''main\server.cfg''; if (Test-Path $t) { ''exists, not touching: '' + $t } else { Copy-Item server.cfg.example $t; ''installed: '' + $t }"'
         platforms: [windows]
@@ -51,7 +51,7 @@ tasks:
   game:
     desc: Start the IW4x game with the shared settings, skipping the update check (use when it does not open)
     cmds:
-      - cmd: ./scripts/start-game.sh
+      - cmd: ./scripts/mac/start-game.sh
         platforms: [darwin]
       - cmd: '{{.PS}} scripts/windows/start-game.ps1'
         platforms: [windows]
@@ -59,7 +59,7 @@ tasks:
   game:update:
     desc: Run the IW4x launcher with its update check, then start the game
     cmds:
-      - cmd: ./scripts/start-game.sh --update
+      - cmd: ./scripts/mac/start-game.sh --update
         platforms: [darwin]
       - cmd: '{{.PS}} scripts/windows/start-game.ps1 -Update'
         platforms: [windows]
@@ -67,7 +67,7 @@ tasks:
   game:kill:
     desc: Stop stuck IW4x launcher/game processes (leaves the dedicated server running)
     cmds:
-      - cmd: ./scripts/kill-game.sh
+      - cmd: ./scripts/mac/kill-game.sh
         platforms: [darwin]
       - cmd: '{{.PS}} scripts/windows/kill-game.ps1'
         platforms: [windows]
@@ -75,11 +75,11 @@ tasks:
   setup:
     desc: Set up this machine (game + config; CrossOver on macOS, Docker on Linux). Pass options after --, e.g. task setup -- --force
     cmds:
-      - cmd: ./scripts/setup-mac.sh {{.CLI_ARGS}}
+      - cmd: ./scripts/mac/setup.sh {{.CLI_ARGS}}
         platforms: [darwin]
-      - cmd: '{{.PS}} scripts/setup-windows.ps1 {{.CLI_ARGS}}'
+      - cmd: '{{.PS}} scripts/windows/setup.ps1 {{.CLI_ARGS}}'
         platforms: [windows]
-      - cmd: bash scripts/setup-linux.sh {{.CLI_ARGS}}
+      - cmd: bash scripts/linux/setup.sh {{.CLI_ARGS}}
         platforms: [linux]
 
   maps:
@@ -87,21 +87,21 @@ tasks:
     cmds:
       - cmd: |
           if [ "${IW4X_SERVER_BOTTLE:-mw}" != "${IW4X_GAME_BOTTLE:-mw}" ]; then
-            bash scripts/install-maps.sh --bottle "$IW4X_SERVER_BOTTLE" --keep-zip {{.CLI_ARGS}}
+            bash scripts/mac/install-maps.sh --bottle "$IW4X_SERVER_BOTTLE" --keep-zip {{.CLI_ARGS}}
           fi
-          bash scripts/install-maps.sh --bottle "${IW4X_GAME_BOTTLE:-mw}" {{.CLI_ARGS}}
+          bash scripts/mac/install-maps.sh --bottle "${IW4X_GAME_BOTTLE:-mw}" {{.CLI_ARGS}}
         platforms: [darwin]
-      - cmd: 'powershell -NoProfile -ExecutionPolicy Bypass -Command ". scripts/windows/env.ps1; if ($ServerDir -ne $GameDir) { & scripts/install-maps.ps1 -InstallDir $ServerDir -KeepZip }; & scripts/install-maps.ps1 -InstallDir $GameDir"'
+      - cmd: 'powershell -NoProfile -ExecutionPolicy Bypass -Command ". scripts/windows/env.ps1; if ($ServerDir -ne $GameDir) { & scripts/windows/install-maps.ps1 -InstallDir $ServerDir -KeepZip }; & scripts/windows/install-maps.ps1 -InstallDir $GameDir"'
         platforms: [windows]
-      - cmd: bash scripts/install-maps.sh --dir game {{.CLI_ARGS}}
+      - cmd: bash scripts/mac/install-maps.sh --dir game {{.CLI_ARGS}}
         platforms: [linux]
 
   sync-config:
     desc: Copy config/client.cfg and config/classes.cfg into the standalone setup scripts
     cmds:
-      - uv run scripts/sync-config.py
+      - uv run scripts/tools/sync-config.py
 
   links:
     desc: Encrypt the mw.zip and maps download links with a password into the setup scripts
     cmds:
-      - uv run scripts/encrypt-links.py
+      - uv run scripts/tools/encrypt-links.py
