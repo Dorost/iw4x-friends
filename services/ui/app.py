@@ -287,9 +287,10 @@ def server_procs() -> list[psutil.Process]:
         if IS_WINDOWS:
             real = (proc.info["name"] or "").lower() == "iw4x.exe"
         else:
-            # Linux: "wine iw4x.exe ..." until Wine rewrites it to the Windows path
+            # Linux: "wine iw4x.exe ..." until Wine rewrites it to the Windows path,
+            # or (Debian's Wine 8) to the bare "iw4x.exe ..."
             real = (bool(re.match(r"[A-Z]:\\", cmd)) or "winewrapper" in cmd
-                    or (IS_LINUX and Path(proc.info["cmdline"][0]).name.startswith("wine")))
+                    or (IS_LINUX and Path(proc.info["cmdline"][0]).name.startswith(("wine", "iw4x.exe"))))
         if real:
             found.append(proc)
     return found
@@ -392,13 +393,20 @@ def live_status() -> dict | None:
                 "num": int(m[1]), "score": m[2], "ping": m[3], "guid": m[4],
                 "name": strip_colors(m[5]), "address": m[7], "bot": m[4].startswith("bot"),
             })
+    in_game = status.lstrip().startswith("map:")
+    lobby_count = 0
+    if not in_game:
+        # IW4x can't list lobby members, but getinfo counts them
+        info = udp("getinfo", 0.7).split("\\")[1:]
+        lobby_count = int(dict(zip(info[::2], info[1::2])).get("clients", "0").strip() or 0)
     return {
         "hostname": strip_colors(kv.get("sv_hostname", "")),
         "map": kv.get("mapname", ""),
         "gametype": kv.get("g_gametype", ""),
         "version": kv.get("shortversion", ""),
-        "in_game": status.lstrip().startswith("map:"),
+        "in_game": in_game,
         "players": players,
+        "lobby_count": lobby_count,
     }
 
 

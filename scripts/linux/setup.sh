@@ -211,6 +211,13 @@ else
   ok "installed to $GAME"
   (( KEEP_ZIP )) || { rm -f "$ZIP"; ok "removed mw.zip"; }
 fi
+# The game folder also holds the 64-bit IW4x launcher's DLLs. Debian's Wine loads
+# zlib1.dll for its own user32.dll and finds the 64-bit one here first: the 32-bit
+# server then fails to start. The server never runs the launcher, so move it aside.
+if [[ -f "$GAME/zlib1.dll" ]]; then
+  mv "$GAME/zlib1.dll" "$GAME/zlib1.dll.x64"
+  ok "moved aside the launcher's 64-bit zlib1.dll (stops Wine from starting the server)"
+fi
 
 # ---------------------------------------------------------------- server.cfg
 step "Custom maps + bots"

@@ -228,12 +228,13 @@ function render() {
   $('btnGame').disabled = !live || live.in_game;
   $('btnLobby').disabled = !live || !live.in_game;
   const ps = live ? live.players : [];
-  $('pcount').textContent = live ? `(${ps.length})` : '';
+  const lobby = live && !live.in_game;
+  $('pcount').textContent = !live ? '' : lobby ? `(${live.lobby_count} in lobby)` : `(${ps.length})`;
   $('players').innerHTML = ps.length ? ps.map(p => `<tr class="border-t border-slate-100">
       <td class="py-1.5">${p.num}</td><td class="font-medium text-slate-700">${esc(p.name)}${p.bot ? ' <span class="text-[10px] text-amber-600 bg-amber-50 px-1 rounded">bot</span>' : ''}</td><td>${p.score}</td><td>${p.bot ? '-' : p.ping}</td>
       <td class="font-mono text-[10px] text-slate-400">${p.guid}</td><td class="text-slate-400">${esc(p.address)}</td>
       <td class="text-right"><button onclick="kick(${p.num}, '${esc(p.name)}')" title="Kick" class="text-rose-400 hover:text-rose-600"><svg class="w-3.5 h-3.5"><use href="#i-x"/></svg></button></td></tr>`).join('')
-    : `<tr><td colspan="7" class="py-3 text-center text-slate-400">${live && !live.in_game ? 'players in the lobby show up here once a game starts' : 'no players'}</td></tr>`;
+    : `<tr><td colspan="7" class="py-3 text-center text-slate-400">${lobby ? `${live.lobby_count} in the lobby, names show up here once a game starts` : 'no players'}</td></tr>`;
 }
 
 async function refresh(first) {
