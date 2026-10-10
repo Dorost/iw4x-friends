@@ -355,10 +355,12 @@ CLASSES_CFG=$(cat <<'CFG'
 // a silencer or red dot; Lightweight and Commando keep them fast.
 // Load them at the main menu: press ~ and type  exec classes.cfg  (or F9 during a match).
 // Run unlockstats first so every weapon, attachment and perk is unlocked.
-// They replace your custom class slots 1 to 10.
+// They replace your custom class slots 1 to 10. inUse makes a slot show up in the
+// in-game class selection (the game only sets it when you edit a class yourself).
 
 // 1. UMP Rush: UMP45 keeps full damage silenced, FMJ shoots through cover: sprint, flank, knife
 setPlayerData customClasses 0 name "UMP Rush"
+setPlayerData customClasses 0 inUse 1
 setPlayerData customClasses 0 weaponSetups 0 weapon ump45
 setPlayerData customClasses 0 weaponSetups 0 attachment 0 silencer
 setPlayerData customClasses 0 weaponSetups 0 attachment 1 fmj
@@ -374,6 +376,7 @@ setPlayerData customClasses 0 specialGrenade flash_grenade
 
 // 2. Vector Ghost: invisible to UAV and thermal, silent footsteps
 setPlayerData customClasses 1 name "Vector Ghost"
+setPlayerData customClasses 1 inUse 1
 setPlayerData customClasses 1 weaponSetups 0 weapon kriss
 setPlayerData customClasses 1 weaponSetups 0 attachment 0 silencer
 setPlayerData customClasses 1 weaponSetups 0 attachment 1 fmj
@@ -389,6 +392,7 @@ setPlayerData customClasses 1 specialGrenade concussion_grenade
 
 // 3. ACR Runner: almost no recoil, silenced with full penetration
 setPlayerData customClasses 2 name "ACR Runner"
+setPlayerData customClasses 2 inUse 1
 setPlayerData customClasses 2 weaponSetups 0 weapon masada
 setPlayerData customClasses 2 weaponSetups 0 attachment 0 silencer
 setPlayerData customClasses 2 weaponSetups 0 attachment 1 fmj
@@ -404,6 +408,7 @@ setPlayerData customClasses 2 specialGrenade flash_grenade
 
 // 4. FAMAS Burst: one-burst kills with a clear red dot
 setPlayerData customClasses 3 name "FAMAS Burst"
+setPlayerData customClasses 3 inUse 1
 setPlayerData customClasses 3 weaponSetups 0 weapon famas
 setPlayerData customClasses 3 weaponSetups 0 attachment 0 reflex
 setPlayerData customClasses 3 weaponSetups 0 attachment 1 fmj
@@ -419,6 +424,7 @@ setPlayerData customClasses 3 specialGrenade flash_grenade
 
 // 5. Quickscope: the classic Intervention quickscope setup
 setPlayerData customClasses 4 name "Quickscope"
+setPlayerData customClasses 4 inUse 1
 setPlayerData customClasses 4 weaponSetups 0 weapon cheytac
 setPlayerData customClasses 4 weaponSetups 0 attachment 0 fmj
 setPlayerData customClasses 4 weaponSetups 0 attachment 1 none
@@ -434,6 +440,7 @@ setPlayerData customClasses 4 specialGrenade flash_grenade
 
 // 6. Shotgun Blitz: close range: rapid MP5K, akimbo 1887s as backup
 setPlayerData customClasses 5 name "Shotgun Blitz"
+setPlayerData customClasses 5 inUse 1
 setPlayerData customClasses 5 weaponSetups 0 weapon mp5k
 setPlayerData customClasses 5 weaponSetups 0 attachment 0 rof
 setPlayerData customClasses 5 weaponSetups 0 attachment 1 fmj
@@ -449,6 +456,7 @@ setPlayerData customClasses 5 specialGrenade flash_grenade
 
 // 7. P90 Ninja: huge magazine, silent, killstreaks one kill earlier
 setPlayerData customClasses 6 name "P90 Ninja"
+setPlayerData customClasses 6 inUse 1
 setPlayerData customClasses 6 weaponSetups 0 weapon p90
 setPlayerData customClasses 6 weaponSetups 0 attachment 0 silencer
 setPlayerData customClasses 6 weaponSetups 0 attachment 1 fmj
@@ -464,6 +472,7 @@ setPlayerData customClasses 6 specialGrenade flash_grenade
 
 // 8. M16 Ghost: silent M16 bursts, off the radar
 setPlayerData customClasses 7 name "M16 Ghost"
+setPlayerData customClasses 7 inUse 1
 setPlayerData customClasses 7 weaponSetups 0 weapon m16
 setPlayerData customClasses 7 weaponSetups 0 attachment 0 silencer
 setPlayerData customClasses 7 weaponSetups 0 attachment 1 fmj
@@ -479,6 +488,7 @@ setPlayerData customClasses 7 specialGrenade flash_grenade
 
 // 9. M16 Power: M16 with Stopping Power: one-burst kills at range
 setPlayerData customClasses 8 name "M16 Power"
+setPlayerData customClasses 8 inUse 1
 setPlayerData customClasses 8 weaponSetups 0 weapon m16
 setPlayerData customClasses 8 weaponSetups 0 attachment 0 reflex
 setPlayerData customClasses 8 weaponSetups 0 attachment 1 fmj
@@ -494,6 +504,7 @@ setPlayerData customClasses 8 specialGrenade flash_grenade
 
 // 10. S&D Stealth: one life, so stay off the radar: claymore guards the bomb, smoke covers plant/defuse
 setPlayerData customClasses 9 name "S&D Stealth"
+setPlayerData customClasses 9 inUse 1
 setPlayerData customClasses 9 weaponSetups 0 weapon scar
 setPlayerData customClasses 9 weaponSetups 0 attachment 0 silencer
 setPlayerData customClasses 9 weaponSetups 0 attachment 1 fmj
