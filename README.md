@@ -6,9 +6,9 @@ Play Modern Warfare 2 ([IW4x](https://iw4x.io)) with friends: one script install
 
 From whoever invites you:
 - the setup files for your system: `setup-windows.ps1` + `install-maps.ps1` (Windows) or `setup-mac.sh` + `install-maps.sh` (Mac), in the same folder
-- either the two **download links** (game and maps pack), or the files themselves: `mw.zip` and `mw2-iw4x-maps-bots.zip`
+- the **setup password**, or the files themselves: `mw.zip` and `mw2-iw4x-maps-bots.zip`
 
-The setup asks for each link when it needs it. Instead of a link you can paste the path to the zip, or drag the zip file into the window. Zips in your **Downloads** folder are found automatically.
+Zips in your **Downloads** folder (or the folder you run setup from) are found automatically. Otherwise the setup asks for the password and downloads them. Press Enter at the password prompt to paste a download link or the path to a zip instead (or drag the zip file into the window).
 
 ## Windows
 
@@ -19,7 +19,7 @@ The setup asks for each link when it needs it. Instead of a link you can paste t
    powershell -ExecutionPolicy Bypass -File setup-windows.ps1
    ```
 
-3. Paste the links (or zip paths) when asked, then wait (~17 GB). If it stops, run the same command again, it continues where it left off
+3. Type the setup password when asked, then wait (~17 GB). If it stops, run the same command again, it continues where it left off
 4. Click **Yes** if Windows asks to install DirectX, and **Allow** if the firewall asks about `iw4x.exe`
 5. Start the game with the **IW4x** icon on your Desktop
 
@@ -34,7 +34,7 @@ Only need the custom maps and bots? Run `powershell -ExecutionPolicy Bypass -Fil
    zsh setup-mac.sh
    ```
 
-3. Paste the links (or drag in the zips) when asked, then wait (~17 GB). If it stops, run the same command again, it continues where it left off
+3. Type the setup password when asked, then wait (~17 GB). If it stops, run the same command again, it continues where it left off
 4. If CrossOver opens, choose **Try Now**, then go back to Terminal and press Enter
 5. Start the game with the **IW4x** icon on your Desktop
 
@@ -69,6 +69,10 @@ The server needs the custom maps too: they come with the setup above. If the ser
 ```sh
 bash scripts/install-maps.sh --bottle mw-server
 ```
+
+### Download links
+
+The setup scripts carry the `mw.zip` and maps pack links encrypted with the setup password. To set or change them, run `task links` (asks for both links and the password), then commit the updated scripts.
 
 ### Linux VPS (optional)
 

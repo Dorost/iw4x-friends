@@ -9,7 +9,8 @@
 #   --bottle <name>  macOS: CrossOver bottle to install into (default: mw)
 #   --dir <path>     game folder to install into (overrides --bottle; required on Linux)
 #   --maps-url <link>  download link of the pack (a Google Drive share link works);
-#                    also MW_MAPS_URL. Asked for when needed and not given
+#                    also MW_MAPS_URL. When needed and not given, it asks for the setup
+#                    password (decrypts the links below) or the link itself
 #   --zip <path>     use this pack zip instead of downloading
 #   --keep-zip       keep the zip afterwards (default: delete it if this script downloaded it)
 #   --force          install again even if already installed
@@ -18,6 +19,8 @@ set -euo pipefail
 
 ZIP_NAME="mw2-iw4x-maps-bots.zip"
 MARK=".iw4x-maps-installed"
+# download links, encrypted with the setup password (written by `task links`)
+LINKS_ENC="U2FsdGVkX19z1JucWZqUi9mbrydBrz7IZBKu1HjwaeSCQDgD/3GuECrT/uzIB2CMUT2zrJQjzDpdIpg/QGnq37w6ffsO0QhnF3C0pjpajXOtdr4yhCmyERBwk+rtJcfWy3gff8aVtAIkGb/0CDFa4mkFQLIPeZKgi4CFBPW2BIt7uXJVUOVoG913KBwD5J8abSgTe8nCDO5zG0I+cRFpWUuJYs4g6WEppu1DiaBTRgX0Ug+P3VNv17X9xN6vwjxmPzXzPh2jmUAE9feoNV9sVcIMuUi3DIk7ToHtwhS/xyaWcAbByQltQ3mPJMNO0IFB"
 
 BOTTLE="mw" DIR="" ZIP="" KEEP_ZIP=0 FORCE=0 LINK="${MW_MAPS_URL:-}"
 while (( $# )); do
@@ -46,6 +49,22 @@ download_url() {
   fi
 }
 
+# ask for the setup password and print the decrypted links ("game=<url>" and "maps=<url>"
+# lines). Fails when there are none, on Enter (paste a link instead) or after 3 wrong tries
+unlock_links() {
+  [[ -n "$LINKS_ENC" ]] && command -v openssl >/dev/null || return 1
+  local pass plain try
+  for try in 1 2 3; do
+    read -rsp "    Setup password (or Enter to paste a link instead): " pass < /dev/tty || return 1
+    echo > /dev/tty
+    [[ -n "$pass" ]] || return 1
+    plain=$(echo "$LINKS_ENC" | PASS="$pass" openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 -a -A -pass env:PASS 2>/dev/null | tr -d '\0') || plain=""
+    [[ "$plain" == game=http* ]] && { echo "$plain"; return 0; }
+    printf '    \033[33m!\033[0m wrong password\n' > /dev/tty
+  done
+  return 1
+}
+
 if [[ -z "$DIR" ]]; then
   [[ "$(uname)" == "Darwin" ]] || die "pass --dir <game folder> on this system"
   DIR="$HOME/Library/Application Support/CrossOver/Bottles/$BOTTLE/drive_c/Program Files (x86)/Call of Duty Modern Warfare 2"
@@ -72,8 +91,12 @@ fi
 
 # ask only when needed and there's a terminal to ask on; a file path works too
 if [[ -z "$ZIP" && -z "$LINK" ]] && { : < /dev/tty; } 2>/dev/null; then
-  printf '    Paste the download link for the maps pack, or the path to %s: ' "$ZIP_NAME" > /dev/tty
-  read -r LINK < /dev/tty || true
+  if links=$(unlock_links); then
+    LINK=$(sed -n 's/^maps=//p' <<< "$links")
+  else
+    printf '    Paste the download link for the maps pack, or the path to %s: ' "$ZIP_NAME" > /dev/tty
+    read -r LINK < /dev/tty || true
+  fi
 fi
 LINK="${LINK//\\ / }"; LINK="${LINK% }"; LINK="${LINK/#\~/$HOME}"   # drag-and-drop escapes spaces
 if [[ -z "$ZIP" && -f "$LINK" ]]; then ZIP="$LINK"; KEEP_ZIP=1; fi

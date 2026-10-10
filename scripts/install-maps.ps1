@@ -8,7 +8,8 @@ Run it straight from GitHub, in PowerShell:
 Options:
   -InstallDir <path>  game folder (default: C:\Games\Call of Duty Modern Warfare 2)
   -MapsUrl <link>     download link of the pack (a Google Drive share link works); also
-                      MW_MAPS_URL. Asked for when needed and not given
+                      MW_MAPS_URL. When needed and not given, it asks for the setup
+                      password (decrypts the links below) or the link itself
   -Zip <path>         use this pack zip instead of downloading
   -KeepZip            keep the zip afterwards (default: delete it if this script downloaded it)
   -Force              install again even if already installed
@@ -25,6 +26,8 @@ $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 $ZipName = "mw2-iw4x-maps-bots.zip"
 $Mark = Join-Path $InstallDir ".iw4x-maps-installed"
+# download links, encrypted with the setup password (written by `task links`)
+$LinksEnc = "U2FsdGVkX19z1JucWZqUi9mbrydBrz7IZBKu1HjwaeSCQDgD/3GuECrT/uzIB2CMUT2zrJQjzDpdIpg/QGnq37w6ffsO0QhnF3C0pjpajXOtdr4yhCmyERBwk+rtJcfWy3gff8aVtAIkGb/0CDFa4mkFQLIPeZKgi4CFBPW2BIt7uXJVUOVoG913KBwD5J8abSgTe8nCDO5zG0I+cRFpWUuJYs4g6WEppu1DiaBTRgX0Ug+P3VNv17X9xN6vwjxmPzXzPh2jmUAE9feoNV9sVcIMuUi3DIk7ToHtwhS/xyaWcAbByQltQ3mPJMNO0IFB"
 
 function Ok($msg)  { Write-Host "    + $msg" -ForegroundColor Green }
 # throw instead of exit: when run as a one-liner, exit would close the user's PowerShell window
@@ -36,6 +39,30 @@ function Get-DownloadUrl($link) {
         return "https://drive.usercontent.google.com/download?id=$($Matches[1])&export=download&confirm=t"
     }
     return $link
+}
+
+# Ask for the setup password and return the decrypted links as @{ game; maps }. Returns
+# nothing when there are none, on Enter (paste a link instead) or after 3 wrong tries.
+# Same format as `openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -md sha256`.
+function Unlock-Links {
+    if (-not $LinksEnc) { return }
+    $data = [Convert]::FromBase64String($LinksEnc)   # "Salted__", 8-byte salt, ciphertext
+    for ($try = 0; $try -lt 3; $try++) {
+        $secure = Read-Host "    Setup password (or Enter to paste a link instead)" -AsSecureString
+        $pass = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
+        if (-not $pass) { return }
+        try {
+            $kdf = New-Object Security.Cryptography.Rfc2898DeriveBytes(([Text.Encoding]::UTF8.GetBytes($pass)), ([byte[]]$data[8..15]), 200000, ([Security.Cryptography.HashAlgorithmName]::SHA256))
+            $keyIv = $kdf.GetBytes(48)
+            $aes = [Security.Cryptography.Aes]::Create()
+            $aes.Key = [byte[]]$keyIv[0..31]; $aes.IV = [byte[]]$keyIv[32..47]
+            $plain = [Text.Encoding]::UTF8.GetString($aes.CreateDecryptor().TransformFinalBlock($data, 16, $data.Length - 16))
+            $links = @{}
+            foreach ($line in $plain -split "`n") { if ($line -match '^(\w+)=(\S+)') { $links[$Matches[1]] = $Matches[2] } }
+            if ($links.game -like "http*") { return $links }
+        } catch {}
+        Write-Host "    ! wrong password" -ForegroundColor Yellow
+    }
 }
 
 # Size of the file behind $url, or "" when the server answers with a web page instead
@@ -79,7 +106,11 @@ if (-not $Zip) {
 } else { $KeepZip = $true }
 
 # a file path works too (drag the zip into the PowerShell window)
-if (-not $Zip -and -not $MapsUrl) { $MapsUrl = (Read-Host "    Paste the download link for the maps pack, or the path to $ZipName").Trim().Trim('"') }
+if (-not $Zip -and -not $MapsUrl) {
+    $links = Unlock-Links
+    if ($links) { $MapsUrl = $links.maps }
+    else { $MapsUrl = (Read-Host "    Paste the download link for the maps pack, or the path to $ZipName").Trim().Trim('"') }
+}
 if (-not $Zip -and $MapsUrl -and (Test-Path -LiteralPath $MapsUrl -PathType Leaf)) { $Zip = $MapsUrl; $KeepZip = $true }
 
 if ($Zip) {

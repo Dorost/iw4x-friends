@@ -17,7 +17,8 @@
 #   --bottle <name>  bottle name to install as (default: mw)
 #   --force          reinstall even if the bottle exists (old one is renamed, not deleted)
 #   --game-url <link>  download link of mw.zip (a Google Drive share link works); also
-#                    MW_GAME_URL. Asked for when a download is needed and it's not given
+#                    MW_GAME_URL. When a download is needed and it's not given, it asks for
+#                    the setup password (decrypts the links below) or the link itself
 #   --maps-url <link>  same for the custom maps + bots pack (MW_MAPS_URL)
 #   --zip <path>     use this mw.zip (otherwise it looks in ~/Downloads, the Bottles
 #                    folder and the current folder before downloading)
@@ -33,6 +34,8 @@ WINE="/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wine"
 DOWNLOAD_ZIP="$HOME/Downloads/mw.zip"
 MARK_INSTALLED=".iw4x-setup-installed"
 MARK_CONFIGURED=".iw4x-setup-configured"
+# download links, encrypted with the setup password (written by `task links`)
+LINKS_ENC="U2FsdGVkX19z1JucWZqUi9mbrydBrz7IZBKu1HjwaeSCQDgD/3GuECrT/uzIB2CMUT2zrJQjzDpdIpg/QGnq37w6ffsO0QhnF3C0pjpajXOtdr4yhCmyERBwk+rtJcfWy3gff8aVtAIkGb/0CDFa4mkFQLIPeZKgi4CFBPW2BIt7uXJVUOVoG913KBwD5J8abSgTe8nCDO5zG0I+cRFpWUuJYs4g6WEppu1DiaBTRgX0Ug+P3VNv17X9xN6vwjxmPzXzPh2jmUAE9feoNV9sVcIMuUi3DIk7ToHtwhS/xyaWcAbByQltQ3mPJMNO0IFB"
 
 FORCE=0 KEEP_ZIP=0 ZIP="" GAME_LINK="${MW_GAME_URL:-}" MAPS_LINK="${MW_MAPS_URL:-}"
 while (( $# )); do
@@ -62,6 +65,22 @@ download_url() {
   else
     print -r -- "$1"
   fi
+}
+
+# ask for the setup password and print the decrypted links ("game=<url>" and "maps=<url>"
+# lines). Fails when there are none, on Enter (paste a link instead) or after 3 wrong tries
+unlock_links() {
+  [[ -n "$LINKS_ENC" ]] && command -v openssl >/dev/null || return 1
+  local pass plain try
+  for try in 1 2 3; do
+    read -rs "pass?    Setup password (or Enter to paste a link instead): " < /dev/tty || return 1
+    print > /dev/tty
+    [[ -n "$pass" ]] || return 1
+    plain=$(print -r -- "$LINKS_ENC" | PASS="$pass" openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 -a -A -pass env:PASS 2>/dev/null) || plain=""
+    [[ "$plain" == game=http* ]] && { print -r -- "$plain"; return 0; }
+    warn "wrong password" > /dev/tty
+  done
+  return 1
 }
 
 # set a "seta key value" line in a .cfg file, appending it if missing
@@ -156,7 +175,12 @@ if (( ! INSTALLED )); then
   # ask only when needed and there's a terminal to ask on; a file path works too
   # (drag mw.zip into the Terminal window)
   if [[ -z "$ZIP" && -z "$GAME_LINK" ]] && { : < /dev/tty; } 2>/dev/null; then
-    read -r "GAME_LINK?    Paste the game download link, or the path to mw.zip: " < /dev/tty || true
+    if links=$(unlock_links); then
+      GAME_LINK=$(sed -n 's/^game=//p' <<< "$links")
+      [[ -n "$MAPS_LINK" ]] || MAPS_LINK=$(sed -n 's/^maps=//p' <<< "$links")
+    else
+      read -r "GAME_LINK?    Paste the game download link, or the path to mw.zip: " < /dev/tty || true
+    fi
   fi
   GAME_LINK="${GAME_LINK//\\ / }"; GAME_LINK="${GAME_LINK% }"   # drag-and-drop escapes spaces, adds a space
   GAME_LINK="${GAME_LINK/#\~/$HOME}"

@@ -12,7 +12,8 @@
 # download resumes where it stopped.
 # Options:
 #   --game-url <link>  download link of mw.zip (a Google Drive share link works); also
-#                  MW_GAME_URL. Asked for when a download is needed and it's not given
+#                  MW_GAME_URL. When a download is needed and it's not given, it asks for
+#                  the setup password (decrypts the links below) or the link itself
 #   --maps-url <link>  same for the custom maps + bots pack (MW_MAPS_URL)
 #   --zip <path>   use this mw.zip (otherwise it looks for mw.zip in the repo and ~)
 #   --keep-zip     keep mw.zip after installing (default: delete it if this script downloaded it)
@@ -25,6 +26,8 @@ cd "$(dirname "$0")/.."
 REPO="$PWD"
 GAME="$REPO/game"
 DOWNLOAD_ZIP="$REPO/mw.zip"
+# download links, encrypted with the setup password (written by `task links`)
+LINKS_ENC="U2FsdGVkX19z1JucWZqUi9mbrydBrz7IZBKu1HjwaeSCQDgD/3GuECrT/uzIB2CMUT2zrJQjzDpdIpg/QGnq37w6ffsO0QhnF3C0pjpajXOtdr4yhCmyERBwk+rtJcfWy3gff8aVtAIkGb/0CDFa4mkFQLIPeZKgi4CFBPW2BIt7uXJVUOVoG913KBwD5J8abSgTe8nCDO5zG0I+cRFpWUuJYs4g6WEppu1DiaBTRgX0Ug+P3VNv17X9xN6vwjxmPzXzPh2jmUAE9feoNV9sVcIMuUi3DIk7ToHtwhS/xyaWcAbByQltQ3mPJMNO0IFB"
 
 KEEP_ZIP=0 ZIP="" GAME_LINK="${MW_GAME_URL:-}" MAPS_LINK="${MW_MAPS_URL:-}"
 while (( $# )); do
@@ -47,6 +50,22 @@ SUDO=""; (( EUID )) && SUDO="sudo"
 size_of() { [[ -f "$1" ]] && stat -c%s "$1" || echo 0; }
 free_gb() { echo $(( $(df -Pk "$1" | awk 'NR==2 {print $4}') / 1024 / 1024 )); }
 random() { tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "$1"; }
+
+# ask for the setup password and print the decrypted links ("game=<url>" and "maps=<url>"
+# lines). Fails when there are none, on Enter (paste a link instead) or after 3 wrong tries
+unlock_links() {
+  [[ -n "$LINKS_ENC" ]] && command -v openssl >/dev/null || return 1
+  local pass plain try
+  for try in 1 2 3; do
+    read -rsp "    Setup password (or Enter to paste a link instead): " pass < /dev/tty || return 1
+    echo > /dev/tty
+    [[ -n "$pass" ]] || return 1
+    plain=$(echo "$LINKS_ENC" | PASS="$pass" openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 -a -A -pass env:PASS 2>/dev/null | tr -d '\0') || plain=""
+    [[ "$plain" == game=http* ]] && { echo "$plain"; return 0; }
+    printf '    \033[33m!\033[0m wrong password\n' > /dev/tty
+  done
+  return 1
+}
 
 # set KEY=value in .env, appending it if missing
 setenv() {
@@ -92,7 +111,12 @@ else
   fi
   # ask only when needed and there's a terminal to ask on; a file path works too
   if [[ -z "$ZIP" && -z "$GAME_LINK" ]] && { : < /dev/tty; } 2>/dev/null; then
-    read -rp "    Paste the game download link, or the path to mw.zip: " GAME_LINK < /dev/tty || true
+    if links=$(unlock_links); then
+      GAME_LINK=$(sed -n 's/^game=//p' <<< "$links")
+      [[ -n "$MAPS_LINK" ]] || MAPS_LINK=$(sed -n 's/^maps=//p' <<< "$links")
+    else
+      read -rp "    Paste the game download link, or the path to mw.zip: " GAME_LINK < /dev/tty || true
+    fi
   fi
   if [[ -z "$ZIP" && -f "$GAME_LINK" ]]; then ZIP="$GAME_LINK"; KEEP_ZIP=1; fi
 

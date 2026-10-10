@@ -100,3 +100,8 @@ tasks:
     desc: Copy config/client.cfg and config/classes.cfg into the standalone setup scripts
     cmds:
       - uv run scripts/sync-config.py
+
+  links:
+    desc: Encrypt the mw.zip and maps download links with a password into the setup scripts
+    cmds:
+      - uv run scripts/encrypt-links.py
