@@ -110,6 +110,48 @@ $Refused = ("the download was refused. With Google Drive that's usually 'Quota e
             "      (too many downloads today), or the link isn't shared. Try again later, or open`n" +
             "      the link in a browser, save the file to your Downloads folder and run this again.")
 
+function SizeOf($path) { if (Test-Path $path) { (Get-Item $path).Length } else { 0 } }
+
+# Download $url ($size bytes) to $out over 8 connections at once: S3 serves each one at
+# only ~13 MB/s. Parts are kept in "$out.parts" so a re-run resumes them, then joined.
+function Get-Parallel($url, [int64]$size, $out) {
+    $n = 8; $chunk = [int64][math]::Ceiling($size / $n)
+    New-Item -ItemType Directory -Force -Path "$out.parts" | Out-Null
+    $parts = 0..($n - 1) | ForEach-Object { Join-Path "$out.parts" $_ }
+    # curl -o overwrites, so each round downloads into part.new and appends it afterwards
+    $merge = {
+        foreach ($p in $parts) {
+            if (-not (Test-Path "$p.new")) { continue }
+            $dst = [IO.File]::Open($p, "Append"); $src = [IO.File]::OpenRead("$p.new")
+            $src.CopyTo($dst); $src.Dispose(); $dst.Dispose(); Remove-Item "$p.new"
+        }
+    }
+    for ($round = 0; $round -lt 5; $round++) {
+        & $merge
+        $procs = @()
+        for ($i = 0; $i -lt $n; $i++) {
+            $start = $i * $chunk + (SizeOf $parts[$i]); $last = [math]::Min(($i + 1) * $chunk, $size) - 1
+            if ($start -gt $last) { continue }
+            # a stalled connection gives up after 30s, the next round picks up where it stopped
+            $procs += Start-Process curl.exe -NoNewWindow -PassThru -ArgumentList @(
+                "-sfL", "--speed-limit", "1000", "--speed-time", "30", "-r", "$start-$last", "-o", "`"$($parts[$i]).new`"", "`"$url`"")
+        }
+        if (-not $procs) { break }
+        do {
+            Start-Sleep 2
+            $got = ($parts | ForEach-Object { (SizeOf $_) + (SizeOf "$_.new") } | Measure-Object -Sum).Sum
+            Write-Host -NoNewline "`r    $([math]::Floor($got / 1MB)) of $([math]::Floor($size / 1MB)) MB"
+        } while ($procs | Where-Object { -not $_.HasExited })
+        Write-Host ""
+    }
+    & $merge
+    if (($parts | ForEach-Object { SizeOf $_ } | Measure-Object -Sum).Sum -ne $size) { return $false }
+    $dst = [IO.File]::Create($out)
+    foreach ($p in $parts) { $src = [IO.File]::OpenRead($p); $src.CopyTo($dst); $src.Dispose(); Remove-Item $p }
+    $dst.Dispose(); Remove-Item "$out.parts"
+    return $true
+}
+
 # A zip whose central directory can be read is complete; a partial download isn't.
 function Test-ZipComplete($path) {
     try { [IO.Compression.ZipFile]::OpenRead($path).Dispose(); $true } catch { $false }
@@ -180,14 +222,18 @@ if (-not $Installed) {
         if (-not $remoteSize) { Die $Refused }
         $Zip = $DownloadZip
         Remove-HtmlPartial $Zip
-        $have = if (Test-Path $Zip) { (Get-Item $Zip).Length } else { 0 }
+        $have = (SizeOf $Zip) + ((Get-ChildItem "$Zip.parts" -File -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum)
         $needGB = [math]::Ceiling(([int64]$remoteSize - $have) / 1GB) + 18
         if ((FreeGB $Zip) -lt $needGB) { Die "need about $needGB GB free on $([IO.Path]::GetPathRoot($Zip)), only $(FreeGB $Zip) GB available" }
         if ($have -gt 0) { Write-Host "    Resuming download ($([math]::Floor($have / 1MB)) MB of $([math]::Floor([int64]$remoteSize / 1MB)) MB done)" }
         else { Write-Host "    Downloading to $Zip" }
         Write-Host "    (if it stops, just re-run the script and it continues)"
         New-Item -ItemType Directory -Force -Path (Split-Path $Zip) | Out-Null
-        & curl.exe -fL -C - --retry 5 --retry-delay 5 --progress-bar -o $Zip $url
+        if ((& curl.exe -sIL --max-time 20 $url) -match '^accept-ranges:\s*bytes') {
+            if (-not (Get-Parallel $url $remoteSize $Zip)) { Die "download incomplete, re-run to resume" }
+        } else {
+            & curl.exe -fL -C - --retry 5 --retry-delay 5 --progress-bar -o $Zip $url
+        }
         if ("$((Get-Item $Zip).Length)" -ne $remoteSize) { Die "download incomplete, re-run to resume" }
         Ok "downloaded"
     }

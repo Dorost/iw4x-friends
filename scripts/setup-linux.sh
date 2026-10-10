@@ -51,6 +51,47 @@ size_of() { [[ -f "$1" ]] && stat -c%s "$1" || echo 0; }
 free_gb() { echo $(( $(df -Pk "$1" | awk 'NR==2 {print $4}') / 1024 / 1024 )); }
 random() { tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "$1"; }
 
+# Download $1 ($2 bytes) to $3 over 8 connections at once: S3 serves each one at only
+# ~13 MB/s. Parts are kept in $3.parts/ so a re-run resumes them, then joined into $3.
+fetch_parallel() {
+  local url=$1 size=$2 out=$3 n=8 chunk i start last have round p alive
+  local -a pids
+  chunk=$(( (size + n - 1) / n ))
+  mkdir -p "$out.parts"
+  for round in 1 2 3 4 5; do
+    pids=()
+    for (( i = 0; i < n; i++ )); do
+      start=$(( i * chunk )) last=$(( (i + 1) * chunk - 1 ))
+      (( last < size )) || last=$(( size - 1 ))
+      have=$(size_of "$out.parts/$i")
+      (( start + have <= last )) || continue
+      # a stalled connection gives up after 30s, the next round picks up where it stopped
+      curl -sfL --speed-limit 1000 --speed-time 30 -r $(( start + have ))-$last "$url" >> "$out.parts/$i" &
+      pids+=($!)
+    done
+    (( ${#pids[@]} )) || break
+    alive=1
+    while (( alive )); do
+      sleep 2
+      alive=0; for p in "${pids[@]}"; do kill -0 "$p" 2>/dev/null && alive=1; done
+      printf '\r    %d of %d MB' $(( $(parts_size "$out") / 1048576 )) $(( size / 1048576 ))
+    done
+    wait "${pids[@]}" || true
+    echo
+  done
+  (( $(parts_size "$out") == size )) || return 1
+  rm -f "$out"
+  for (( i = 0; i < n; i++ )); do cat "$out.parts/$i" >> "$out"; rm "$out.parts/$i"; done
+  rmdir "$out.parts"
+}
+
+# bytes downloaded so far into the parts of $1
+parts_size() {
+  local i total=0
+  for (( i = 0; i < 8; i++ )); do (( total += $(size_of "$1.parts/$i") )); done
+  echo $total
+}
+
 # ask for the setup password and print the decrypted links ("game=<url>" and "maps=<url>"
 # lines). Fails when there are none, on Enter (paste a link instead) or after 3 wrong tries
 unlock_links() {
@@ -141,13 +182,17 @@ else
     ZIP="$DOWNLOAD_ZIP"
     # a partial file that is really an HTML error page can't be resumed
     [[ -f "$ZIP" ]] && [[ "$(head -c 1 "$ZIP")" == "<" ]] && rm -f "$ZIP"
-    have=$(size_of "$ZIP")
+    have=$(( $(size_of "$ZIP") + $(parts_size "$ZIP") ))
     need_gb=$(( (remote_size - have) / 1024 / 1024 / 1024 + 18 ))   # rest of download + game folder
     (( $(free_gb "$REPO") >= need_gb )) || die "need about ${need_gb} GB free disk space, only $(free_gb "$REPO") GB available"
     (( have > 0 )) && echo "    Resuming download ($(( have / 1024 / 1024 )) MB of $(( remote_size / 1024 / 1024 )) MB done)" \
                    || echo "    Downloading to $ZIP"
     echo "    (if it stops, just re-run the script and it continues)"
-    curl -fL -C - --retry 5 --retry-delay 5 --progress-bar "$url" -o "$ZIP"
+    if grep -qi '^accept-ranges: bytes' <<< "$head"; then
+      fetch_parallel "$url" "$remote_size" "$ZIP" || die "download incomplete, re-run to resume"
+    else
+      curl -fL -C - --retry 5 --retry-delay 5 --progress-bar "$url" -o "$ZIP"
+    fi
     [[ "$(size_of "$ZIP")" == "$remote_size" ]] || die "download incomplete, re-run to resume"
     ok "downloaded"
   fi
