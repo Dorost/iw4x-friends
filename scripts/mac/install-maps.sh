@@ -20,7 +20,7 @@ set -euo pipefail
 ZIP_NAME="mw2-iw4x-maps-bots.zip"
 MARK=".iw4x-maps-installed"
 # download links, encrypted with the setup password (written by `task links`)
-LINKS_ENC="U2FsdGVkX19z1JucWZqUi9mbrydBrz7IZBKu1HjwaeSCQDgD/3GuECrT/uzIB2CMUT2zrJQjzDpdIpg/QGnq37w6ffsO0QhnF3C0pjpajXOtdr4yhCmyERBwk+rtJcfWy3gff8aVtAIkGb/0CDFa4mkFQLIPeZKgi4CFBPW2BIt7uXJVUOVoG913KBwD5J8abSgTe8nCDO5zG0I+cRFpWUuJYs4g6WEppu1DiaBTRgX0Ug+P3VNv17X9xN6vwjxmPzXzPh2jmUAE9feoNV9sVcIMuUi3DIk7ToHtwhS/xyaWcAbByQltQ3mPJMNO0IFB"
+LINKS_ENC="U2FsdGVkX18BSFqqHMCQ++5w+wJL5cdh3asQpzzejdBx2HWUrjeVW3q15pMGc31tolezaREbLw7dPLBzNarkDGagqk5k81ChbyM7uVo97si+Qc/A/GDQ+Y1Gkje41pLweL2l2zWtdoyWSKS33+xtZ92FbDNb5kYs4B9rHU3DfkJFIP0naKFFciIY7ikspmyrxsHNiTtW8zGg5eFIJbcxXe/vVJiCjUDQyPGbkry3TdA="
 
 BOTTLE="mw" DIR="" ZIP="" KEEP_ZIP=0 FORCE=0 LINK="${MW_MAPS_URL:-}"
 while (( $# )); do

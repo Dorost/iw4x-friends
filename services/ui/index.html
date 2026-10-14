@@ -26,6 +26,10 @@
   <symbol id="i-bot" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 8V4M9 13h.01M15 13h.01M2 13v2M22 13v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
   <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
   <symbol id="i-lobby" viewBox="0 0 24 24"><path d="M4 11V8a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v3M3 11a2 2 0 0 1 2 2v2h14v-2a2 2 0 1 1 2 2v3H3v-3a2 2 0 0 1 0-4zM6 18v2M18 18v2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-join" viewBox="0 0 24 24"><path d="M10 17l5-5-5-5M15 12H3M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-spin" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
   <symbol id="i-send" viewBox="0 0 24 24"><path d="M4 12 20 4l-6 16-3-7z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
 </svg>
 
@@ -38,13 +42,37 @@
       <h1 class="text-base font-semibold text-slate-800">IW4x Server</h1>
       <span id="statusText" class="text-xs text-slate-400">checking...</span>
     </div>
-    <div class="text-xs text-slate-500">join: <code id="addr" class="bg-slate-100 px-1.5 py-0.5 rounded">-</code></div>
+    <span id="conn" class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-400" title="Live updates from the server">connecting</span>
     <div class="ml-auto flex gap-2">
-      <button onclick="act('start')" class="btn bg-emerald-50 text-emerald-700 hover:bg-emerald-100"><svg class="w-3.5 h-3.5"><use href="#i-play"/></svg>Start</button>
-      <button onclick="act('restart')" title="Restarts the server process: disconnects everyone" class="btn bg-sky-50 text-sky-700 hover:bg-sky-100"><svg class="w-3.5 h-3.5"><use href="#i-restart"/></svg>Restart</button>
-      <button onclick="act('stop')" class="btn bg-rose-50 text-rose-700 hover:bg-rose-100"><svg class="w-3.5 h-3.5"><use href="#i-stop"/></svg>Stop</button>
+      <button id="btnStart" onclick="act('start', this)" class="btn bg-emerald-50 text-emerald-700 hover:bg-emerald-100"><svg class="w-3.5 h-3.5"><use href="#i-play"/></svg>Start</button>
+      <button id="btnRestart" onclick="act('restart', this)" title="Restarts the server process: disconnects everyone" class="btn bg-sky-50 text-sky-700 hover:bg-sky-100"><svg class="w-3.5 h-3.5"><use href="#i-restart"/></svg>Restart</button>
+      <button id="btnStop" onclick="act('stop', this)" class="btn bg-rose-50 text-rose-700 hover:bg-rose-100"><svg class="w-3.5 h-3.5"><use href="#i-stop"/></svg>Stop</button>
     </div>
   </header>
+
+  <!-- join -->
+  <section class="bg-white rounded-xl shadow-sm p-4 space-y-2">
+    <h2 class="title"><svg class="w-4 h-4"><use href="#i-join"/></svg>How to join
+      <button onclick="copy(inviteText(), this)" class="btn ml-auto bg-sky-50 text-sky-700 hover:bg-sky-100"><svg class="w-3.5 h-3.5"><use href="#i-copy"/></svg>Copy invite for chat</button>
+    </h2>
+    <ol class="text-xs text-slate-500 list-decimal pl-4 space-y-0.5">
+      <li>Start <b class="text-slate-600">IW4x</b> and wait for the main menu</li>
+      <li>Press <kbd class="px-1 rounded bg-slate-100 border border-slate-200 font-mono">~</kbd> to open the console</li>
+      <li>Type the game password, press Enter <span id="noPass" class="hidden text-slate-400">(no game password set: skip this)</span></li>
+    </ol>
+    <div class="flex items-center gap-2">
+      <code id="passCmd" class="flex-1 min-w-0 truncate bg-slate-800 text-emerald-300 font-mono text-xs px-3 py-2 rounded-lg">-</code>
+      <button onclick="copy(passCmd(), this)" class="btn bg-slate-100 hover:bg-slate-200"><svg class="w-3.5 h-3.5"><use href="#i-copy"/></svg>Copy</button>
+    </div>
+    <ol start="4" class="text-xs text-slate-500 list-decimal pl-4">
+      <li>Then connect, press Enter:</li>
+    </ol>
+    <div class="flex items-center gap-2">
+      <code id="joinCmd" class="flex-1 min-w-0 truncate bg-slate-800 text-emerald-300 font-mono text-xs px-3 py-2 rounded-lg">-</code>
+      <button onclick="copy(joinCmd(), this)" class="btn bg-slate-100 hover:bg-slate-200"><svg class="w-3.5 h-3.5"><use href="#i-copy"/></svg>Copy</button>
+    </div>
+    <p class="text-[11px] text-slate-400">On the same network the server also shows in <b>Server Browser → LAN</b>. Players need the custom maps pack installed to join custom maps.</p>
+  </section>
 
   <div id="toast" class="hidden fixed bottom-4 right-4 bg-slate-800 text-white text-xs px-3 py-2 rounded-lg shadow"></div>
 
@@ -78,7 +106,7 @@
         </div>
       </div>
       <div class="flex gap-2 pt-1">
-        <button onclick="save()" class="btn bg-sky-600 text-white hover:bg-sky-700"><svg class="w-3.5 h-3.5"><use href="#i-save"/></svg>Save</button>
+        <button onclick="save(this)" class="btn bg-sky-600 text-white hover:bg-sky-700"><svg class="w-3.5 h-3.5"><use href="#i-save"/></svg>Save</button>
       </div>
     </section>
 
@@ -101,8 +129,8 @@
         </div>
         <p class="text-[11px] text-slate-400">Saved per game mode, used from the next Start game. Empty = the mode's default.</p>
         <div class="flex gap-2">
-          <button id="btnGame" onclick="startGame()" class="btn bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:pointer-events-none"><svg class="w-3.5 h-3.5"><use href="#i-play"/></svg>Start game</button>
-          <button id="btnLobby" onclick="toLobby()" class="btn bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-40 disabled:pointer-events-none"><svg class="w-3.5 h-3.5"><use href="#i-lobby"/></svg>Back to lobby</button>
+          <button id="btnGame" onclick="startGame(this)" class="btn bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:pointer-events-none"><svg class="w-3.5 h-3.5"><use href="#i-play"/></svg>Start game</button>
+          <button id="btnLobby" onclick="toLobby(this)" class="btn bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-40 disabled:pointer-events-none"><svg class="w-3.5 h-3.5"><use href="#i-lobby"/></svg>Back to lobby</button>
         </div>
         <p class="text-[11px] text-slate-400">Players stay connected both ways. When a match ends everyone goes back to the lobby and waits for the next Start game.</p>
       </section>
@@ -124,30 +152,62 @@
     <pre id="log" class="bg-slate-800 text-slate-200 text-[11px] leading-snug rounded-lg p-3 h-64 overflow-y-auto whitespace-pre-wrap"></pre>
     <form onsubmit="sendRcon(event)" class="flex gap-2">
       <input id="cmd" class="inp flex-1 font-mono" placeholder="rcon command, e.g. say hello  /  fast_restart">
-      <button class="btn bg-slate-100 hover:bg-slate-200"><svg class="w-3.5 h-3.5"><use href="#i-send"/></svg>Send</button>
+      <button id="btnSend" class="btn bg-slate-100 hover:bg-slate-200"><svg class="w-3.5 h-3.5"><use href="#i-send"/></svg>Send</button>
     </form>
   </section>
 </div>
 
 <style type="text/tailwindcss">
-  .btn { @apply inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition; }
+  .btn { @apply inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition active:scale-95 disabled:opacity-40 disabled:pointer-events-none; }
+  .btn.busy svg { @apply animate-spin; }
   .inp { @apply mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:border-sky-400 disabled:opacity-50; }
   .lbl { @apply text-xs text-slate-600; }
   .title { @apply text-sm font-semibold text-slate-700 flex items-center gap-1.5; }
 </style>
 
 <script>
-let S = null, rconOut = [];
+let S = null, logLines = [], rconOut = [], pending = null;
 const LIMITS = ['scorelimit', 'timelimit', 'roundlimit', 'winlimit', 'roundswitch', 'numlives'];
 const $ = id => document.getElementById(id);
 const api = async (path, body) => {
   const r = await fetch(path, body === undefined ? {} : {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
-  if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
   return r.json();
 };
-const toast = msg => { const t = $('toast'); t.textContent = msg; t.classList.remove('hidden'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.add('hidden'), 2500); };
-const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const toast = (msg, err) => {
+  const t = $('toast'); t.textContent = msg; t.className = `fixed bottom-4 right-4 text-white text-xs px-3 py-2 rounded-lg shadow ${err ? 'bg-rose-600' : 'bg-slate-800'}`;
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.add('hidden'), err ? 5000 : 2500);
+};
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const mapName = id => (S.maps.find(m => m.id === id) || {name: id}).name;
+
+// runs fn with the button disabled and its icon spinning; errors become a red toast
+async function busy(btn, fn) {
+  const use = btn && btn.querySelector('use'), icon = use && use.getAttribute('href');
+  if (btn) { btn.disabled = true; btn.classList.add('busy'); use && use.setAttribute('href', '#i-spin'); }
+  try { return await fn(); }
+  catch (e) { toast('error: ' + e.message, true); }
+  finally { if (btn) { btn.classList.remove('busy'); use && use.setAttribute('href', icon); btn.disabled = false; if (S) render(); } }
+}
+
+// what an action is waiting for: shown in the header until the server state confirms it
+function expect(label, done) { pending = {label, done, until: Date.now() + 90000}; render(); }
+
+// ---------- join ----------
+const passCmd = () => S ? `password ${S.config.password}` : '';
+const joinCmd = () => S ? `connect ${S.address}` : '';
+const inviteText = () => `Join my MW2 server${S && S.live ? ` "${S.live.hostname}"` : ''}: start IW4x, press ~ and type, pressing Enter after each line:\n`
+  + (S && S.config.password ? passCmd() + '\n' : '') + joinCmd();
+async function copy(text, btn) {
+  try { await navigator.clipboard.writeText(text); }
+  catch {  // plain http (LAN) has no clipboard API
+    const ta = Object.assign(document.createElement('textarea'), {value: text});
+    document.body.append(ta); ta.select(); document.execCommand('copy'); ta.remove();
+  }
+  const use = btn.querySelector('use'); use.setAttribute('href', '#i-check');
+  setTimeout(() => use.setAttribute('href', '#i-copy'), 1500);
+  toast('copied');
+}
 
 function fillForm(c) {
   $('bots_skill').innerHTML = Object.entries(S.bot_skills).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
@@ -169,95 +229,116 @@ function modeChanged() {
 // players in the lobby see the picked map and mode before Start game
 async function showPick() {
   if (!S.live || S.live.in_game) return;
-  try { await api('/api/select', {map: $('liveMap').value, gametype: $('gametype').value}); toast('lobby shows ' + mapName($('liveMap').value)); }
-  catch (e) { toast('error: ' + e.message); }
+  await busy(null, async () => { await api('/api/select', {map: $('liveMap').value, gametype: $('gametype').value}); toast('lobby shows ' + mapName($('liveMap').value)); });
 }
 
 function render() {
   const run = S.running, live = S.live;
-  $('dot').className = 'w-2.5 h-2.5 rounded-full ' + (live ? 'bg-emerald-400' : run ? 'bg-amber-400' : 'bg-slate-300');
-  $('statusText').textContent = live ? `running ${live.version} · ${live.in_game ? 'in game' : 'lobby'}` : run ? 'starting...' : 'stopped';
-  $('addr').textContent = S.address;
-  $('now').innerHTML = !live ? 'server not running'
+  if (pending && (pending.done(S) || Date.now() > pending.until)) pending = null;
+  $('dot').className = 'w-2.5 h-2.5 rounded-full ' + (pending ? 'bg-sky-400 animate-pulse' : live ? 'bg-emerald-400' : run ? 'bg-amber-400 animate-pulse' : 'bg-slate-300');
+  $('statusText').textContent = pending ? pending.label + '...'
+    : live ? `running ${live.version} · ${live.in_game ? 'in game' : 'lobby'}` : run ? 'starting...' : 'stopped';
+  $('passCmd').textContent = passCmd();
+  $('noPass').classList.toggle('hidden', !!S.config.password);
+  $('joinCmd').textContent = joinCmd();
+  $('btnStart').disabled = !!pending || run;
+  $('btnRestart').disabled = !!pending || !run;
+  $('btnStop').disabled = !!pending || !run;
+  $('now').innerHTML = !live ? (run ? 'server is starting...' : 'server not running')
     : live.in_game ? `<span class="text-slate-700 font-medium">${esc(mapName(live.map))}</span> · ${esc(S.gametypes[live.gametype] || live.gametype)} · ${esc(live.hostname)}`
     : `<span class="text-slate-700 font-medium">In the lobby</span>, waiting for Start game · ${esc(live.hostname)}`;
-  $('btnGame').disabled = !live || live.in_game;
-  $('btnLobby').disabled = !live || !live.in_game;
+  $('btnGame').disabled = !!pending || !live || live.in_game;
+  $('btnLobby').disabled = !!pending || !live || !live.in_game;
   const ps = live ? live.players : [];
   const lobby = live && !live.in_game;
   $('pcount').textContent = !live ? '' : lobby ? `(${live.lobby_count} in lobby)` : `(${ps.length})`;
   $('players').innerHTML = ps.length ? ps.map(p => `<tr class="border-t border-slate-100">
-      <td class="py-1.5">${p.num}</td><td class="font-medium text-slate-700">${esc(p.name)}${p.bot ? ' <span class="text-[10px] text-amber-600 bg-amber-50 px-1 rounded">bot</span>' : ''}</td><td>${p.score}</td><td>${p.bot ? '-' : p.ping}</td>
-      <td class="font-mono text-[10px] text-slate-400">${p.guid}</td><td class="text-slate-400">${esc(p.address)}</td>
-      <td class="text-right"><button onclick="kick(${p.num}, '${esc(p.name)}')" title="Kick" class="text-rose-400 hover:text-rose-600"><svg class="w-3.5 h-3.5"><use href="#i-x"/></svg></button></td></tr>`).join('')
+      <td class="py-1.5">${p.num}</td><td class="font-medium text-slate-700">${esc(p.name)}${p.bot ? ' <span class="text-[10px] text-amber-600 bg-amber-50 px-1 rounded">bot</span>' : ''}</td><td>${esc(p.score)}</td><td>${p.bot ? '-' : esc(p.ping)}</td>
+      <td class="font-mono text-[10px] text-slate-400">${esc(p.guid)}</td><td class="text-slate-400">${esc(p.address)}</td>
+      <td class="text-right"><button onclick="kick(${p.num}, this)" title="Kick" class="btn !p-1 text-rose-400 hover:text-rose-600"><svg class="w-3.5 h-3.5"><use href="#i-x"/></svg></button></td></tr>`).join('')
     : `<tr><td colspan="7" class="py-3 text-center text-slate-400">${lobby ? `${live.lobby_count} in the lobby, names show up here once a game starts` : 'no players'}</td></tr>`;
 }
 
-async function refresh(first) {
-  try {
-    S = await api('/api/state');
-    if (first) fillForm(S.config);
-    render();
-  } catch (e) { $('statusText').textContent = 'ui backend unreachable'; }
-}
-
-async function refreshLog() {
-  const {lines} = await api('/api/log');
+function renderLog() {
   const el = $('log'), atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 20;
-  el.textContent = lines.concat(rconOut).join('\n');
+  el.textContent = logLines.concat(rconOut).join('\n');
   if (atBottom) el.scrollTop = el.scrollHeight;
 }
 
-async function act(a) {
-  const n = S && S.live ? S.live.players.length : 0;
-  if (n && a !== 'start' && !confirm(`${a} disconnects all ${n} player(s). Continue?`)) return;
-  toast(a + '...');
-  try { await api('/api/server/' + a, {}); toast(a + ' done'); } catch (e) { toast('error: ' + e.message); }
-  refresh();
+// ---------- live updates (server-sent events) ----------
+function connect() {
+  const es = new EventSource('/api/events');
+  const conn = (text, cls) => { $('conn').textContent = text; $('conn').className = 'text-[10px] px-1.5 py-0.5 rounded ' + cls; };
+  es.onopen = () => conn('live', 'bg-emerald-50 text-emerald-600');
+  es.onerror = () => conn('reconnecting', 'bg-amber-50 text-amber-600');  // EventSource retries by itself
+  es.onmessage = e => {
+    const d = JSON.parse(e.data);
+    if (d.error) { $('statusText').textContent = 'error: ' + d.error; return; }
+    const first = !S;
+    S = d.state; logLines = d.log;
+    if (first) fillForm(S.config);
+    render(); renderLog();
+  };
 }
 
-async function save() {
+function act(a, btn) {
+  const n = S && S.live ? (S.live.in_game ? S.live.players.filter(p => !p.bot).length : S.live.lobby_count) : 0;
+  if (n && a !== 'start' && !confirm(`${a} disconnects all ${n} player(s). Continue?`)) return;
+  const label = {start: 'starting', stop: 'stopping', restart: 'restarting'}[a];
+  return busy(btn, async () => {
+    await api('/api/server/' + a, {});
+    expect(label, a === 'stop' ? s => !s.running : s => !!s.live);
+    toast(label + '...');
+  });
+}
+
+function save(btn) {
   const body = {
     hostname: $('hostname').value, password: $('password').value, rcon_password: $('rcon_password').value,
     maxclients: +$('maxclients').value, lan_only: $('lan_only').checked,
     voice: $('voice').checked, alltalk: $('alltalk').value === '1', deadchat: $('deadchat').checked,
     bots_fill: +$('bots_fill').value, bots_fill_mode: $('bots_fill_mode').value, bots_skill: $('bots_skill').value,
   };
-  try { await api('/api/config', body); toast('saved'); }
-  catch (e) { toast('error: ' + e.message); }
+  return busy(btn, async () => { await api('/api/config', body); Object.assign(S.config, body); render(); toast('saved'); });
 }
 
-async function kick(num, name) {
-  await api('/api/kick', {num}); toast('kicked ' + name); refresh();
+function kick(num, btn) {
+  const p = S.live && S.live.players.find(p => p.num === num);
+  if (!confirm(`Kick ${p ? p.name : '#' + num}?`)) return;
+  return busy(btn, async () => { await api('/api/kick', {num}); toast('kicked ' + (p ? p.name : '#' + num)); });
 }
 
-async function startGame() {
+function startGame(btn) {
   const body = {map: $('liveMap').value, gametype: $('gametype').value, ...Object.fromEntries(LIMITS.map(k => [k, $(k).value]))};
-  try {
-    await api('/api/game', body); toast(`starting ${mapName(body.map)}...`);
+  return busy(btn, async () => {
+    await api('/api/game', body);
     Object.assign(S.config, body);
-  }
-  catch (e) { toast('error: ' + e.message); }
-  setTimeout(refresh, 4000);
+    expect(`loading ${mapName(body.map)}`, s => s.live && s.live.in_game);
+    toast(`starting ${mapName(body.map)}...`);
+  });
 }
 
-async function toLobby() {
-  try { await api('/api/lobby', {}); toast('ending the match, everyone goes back to the lobby...'); }
-  catch (e) { toast('error: ' + e.message); }
-  setTimeout(refresh, 4000);
+function toLobby(btn) {
+  return busy(btn, async () => {
+    await api('/api/lobby', {});
+    expect('ending the match', s => s.live && !s.live.in_game);
+    toast('ending the match, everyone goes back to the lobby...');
+  });
 }
 
-async function sendRcon(e) {
+function sendRcon(e) {
   e.preventDefault();
   const cmd = $('cmd').value.trim(); if (!cmd) return;
-  const {output} = await api('/api/rcon', {cmd});
-  rconOut.push('> ' + cmd, output.trim() || '(no output)');
-  $('cmd').value = '';
-  await refreshLog(); $('log').scrollTop = $('log').scrollHeight;
+  return busy($('btnSend'), async () => {
+    const {output} = await api('/api/rcon', {cmd});
+    rconOut.push('> ' + cmd, output.trim() || '(no output)');
+    $('cmd').value = '';
+    renderLog(); $('log').scrollTop = $('log').scrollHeight;
+  });
 }
 
-refresh(true); refreshLog();
-setInterval(refresh, 3000); setInterval(refreshLog, 3000);
+connect();
+setInterval(() => S && pending && render(), 2000);  // lets a stuck action time out
 </script>
 </body>
 </html>

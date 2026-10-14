@@ -5,3 +5,4 @@ mw.zip
 services/ui/server.log
 __pycache__/
 .DS_Store
+game-files/

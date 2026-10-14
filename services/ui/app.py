@@ -4,7 +4,9 @@
 # ///
 """Small web UI to configure and control the IW4x LAN dedicated server."""
 
+import asyncio
 import base64
+import json
 import os
 import re
 import secrets
@@ -20,7 +22,7 @@ from pathlib import Path
 import psutil
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
 IS_WINDOWS = sys.platform == "win32"
@@ -422,6 +424,54 @@ def show_pick() -> None:
 pick_shown = False
 
 
+# ---------- live updates ----------
+# One background thread queries the server for every open page and pushes changes to
+# them (SSE), instead of each page polling: rcon allows only one request per 500 ms.
+
+POLL_SECONDS = 2.0
+poked = threading.Event()  # set after an action: poll right away instead of waiting
+snapshot_lock = threading.Lock()
+snapshot: dict = {"version": 0, "data": None}
+
+
+def changed() -> None:
+    poked.set()
+
+
+def poll_loop() -> None:
+    while True:
+        poked.clear()
+        try:
+            data = {"state": state(), "log": log()["lines"]}
+        except Exception as e:  # keep pushing: one failed query must not stop live updates
+            data = {"error": str(e)}
+        with snapshot_lock:
+            if data != snapshot["data"]:
+                snapshot["data"] = data
+                snapshot["version"] += 1
+        poked.wait(POLL_SECONDS)
+
+
+@app.get("/api/events")
+async def events(request: Request):
+    async def stream():
+        seen, idle = 0, 0.0
+        while not await request.is_disconnected():
+            with snapshot_lock:
+                version, data = snapshot["version"], snapshot["data"]
+            if version != seen and data is not None:
+                seen, idle = version, 0.0
+                yield f"data: {json.dumps(data)}\n\n"
+            elif idle >= 15:  # keeps proxies from closing a quiet stream
+                idle = 0.0
+                yield ": ping\n\n"
+            await asyncio.sleep(0.25)
+            idle += 0.25
+
+    return StreamingResponse(stream(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
 # ---------- API ----------
 
 @app.get("/api/state")
@@ -450,6 +500,7 @@ def save_config(c: Config):
     write_cfg(c)
     if live_status():
         rcon("exec server.cfg")
+    changed()
     return {"ok": True}
 
 
@@ -464,6 +515,7 @@ def server_action(action: str):
         start_server()
     else:
         raise HTTPException(404)
+    changed()
     return {"ok": True}
 
 
@@ -473,7 +525,9 @@ class Kick(BaseModel):
 
 @app.post("/api/kick")
 def kick(k: Kick):
-    return {"output": rcon(f"clientkick {k.num}")}
+    output = rcon(f"clientkick {k.num}")
+    changed()
+    return {"output": output}
 
 
 class Pick(BaseModel):
@@ -496,6 +550,7 @@ def select(p: Pick):
     live = live_status()
     if live and not live["in_game"]:
         show_pick()
+    changed()
     return {"ok": True}
 
 
@@ -526,7 +581,9 @@ def start_game(g: Game):
             rcon(f"reset {key}")  # back to the mode's default
     save_cfg(v)
     rcon("exec server.cfg")
-    return {"output": rcon("xpartygo")}
+    output = rcon("xpartygo")
+    changed()
+    return {"output": output}
 
 
 @app.post("/api/lobby")
@@ -535,7 +592,9 @@ def to_lobby():
     live = live_status()
     if not live or not live["in_game"]:
         raise HTTPException(409, "no match running")
-    return {"output": rcon("sv_tolobby 1")}
+    output = rcon("sv_tolobby 1")
+    changed()
+    return {"output": output}
 
 
 class Command(BaseModel):
@@ -544,7 +603,9 @@ class Command(BaseModel):
 
 @app.post("/api/rcon")
 def raw_rcon(c: Command):
-    return {"output": rcon(c.cmd)}
+    output = rcon(c.cmd)
+    changed()
+    return {"output": output}
 
 
 @app.get("/api/log")
@@ -563,4 +624,6 @@ if __name__ == "__main__":
     install_lobby_gsc()
     if os.environ.get("AUTOSTART") == "1":
         start_server()
-    uvicorn.run(app, host=UI_HOST, port=UI_PORT)
+    threading.Thread(target=poll_loop, daemon=True).start()
+    # an open live-update stream would otherwise keep the server from shutting down
+    uvicorn.run(app, host=UI_HOST, port=UI_PORT, timeout_graceful_shutdown=2)

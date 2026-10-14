@@ -32,6 +32,21 @@ tasks:
     cmds:
       - docker compose down
 
+  vps:up:
+    desc: Create a Vultr VPS (New York), copy this repo to it, set up and start the server
+    cmds:
+      - uv run scripts/tools/vultr.py up
+
+  vps:down:
+    desc: Destroy the Vultr VPS
+    cmds:
+      - uv run scripts/tools/vultr.py down
+
+  vps:status:
+    desc: Show the Vultr VPS address and web UI link
+    cmds:
+      - uv run scripts/tools/vultr.py status
+
   stop:
     desc: Stop the dedicated server
     cmds:

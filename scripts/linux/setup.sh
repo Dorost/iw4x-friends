@@ -27,7 +27,7 @@ REPO="$PWD"
 GAME="$REPO/game"
 DOWNLOAD_ZIP="$REPO/mw.zip"
 # download links, encrypted with the setup password (written by `task links`)
-LINKS_ENC="U2FsdGVkX19z1JucWZqUi9mbrydBrz7IZBKu1HjwaeSCQDgD/3GuECrT/uzIB2CMUT2zrJQjzDpdIpg/QGnq37w6ffsO0QhnF3C0pjpajXOtdr4yhCmyERBwk+rtJcfWy3gff8aVtAIkGb/0CDFa4mkFQLIPeZKgi4CFBPW2BIt7uXJVUOVoG913KBwD5J8abSgTe8nCDO5zG0I+cRFpWUuJYs4g6WEppu1DiaBTRgX0Ug+P3VNv17X9xN6vwjxmPzXzPh2jmUAE9feoNV9sVcIMuUi3DIk7ToHtwhS/xyaWcAbByQltQ3mPJMNO0IFB"
+LINKS_ENC="U2FsdGVkX18BSFqqHMCQ++5w+wJL5cdh3asQpzzejdBx2HWUrjeVW3q15pMGc31tolezaREbLw7dPLBzNarkDGagqk5k81ChbyM7uVo97si+Qc/A/GDQ+Y1Gkje41pLweL2l2zWtdoyWSKS33+xtZ92FbDNb5kYs4B9rHU3DfkJFIP0naKFFciIY7ikspmyrxsHNiTtW8zGg5eFIJbcxXe/vVJiCjUDQyPGbkry3TdA="
 
 KEEP_ZIP=0 ZIP="" GAME_LINK="${MW_GAME_URL:-}" MAPS_LINK="${MW_MAPS_URL:-}"
 while (( $# )); do
@@ -49,7 +49,7 @@ die()  { printf '    \033[31m✗ %s\033[0m\n' "$1"; exit 1; }
 SUDO=""; (( EUID )) && SUDO="sudo"
 size_of() { [[ -f "$1" ]] && stat -c%s "$1" || echo 0; }
 free_gb() { echo $(( $(df -Pk "$1" | awk 'NR==2 {print $4}') / 1024 / 1024 )); }
-random() { tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "$1"; }
+random() { LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "$1" || true; }   # tr gets SIGPIPE when head is done
 
 # Download $1 ($2 bytes) to $3 over 8 connections at once: S3 serves each one at only
 # ~13 MB/s. Parts are kept in $3.parts/ so a re-run resumes them, then joined into $3.
@@ -203,7 +203,7 @@ else
   tmp="$REPO/.setup-tmp"
   rm -rf "$tmp"
   trap 'rm -rf "$tmp"' EXIT
-  unzip -q "$ZIP" "*/$GAME_REL/*" -d "$tmp" || die "zip does not contain the MW2 game folder"
+  unzip -q "$ZIP" "*/$GAME_REL/*" -x "__MACOSX/*" -d "$tmp" || die "zip does not contain the MW2 game folder"
   src=$(find "$tmp" -mindepth 1 -maxdepth 1 -type d | head -1)
   [[ -f "$src/$GAME_REL/iw4x.exe" ]] || die "zip does not contain the MW2 game folder"
   mv "$src/$GAME_REL" "$GAME"

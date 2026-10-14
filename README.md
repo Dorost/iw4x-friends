@@ -89,6 +89,16 @@ docker compose up -d --build
 
 Then open `https://<your-domain>`, log in with the password the setup printed, and press **Start**.
 
+### On Vultr, created by script
+
+Creates the VPS (New York, high frequency 2 CPU / 4 GB), copies this repo, runs the setup and starts everything. No domain needed: the web UI gets `https://<ip>.sslip.io`.
+
+1. Put your Vultr API key in `.env`: `VULTR_API_KEY=...` (Vultr: Account → API, and allow your IP there)
+2. Run `task vps:up`, type the setup password when asked. At the end it prints the web UI link, its password and the `connect` address
+3. Done playing: `task vps:down` destroys the VPS (billing stops, the game files go with it)
+
+`task vps:status` shows the address again.
+
 ## Repo layout
 
 - `scripts/windows/`, `scripts/mac/`, `scripts/linux/`: setup and helper scripts per system
