@@ -85,46 +85,114 @@ BOT_SKILLS = {
 }
 # per-mode settings (scr_<mode>_<name>), set from the Game panel; empty = the mode's default
 MODE_LIMITS = ["scorelimit", "timelimit", "roundlimit", "winlimit", "roundswitch", "numlives"]
-# Physics and movement dvars from the Fun panel: dvar -> (label, game default, hint).
+ON_OFF = {"0": "off", "1": "on"}
+# Physics and movement dvars from the Fun panel: dvar -> (label, game default, hint, choices or None).
 # Applied right away on Save, also mid-match.
 FUN_DVARS = {
-    "g_gravity": ("Gravity", "800", "lower = floatier, 200 = moon"),
-    "jump_height": ("Jump height", "39", "higher = jump onto roofs"),
-    "g_speed": ("Move speed", "190", "player run speed"),
-    "g_knockback": ("Knockback", "1000", "push from damage and explosions"),
-    "bg_fallDamageMinHeight": ("Fall damage from", "128", "fall height where damage starts"),
-    "bg_fallDamageMaxHeight": ("Fall death at", "300", "fall height that kills"),
-    "jump_slowdownEnable": ("Jump slowdown", "1", "0 = no slowdown after landing (bunny hop)"),
-    "player_sprintUnlimited": ("Unlimited sprint", "0", "1 = sprint forever"),
+    "g_gravity": ("Gravity", "800", "lower = floatier, 200 = moon", None),
+    "jump_height": ("Jump height", "39", "higher = jump onto roofs", None),
+    "g_speed": ("Move speed", "190", "player run speed", None),
+    "g_knockback": ("Knockback", "1000", "push from damage and explosions", None),
+    "bg_fallDamageMinHeight": ("Fall damage from", "128", "fall height where damage starts", None),
+    "bg_fallDamageMaxHeight": ("Fall death at", "300", "fall height that kills", None),
+    "jump_slowdownEnable": ("Jump slowdown", "1", "off = keep speed after landing (bunny hop)", ON_OFF),
+    "player_sprintUnlimited": ("Unlimited sprint", "0", "sprint forever", ON_OFF),
+}
+# Match rule dvars from the Fun panel: dvar -> (label, game default, hint, choices or None).
+# The game reads these when a match starts: they apply on the next Start game or map restart.
+FUN_RULES = {
+    "sv_funweapons": ("Weapons", "0", "everyone gets a random weapon of this kind on every spawn (weapons.gsc)",
+                      {"0": "classes (normal)", "1": "knife only", "2": "snipers only", "3": "pistols only",
+                       "4": "shotguns only", "5": "rockets (refill)", "6": "riot shields", "7": "roulette (any)",
+                       "8": "akimbo", "9": "one in the chamber"}),
+    "sv_funammo": ("Infinite ammo", "0", "magazines refill by themselves (weapons.gsc)", ON_OFF),
+    "scr_game_hardpoints": ("Killstreaks", "1", "killstreak rewards", ON_OFF),
+    "scr_game_perks": ("Perks", "1", "perks from classes", ON_OFF),
+    "scr_game_allowkillcam": ("Killcam", "1", "replay of your death", ON_OFF),
+    "scr_hardcore": ("Hardcore", "0", "low health, no HUD", ON_OFF),
+    "scr_team_fftype": ("Friendly fire", "0", "what happens when you shoot a teammate",
+                        {"0": "off", "1": "on", "2": "reflect", "3": "shared"}),
+    "scr_player_maxhealth": ("Health", "100", "player health, 30 = one shot kills, 300 = tank", None),
+    "scr_player_healthregentime": ("Health regen (s)", "5", "seconds before health comes back", None),
 }
 NO_FALL_DAMAGE = {"bg_fallDamageMinHeight": "9998", "bg_fallDamageMaxHeight": "9999"}
-# One-click Fun setups: name -> (hint, dvars that differ from the defaults). They only fill
-# the fields; the numbers stay editable before Save.
+# One-click Fun setups, in groups: group -> name -> (hint, dvars that differ from the
+# defaults). They only fill the fields; the numbers stay editable before Save.
 FUN_PRESETS = {
-    "Normal": ("stock MW2", {}),
-    "Moon": ("low gravity, floaty high jumps, soft landings",
-             {"g_gravity": "150", "jump_height": "120", **NO_FALL_DAMAGE}),
-    "Super jump": ("jump onto rooftops, never die from falling",
-                   {"jump_height": "350", **NO_FALL_DAMAGE}),
-    "Speed demon": ("run fast, sprint forever",
-                    {"g_speed": "320", "player_sprintUnlimited": "1", "jump_slowdownEnable": "0"}),
-    "Bunny hop": ("keep speed between jumps",
-                  {"g_speed": "230", "jump_height": "60", "jump_slowdownEnable": "0", "player_sprintUnlimited": "1"}),
-    "Parkour": ("fast, high jumps, no fall damage",
-                {"g_speed": "260", "jump_height": "110", "g_gravity": "650", "jump_slowdownEnable": "0",
-                 "player_sprintUnlimited": "1", **NO_FALL_DAMAGE}),
-    "Rocket ride": ("explosions launch players across the map",
-                    {"g_knockback": "6000", "g_gravity": "500", **NO_FALL_DAMAGE}),
-    "Heavy metal": ("double gravity, slow, short jumps",
-                    {"g_gravity": "1600", "jump_height": "22", "g_speed": "150"}),
-    "Glass legs": ("any small drop hurts, a big one kills",
-                   {"bg_fallDamageMinHeight": "40", "bg_fallDamageMaxHeight": "120"}),
+    "Movement": {
+        "Normal": ("stock MW2", {}),
+        "Moon": ("low gravity, floaty high jumps, soft landings",
+                 {"g_gravity": "150", "jump_height": "120", **NO_FALL_DAMAGE}),
+        "Super jump": ("jump onto rooftops, never die from falling",
+                       {"jump_height": "350", **NO_FALL_DAMAGE}),
+        "Speed demon": ("run fast, sprint forever",
+                        {"g_speed": "320", "player_sprintUnlimited": "1", "jump_slowdownEnable": "0"}),
+        "Bunny hop": ("keep speed between jumps",
+                      {"g_speed": "230", "jump_height": "60", "jump_slowdownEnable": "0", "player_sprintUnlimited": "1"}),
+        "Parkour": ("fast, high jumps, no fall damage",
+                    {"g_speed": "260", "jump_height": "110", "g_gravity": "650", "jump_slowdownEnable": "0",
+                     "player_sprintUnlimited": "1", **NO_FALL_DAMAGE}),
+        "Heavy metal": ("double gravity, slow, short jumps",
+                        {"g_gravity": "1600", "jump_height": "22", "g_speed": "150"}),
+        "Glass legs": ("any small drop hurts, a big one kills",
+                       {"bg_fallDamageMinHeight": "40", "bg_fallDamageMaxHeight": "120"}),
+    },
+    "Weapons": {
+        "Knife fight": ("knives only, fast and jumpy, no killstreaks",
+                        {"sv_funweapons": "1", "g_speed": "240", "jump_height": "60", "scr_game_hardpoints": "0",
+                         "player_sprintUnlimited": "1"}),
+        "Ninja": ("knives only, silent leaps across the map, no killcam",
+                  {"sv_funweapons": "1", "g_gravity": "400", "jump_height": "150", "g_speed": "260",
+                   "scr_game_allowkillcam": "0", "scr_game_hardpoints": "0", **NO_FALL_DAMAGE}),
+        "Sniper duel": ("snipers only, one shot, no killstreaks",
+                        {"sv_funweapons": "2", "scr_player_maxhealth": "30", "scr_game_hardpoints": "0"}),
+        "Trickshot": ("snipers, floaty jumps, keep speed after landing: spin and quickscope",
+                      {"sv_funweapons": "2", "g_gravity": "500", "jump_height": "100", "g_speed": "230",
+                       "jump_slowdownEnable": "0", "scr_game_hardpoints": "0", **NO_FALL_DAMAGE}),
+        "Pistol whip": ("pistols only, extra health", {"sv_funweapons": "3", "scr_player_maxhealth": "150"}),
+        "Shotgun rush": ("shotguns only, fast, sprint forever",
+                         {"sv_funweapons": "4", "g_speed": "250", "player_sprintUnlimited": "1", "jump_slowdownEnable": "0"}),
+        "Akimbo madness": ("two guns at once, endless ammo, run fast",
+                           {"sv_funweapons": "8", "sv_funammo": "1", "g_speed": "220", "player_sprintUnlimited": "1"}),
+        "One in the chamber": ("Deagle with one bullet, every kill gives one more, one shot kills",
+                               {"sv_funweapons": "9", "scr_player_maxhealth": "30", "scr_game_hardpoints": "0",
+                                "scr_game_perks": "0"}),
+        "Shield bash": ("riot shields only, melee to kill", {"sv_funweapons": "6", "scr_game_hardpoints": "0"}),
+    },
+    "Party": {
+        "Rocket ride": ("explosions launch players across the map",
+                        {"g_knockback": "6000", "g_gravity": "500", **NO_FALL_DAMAGE}),
+        "Rocket arena": ("rockets that refill, explosions launch you, no fall damage",
+                         {"sv_funweapons": "5", "g_knockback": "4000", "g_gravity": "500", "jump_height": "80",
+                          "scr_game_hardpoints": "0", **NO_FALL_DAMAGE}),
+        "Space snipers": ("snipers on the moon",
+                          {"sv_funweapons": "2", "g_gravity": "100", "jump_height": "200", **NO_FALL_DAMAGE}),
+        "Roulette": ("random weapon every spawn", {"sv_funweapons": "7"}),
+        "Spray and pray": ("random weapon every spawn, ammo never runs out",
+                           {"sv_funweapons": "7", "sv_funammo": "1"}),
+        "Old school": ("CoD classic: no killstreaks, no perks, high jumps, no fall damage",
+                       {"scr_game_hardpoints": "0", "scr_game_perks": "0", "jump_height": "64", **NO_FALL_DAMAGE}),
+        "One shot": ("every hit kills, no regen",
+                     {"scr_player_maxhealth": "30", "scr_player_healthregentime": "0"}),
+        "Tanks": ("triple health, fast regen, slow walk",
+                  {"scr_player_maxhealth": "300", "scr_player_healthregentime": "2", "g_speed": "160"}),
+        "Juggernauts": ("huge health, endless ammo, slow and heavy, no knockback",
+                        {"scr_player_maxhealth": "500", "sv_funammo": "1", "g_speed": "140", "g_gravity": "1200",
+                         "g_knockback": "0"}),
+        "Glass cannons": ("hardcore, friendly fire reflects, killcam off",
+                          {"scr_hardcore": "1", "scr_team_fftype": "2", "scr_game_allowkillcam": "0"}),
+        "Chaos": ("friendly fire on, rockets launch you, moon gravity",
+                  {"scr_team_fftype": "1", "g_knockback": "5000", "g_gravity": "200", "jump_height": "100",
+                   **NO_FALL_DAMAGE}),
+    },
 }
 # The server always runs as a lobby (party) server: players wait in the lobby and the UI
 # picks the map and mode and starts each match. The lobby never starts one by itself.
 LOBBY_ARGS = ["+set", "party_enable", "1"]
 # ends the match on "sv_tolobby 1", sending everyone back to the lobby
 LOBBY_GSC = Path(__file__).resolve().parent / "lobby.gsc"
+# weapon modes (knife only, snipers, ...) from the Fun panel's sv_funweapons
+WEAPONS_GSC = Path(__file__).resolve().parent / "weapons.gsc"
 # Our own playlist file: the stock playlists set "rule party_minplayers 4" (re-applied on
 # every return to the lobby), so with enough players the lobby starts the next playlist
 # map by itself, and that list includes DLC maps that aren't installed.
@@ -206,7 +274,7 @@ def config_view() -> dict:
         "rcon_password": v.get("rcon_password", ""),
         "maxclients": int(v.get("sv_maxclients", "18")),
         "lan_only": v.get("sv_lanOnly", "1") == "1",
-        "fun": {k: v.get(k, d[1]) for k, d in FUN_DVARS.items()},
+        "fun": {k: v.get(k, d[1]) for k, d in {**FUN_DVARS, **FUN_RULES}.items()},
         "gametype": gt,
         **{k: v.get(f"scr_{gt}_{k}", "") for k in MODE_LIMITS},
         "map": v.get("ui_mapname", ""),
@@ -240,15 +308,21 @@ def clean(s: str) -> str:
     return s.replace('"', "").replace("\n", "").strip()
 
 
+def fun_value(key: str, raw: str) -> str:
+    """A Fun field's value: a number (or one of its choices); empty = the game's default."""
+    _, default, _, choices = {**FUN_DVARS, **FUN_RULES}[key]
+    val = clean(raw) or default
+    if not re.fullmatch(r"-?\d+(\.\d+)?", val) or (choices and val not in choices):
+        raise HTTPException(400, f"{key}: invalid value")
+    return val
+
+
 def write_cfg(c: Config) -> None:
     if c.bots_skill not in BOT_SKILLS or c.bots_fill_mode not in ("0", "1"):
         raise HTTPException(400, "invalid bot settings")
     v = read_cfg()
-    for key, (_, default, _) in FUN_DVARS.items():  # empty = back to the game's default
-        val = clean(c.fun.get(key, "")) or default
-        if not re.fullmatch(r"-?\d+(\.\d+)?", val):
-            raise HTTPException(400, f"{key} must be a number")
-        v[key] = val
+    for key in {**FUN_DVARS, **FUN_RULES}:
+        v[key] = fun_value(key, c.fun.get(key, ""))
     v.update({
         "sv_hostname": clean(c.hostname),
         "sv_lanOnly": "1" if c.lan_only else "0",
@@ -310,10 +384,11 @@ def server_pids() -> list[int]:
 
 def install_lobby_gsc() -> None:
     """The server loads custom scripts on every map load, so this also reaches a running server."""
-    dest = GAME_DIR / "userraw" / "scripts" / "mp" / "lobby.gsc"
-    if GAME_DIR.exists() and (not dest.exists() or dest.read_bytes() != LOBBY_GSC.read_bytes()):
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(LOBBY_GSC.read_bytes())
+    for src in (LOBBY_GSC, WEAPONS_GSC):
+        dest = GAME_DIR / "userraw" / "scripts" / "mp" / src.name
+        if GAME_DIR.exists() and (not dest.exists() or dest.read_bytes() != src.read_bytes()):
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(src.read_bytes())
 
 
 def install_lobby_playlist() -> bool:
@@ -521,14 +596,17 @@ def hangout_msg() -> str:
     return clean(f"Next: {names.get(v.get('ui_mapname', ''), v.get('ui_mapname', '?'))} - {mode}")
 
 
-def start_hangout() -> None:
-    """Lobby -> waiting room match: no time or score limit, no bots, banner from lobby.gsc."""
+def start_hangout(from_match: bool = False) -> None:
+    """Lobby -> waiting room match: no time or score limit, no bots, banner from lobby.gsc.
+    from_match: switch the running match straight to the waiting room map, no lobby in between."""
     global hangout_active
-    rcon(f"playlist {lobby_playlist(HANGOUT_MODE)}")
-    time.sleep(1)  # switching playlist re-picks the lobby map: let it settle
+    if not from_match:
+        rcon(f"playlist {lobby_playlist(HANGOUT_MODE)}")
+        time.sleep(1)  # switching playlist re-picks the lobby map: let it settle
     for cmd in (f"ui_mapname {HANGOUT_MAP}", f"ui_gametype {HANGOUT_MODE}", f"g_gametype {HANGOUT_MODE}",
                 f"set scr_{HANGOUT_MODE}_timelimit 0", f"set scr_{HANGOUT_MODE}_scorelimit 0",
-                "set bots_manage_fill 0", "set sv_hangout 1", f'set sv_hangout_msg "{hangout_msg()}"', "xpartygo"):
+                "set bots_manage_fill 0", "set sv_hangout 1", f'set sv_hangout_msg "{hangout_msg()}"',
+                f"map {HANGOUT_MAP}" if from_match else "xpartygo"):
         rcon(cmd)
     hangout_active = True
 
@@ -612,8 +690,54 @@ def state():
         "gametypes": gametypes(),
         "bot_skills": BOT_SKILLS,
         "fun_dvars": FUN_DVARS,
-        "fun_presets": FUN_PRESETS,
+        "fun_rules": FUN_RULES,
+        "fun_presets": {**FUN_PRESETS, "Custom": custom_presets()},
     }
+
+
+# ---------- custom Fun presets ----------
+# Saved from the Fun panel, in the data dir (a volume in Docker, so they survive rebuilds):
+# name -> (hint, dvars that differ from the defaults), the same shape as FUN_PRESETS.
+
+PRESETS_FILE = DATA_DIR / "presets.json"
+
+
+def custom_presets() -> dict[str, tuple[str, dict[str, str]]]:
+    try:
+        return json.loads(PRESETS_FILE.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+class CustomPreset(BaseModel):
+    name: str
+    fun: dict[str, str]
+
+
+@app.post("/api/presets")
+def save_preset(p: CustomPreset):
+    """Saves the Fun fields as a preset; an existing custom preset with that name is overwritten."""
+    name = clean(p.name)
+    if not 0 < len(name) <= 24:
+        raise HTTPException(400, "preset name: 1 to 24 characters")
+    if any(name in group for group in FUN_PRESETS.values()):
+        raise HTTPException(400, f"{name} is a built-in preset, pick another name")
+    changes = {}
+    for key, (_, default, *_) in {**FUN_DVARS, **FUN_RULES}.items():
+        if (val := fun_value(key, p.fun.get(key, ""))) != default:
+            changes[key] = val
+    presets = custom_presets()
+    presets[name] = ("your preset", changes)
+    PRESETS_FILE.write_text(json.dumps(presets, indent=1))
+    return {"presets": presets}
+
+
+@app.delete("/api/presets/{name}")
+def delete_preset(name: str):
+    presets = custom_presets()
+    presets.pop(name, None)
+    PRESETS_FILE.write_text(json.dumps(presets, indent=1))
+    return {"presets": presets}
 
 
 @app.post("/api/config")
@@ -736,13 +860,31 @@ def start_match(g: Game, v: dict[str, str], live: dict) -> dict:
 
 @app.post("/api/lobby")
 def to_lobby():
-    """Match -> lobby: lobby.gsc ends the match, players stay connected and wait in the lobby."""
+    """Match -> lobby: lobby.gsc ends the match, players stay connected and wait in the lobby.
+    With the waiting room on, the match switches straight to it instead (no scoreboard or lobby)."""
+    global pick_shown, hangout_active
     live = live_status()
     if not live or not live["in_game"]:
         raise HTTPException(409, "no match running")
-    output = rcon("sv_tolobby 1")
+    if read_cfg().get("sv_hangout_enabled", "1") != "1":
+        output = rcon("sv_tolobby 1")
+        changed()
+        return {"output": output}
+    starting_match.set()  # the map load can show as "lobby": don't start the waiting room twice
+    try:
+        start_hangout(from_match=True)
+        time.sleep(5)  # the old match still answers for a moment
+        for _ in range(40):
+            if (now := live_status()) and now["in_game"]:
+                hangout_active = True  # the poll loop clears it while the map loads
+                break
+            time.sleep(1)
+    finally:
+        # if the switch fell back to the lobby, the next poll starts the waiting room from there
+        pick_shown = False
+        starting_match.clear()
     changed()
-    return {"output": output}
+    return {"output": ""}
 
 
 MATCH_COMMANDS = {

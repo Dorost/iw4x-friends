@@ -102,9 +102,11 @@
       </div>
       <div>
         <span class="text-xs font-medium text-slate-600 flex items-center gap-1 mb-1.5"><svg class="w-3.5 h-3.5"><use href="#i-bolt"/></svg>Fun</span>
-        <div id="presets" class="flex flex-wrap gap-1.5 mb-2"></div>
+        <div id="presets" class="space-y-1.5 mb-2"></div>
         <div id="fun" oninput="markPreset()" class="grid grid-cols-4 gap-3"></div>
-        <p class="text-[11px] text-slate-400 mt-1">Physics and movement for everyone. A preset fills in the numbers, change any of them, then Save. Applies right away, also mid-match. Hover for what each does.</p>
+        <p class="text-[11px] text-slate-400 mt-1 mb-2">Physics and movement: applies right away on Save, also mid-match.</p>
+        <div id="funRules" oninput="markPreset()" class="grid grid-cols-4 gap-3"></div>
+        <p class="text-[11px] text-slate-400 mt-1">Match rules: apply from the next Start game or map restart. A preset fills in all fields, change any of them, then Save. Hover for what each does.</p>
       </div>
       <div class="flex gap-2 pt-1">
         <button onclick="save(this)" class="btn bg-sky-600 text-white hover:bg-sky-700"><svg class="w-3.5 h-3.5"><use href="#i-save"/></svg>Save</button>
@@ -214,11 +216,9 @@ function fillForm(c) {
   $('bots_skill').innerHTML = Object.entries(S.bot_skills).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
   for (const k of ['hostname','password','rcon_password','maxclients','bots_fill','bots_fill_mode','bots_skill', ...LIMITS]) $(k).value = c[k];
   $('lan_only').checked = c.lan_only;
-  $('fun').innerHTML = Object.entries(S.fun_dvars).map(([k, [label, def, hint]]) =>
-    `<label class="lbl" title="${esc(hint)} (default ${def})">${esc(label)}<input id="fun_${k}" value="${esc(c.fun[k])}" placeholder="${def}" class="inp"></label>`).join('');
-  $('presets').innerHTML = Object.entries(S.fun_presets).map(([name, [hint]]) =>
-    `<button type="button" data-preset="${esc(name)}" onclick="applyPreset(this.dataset.preset)" title="${esc(hint)}" class="text-[11px] px-2 py-0.5 rounded-full border transition">${esc(name)}</button>`).join('');
-  markPreset();
+  $('fun').innerHTML = funFields(S.fun_dvars, c.fun);
+  $('funRules').innerHTML = funFields(S.fun_rules, c.fun);
+  renderPresets();
   $('voice').checked = c.voice; $('alltalk').value = c.alltalk ? '1' : '0'; $('deadchat').checked = c.deadchat; $('hangout').checked = c.hangout;
   const opts = Object.entries(S.gametypes).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
   $('gametype').innerHTML = opts; $('gametype').value = c.gametype;
@@ -303,23 +303,80 @@ function save(btn) {
     maxclients: +$('maxclients').value, lan_only: $('lan_only').checked,
     voice: $('voice').checked, alltalk: $('alltalk').value === '1', deadchat: $('deadchat').checked, hangout: $('hangout').checked,
     bots_fill: +$('bots_fill').value, bots_fill_mode: $('bots_fill_mode').value, bots_skill: $('bots_skill').value,
-    fun: Object.fromEntries(Object.keys(S.fun_dvars).map(k => [k, $('fun_' + k).value])),
+    fun: funFieldValues(),
   };
   return busy(btn, async () => { await api('/api/config', body); Object.assign(S.config, body); render(); toast('saved'); });
 }
 
+// Fun fields: a dropdown for on/off style settings, a number box for the rest
+const funFields = (dvars, values) => Object.entries(dvars).map(([k, [label, def, hint, choices]]) =>
+  `<label class="lbl" title="${esc(hint)} (default ${choices ? choices[def] : def})">${esc(label)}${choices
+    ? `<select id="fun_${k}" onchange="markPreset()" class="inp">${Object.entries(choices).map(([v, n]) => `<option value="${v}"${v === values[k] ? ' selected' : ''}>${n}</option>`).join('')}</select>`
+    : `<input id="fun_${k}" value="${esc(values[k])}" placeholder="${def}" class="inp">`}</label>`).join('');
+const allFun = () => ({...S.fun_dvars, ...S.fun_rules});
+
 // a preset's full set of values: the defaults plus its own changes
-const presetValues = name => ({...Object.fromEntries(Object.entries(S.fun_dvars).map(([k, [, def]]) => [k, def])), ...S.fun_presets[name][1]});
+const presetValues = name => ({...Object.fromEntries(Object.entries(allFun()).map(([k, [, def]]) => [k, def])), ...Object.assign({}, ...Object.values(S.fun_presets))[name][1]});
 
 function applyPreset(name) {
   for (const [k, v] of Object.entries(presetValues(name))) $('fun_' + k).value = v;
+  if (name in S.fun_presets.Custom) $('presetName').value = name;  // ready to tweak and overwrite
   markPreset();
+}
+
+// one row of chips per group; each chip shows a tooltip above it on hover: what the
+// preset is and what it changes
+function renderPresets() {
+  $('presets').innerHTML = Object.entries(S.fun_presets).map(([group, presets]) =>
+    `<div class="flex flex-wrap items-center gap-1.5"><span class="w-16 text-[10px] uppercase tracking-wide text-slate-400">${esc(group)}</span>${
+    Object.entries(presets).map(([name, [hint, changes]]) => {
+    const lines = Object.entries(changes).map(([k, v]) => {
+      const [label, , , choices] = allFun()[k];
+      return `<li><span class="text-slate-400">${esc(label)}</span> ${esc(choices ? choices[v] : v)}</li>`;
+    }).join('');
+    return `<span class="relative group">
+      <button type="button" data-preset="${esc(name)}" onclick="applyPreset(this.dataset.preset)" class="text-[11px] px-2 py-0.5 rounded-full border transition">${esc(name)}</button>${group === 'Custom'
+        ? `<button type="button" data-name="${esc(name)}" onclick="deletePreset(this.dataset.name)" title="Delete ${esc(name)}" class="absolute -top-1.5 -right-1.5 hidden group-hover:flex w-3.5 h-3.5 items-center justify-center rounded-full bg-slate-500 text-white hover:bg-rose-500"><svg class="w-2.5 h-2.5"><use href="#i-x"/></svg></button>` : ''}
+      <span class="pointer-events-none absolute bottom-full left-0 mb-1.5 z-10 w-52 rounded-lg bg-slate-800 text-white text-[11px] leading-snug px-2.5 py-2 shadow-lg opacity-0 translate-y-1 transition group-hover:opacity-100 group-hover:translate-y-0">
+        <span class="block font-medium">${esc(hint)}</span>
+        ${lines ? `<ul class="mt-1 space-y-0.5 text-slate-200">${lines}</ul>` : '<span class="block mt-1 text-slate-400">game defaults</span>'}
+        <span class="absolute top-full left-4 border-4 border-transparent border-t-slate-800"></span>
+      </span>
+    </span>`;
+  }).join('')}${group === 'Custom' ? `<span class="flex items-center gap-1 ml-1">
+      <input id="presetName" placeholder="name" maxlength="24" class="w-24 bg-slate-50 border border-slate-200 rounded-full px-2 py-0.5 text-[11px] focus:border-sky-400">
+      <button type="button" onclick="savePreset(this)" title="Save the fields below as a preset (same name = overwrite)" class="btn !px-2 !py-0.5 !text-[11px] bg-sky-50 text-sky-700 hover:bg-sky-100"><svg class="w-3 h-3"><use href="#i-save"/></svg>Save as preset</button>
+    </span>` : ''}</div>`).join('');
+  markPreset();
+}
+
+const funFieldValues = () => Object.fromEntries(Object.keys(allFun()).map(k => [k, $('fun_' + k).value]));
+
+function savePreset(btn) {
+  const name = $('presetName').value.trim();
+  if (!name) { toast('give the preset a name', true); return; }
+  if (name in S.fun_presets.Custom && !confirm(`Overwrite preset ${name}?`)) return;
+  return busy(btn, async () => {
+    S.fun_presets.Custom = (await api('/api/presets', {name, fun: funFieldValues()})).presets;
+    renderPresets(); $('presetName').value = name;
+    toast(`preset ${name} saved`);
+  });
+}
+
+async function deletePreset(name) {
+  if (!confirm(`Delete preset ${name}?`)) return;
+  await busy(null, async () => {
+    const r = await fetch('/api/presets/' + encodeURIComponent(name), {method: 'DELETE'});
+    if (!r.ok) throw new Error(r.statusText);
+    S.fun_presets.Custom = (await r.json()).presets;
+    renderPresets(); toast(`preset ${name} deleted`);
+  });
 }
 
 // highlights the preset the fields match, if any
 function markPreset() {
   for (const b of document.querySelectorAll('[data-preset]')) {
-    const on = Object.entries(presetValues(b.dataset.preset)).every(([k, v]) => ($('fun_' + k).value.trim() || S.fun_dvars[k][1]) === v);
+    const on = Object.entries(presetValues(b.dataset.preset)).every(([k, v]) => ($('fun_' + k).value.trim() || allFun()[k][1]) === v);
     b.className = 'text-[11px] px-2 py-0.5 rounded-full border transition ' + (on ? 'bg-sky-50 border-sky-300 text-sky-700' : 'border-slate-200 text-slate-500 hover:bg-slate-50');
   }
 }
@@ -342,9 +399,10 @@ function startGame(btn) {
 
 function toLobby(btn) {
   return busy(btn, async () => {
+    const room = S.config.hangout;
     await api('/api/lobby', {});
-    expect('ending the match', s => s.live && !s.live.in_game);
-    toast('ending the match, everyone goes back to the lobby...');
+    expect(room ? 'loading the waiting room' : 'ending the match', s => s.live && (room ? s.live.hangout : !s.live.in_game));
+    toast(room ? 'ending the match, everyone moves to the waiting room...' : 'ending the match, everyone goes back to the lobby...');
   });
 }
 
