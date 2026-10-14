@@ -30,6 +30,7 @@
   <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-join" viewBox="0 0 24 24"><path d="M10 17l5-5-5-5M15 12H3M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-spin" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
   <symbol id="i-send" viewBox="0 0 24 24"><path d="M4 12 20 4l-6 16-3-7z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
 </svg>
 
@@ -58,14 +59,7 @@
     <ol class="text-xs text-slate-500 list-decimal pl-4 space-y-0.5">
       <li>Start <b class="text-slate-600">IW4x</b> and wait for the main menu</li>
       <li>Press <kbd class="px-1 rounded bg-slate-100 border border-slate-200 font-mono">~</kbd> to open the console</li>
-      <li>Type the game password, press Enter <span id="noPass" class="hidden text-slate-400">(no game password set: skip this)</span></li>
-    </ol>
-    <div class="flex items-center gap-2">
-      <code id="passCmd" class="flex-1 min-w-0 truncate bg-slate-800 text-emerald-300 font-mono text-xs px-3 py-2 rounded-lg">-</code>
-      <button onclick="copy(passCmd(), this)" class="btn bg-slate-100 hover:bg-slate-200"><svg class="w-3.5 h-3.5"><use href="#i-copy"/></svg>Copy</button>
-    </div>
-    <ol start="4" class="text-xs text-slate-500 list-decimal pl-4">
-      <li>Then connect, press Enter:</li>
+      <li>Paste this and press Enter:</li>
     </ol>
     <div class="flex items-center gap-2">
       <code id="joinCmd" class="flex-1 min-w-0 truncate bg-slate-800 text-emerald-300 font-mono text-xs px-3 py-2 rounded-lg">-</code>
@@ -104,6 +98,13 @@
           <label class="lbl">Who hears whom<select id="alltalk" class="inp"><option value="0">own team only</option><option value="1">everyone (all talk)</option></select></label>
           <label class="flex items-center gap-2 text-xs pb-1.5"><input id="deadchat" type="checkbox" class="accent-sky-600">Dead can talk to living</label>
         </div>
+        <label class="flex items-center gap-2 text-xs mt-2" title="IW4x has no voice chat in the lobby. Players wait in a match on Rust instead, without guns or damage, until you press Start game"><input id="hangout" type="checkbox" class="accent-sky-600">Waiting room between matches (voice works there, no guns)</label>
+      </div>
+      <div>
+        <span class="text-xs font-medium text-slate-600 flex items-center gap-1 mb-1.5"><svg class="w-3.5 h-3.5"><use href="#i-bolt"/></svg>Fun</span>
+        <div id="presets" class="flex flex-wrap gap-1.5 mb-2"></div>
+        <div id="fun" oninput="markPreset()" class="grid grid-cols-4 gap-3"></div>
+        <p class="text-[11px] text-slate-400 mt-1">Physics and movement for everyone. A preset fills in the numbers, change any of them, then Save. Applies right away, also mid-match. Hover for what each does.</p>
       </div>
       <div class="flex gap-2 pt-1">
         <button onclick="save(this)" class="btn bg-sky-600 text-white hover:bg-sky-700"><svg class="w-3.5 h-3.5"><use href="#i-save"/></svg>Save</button>
@@ -128,9 +129,11 @@
           <label class="lbl" title="Lives per player per round, 0 = unlimited">Lives<input id="numlives" class="inp" placeholder="default"></label>
         </div>
         <p class="text-[11px] text-slate-400">Saved per game mode, used from the next Start game. Empty = the mode's default.</p>
-        <div class="flex gap-2">
+        <div class="flex flex-wrap gap-2">
           <button id="btnGame" onclick="startGame(this)" class="btn bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:pointer-events-none"><svg class="w-3.5 h-3.5"><use href="#i-play"/></svg>Start game</button>
           <button id="btnLobby" onclick="toLobby(this)" class="btn bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-40 disabled:pointer-events-none"><svg class="w-3.5 h-3.5"><use href="#i-lobby"/></svg>Back to lobby</button>
+          <button id="btnFast" onclick="matchAct('fast_restart', this)" title="Restart the match on the same map right away: scores reset, everyone stays" class="btn bg-sky-50 text-sky-700 hover:bg-sky-100 disabled:opacity-40 disabled:pointer-events-none"><svg class="w-3.5 h-3.5"><use href="#i-restart"/></svg>Fast restart</button>
+          <button id="btnMapRestart" onclick="matchAct('map_restart', this)" title="Reload the map and restart the match: scores reset, everyone stays" class="btn bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-40 disabled:pointer-events-none"><svg class="w-3.5 h-3.5"><use href="#i-map"/></svg>Map restart</button>
         </div>
         <p class="text-[11px] text-slate-400">Players stay connected both ways. When a match ends everyone goes back to the lobby and waits for the next Start game.</p>
       </section>
@@ -194,10 +197,8 @@ async function busy(btn, fn) {
 function expect(label, done) { pending = {label, done, until: Date.now() + 90000}; render(); }
 
 // ---------- join ----------
-const passCmd = () => S ? `password ${S.config.password}` : '';
-const joinCmd = () => S ? `connect ${S.address}` : '';
-const inviteText = () => `Join my MW2 server${S && S.live ? ` "${S.live.hostname}"` : ''}: start IW4x, press ~ and type, pressing Enter after each line:\n`
-  + (S && S.config.password ? passCmd() + '\n' : '') + joinCmd();
+const joinCmd = () => S ? (S.config.password ? `password ${S.config.password}; ` : '') + `connect ${S.address}` : '';
+const inviteText = () => `Join my MW2 server${S && S.live ? ` "${S.live.hostname}"` : ''}: start IW4x, press ~ and paste:\n${joinCmd()}`;
 async function copy(text, btn) {
   try { await navigator.clipboard.writeText(text); }
   catch {  // plain http (LAN) has no clipboard API
@@ -213,7 +214,12 @@ function fillForm(c) {
   $('bots_skill').innerHTML = Object.entries(S.bot_skills).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
   for (const k of ['hostname','password','rcon_password','maxclients','bots_fill','bots_fill_mode','bots_skill', ...LIMITS]) $(k).value = c[k];
   $('lan_only').checked = c.lan_only;
-  $('voice').checked = c.voice; $('alltalk').value = c.alltalk ? '1' : '0'; $('deadchat').checked = c.deadchat;
+  $('fun').innerHTML = Object.entries(S.fun_dvars).map(([k, [label, def, hint]]) =>
+    `<label class="lbl" title="${esc(hint)} (default ${def})">${esc(label)}<input id="fun_${k}" value="${esc(c.fun[k])}" placeholder="${def}" class="inp"></label>`).join('');
+  $('presets').innerHTML = Object.entries(S.fun_presets).map(([name, [hint]]) =>
+    `<button type="button" data-preset="${esc(name)}" onclick="applyPreset(this.dataset.preset)" title="${esc(hint)}" class="text-[11px] px-2 py-0.5 rounded-full border transition">${esc(name)}</button>`).join('');
+  markPreset();
+  $('voice').checked = c.voice; $('alltalk').value = c.alltalk ? '1' : '0'; $('deadchat').checked = c.deadchat; $('hangout').checked = c.hangout;
   const opts = Object.entries(S.gametypes).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
   $('gametype').innerHTML = opts; $('gametype').value = c.gametype;
   $('liveMap').innerHTML = S.maps.map(m => `<option value="${m.id}">${esc(m.name)}${m.custom ? ' (custom)' : ''}</option>`).join('');
@@ -238,17 +244,16 @@ function render() {
   $('dot').className = 'w-2.5 h-2.5 rounded-full ' + (pending ? 'bg-sky-400 animate-pulse' : live ? 'bg-emerald-400' : run ? 'bg-amber-400 animate-pulse' : 'bg-slate-300');
   $('statusText').textContent = pending ? pending.label + '...'
     : live ? `running ${live.version} · ${live.in_game ? 'in game' : 'lobby'}` : run ? 'starting...' : 'stopped';
-  $('passCmd').textContent = passCmd();
-  $('noPass').classList.toggle('hidden', !!S.config.password);
   $('joinCmd').textContent = joinCmd();
   $('btnStart').disabled = !!pending || run;
   $('btnRestart').disabled = !!pending || !run;
   $('btnStop').disabled = !!pending || !run;
   $('now').innerHTML = !live ? (run ? 'server is starting...' : 'server not running')
+    : live.hangout ? `<span class="text-slate-700 font-medium">Waiting room</span> on ${esc(mapName(live.map))}, no guns, voice on · next: ${esc(mapName(S.config.map))} · ${esc(S.gametypes[S.config.gametype] || S.config.gametype)}`
     : live.in_game ? `<span class="text-slate-700 font-medium">${esc(mapName(live.map))}</span> · ${esc(S.gametypes[live.gametype] || live.gametype)} · ${esc(live.hostname)}`
     : `<span class="text-slate-700 font-medium">In the lobby</span>, waiting for Start game · ${esc(live.hostname)}`;
-  $('btnGame').disabled = !!pending || !live || live.in_game;
-  $('btnLobby').disabled = !!pending || !live || !live.in_game;
+  $('btnGame').disabled = !!pending || !live || (live.in_game && !live.hangout);
+  $('btnLobby').disabled = $('btnFast').disabled = $('btnMapRestart').disabled = !!pending || !live || !live.in_game || live.hangout;
   const ps = live ? live.players : [];
   const lobby = live && !live.in_game;
   $('pcount').textContent = !live ? '' : lobby ? `(${live.lobby_count} in lobby)` : `(${ps.length})`;
@@ -296,10 +301,27 @@ function save(btn) {
   const body = {
     hostname: $('hostname').value, password: $('password').value, rcon_password: $('rcon_password').value,
     maxclients: +$('maxclients').value, lan_only: $('lan_only').checked,
-    voice: $('voice').checked, alltalk: $('alltalk').value === '1', deadchat: $('deadchat').checked,
+    voice: $('voice').checked, alltalk: $('alltalk').value === '1', deadchat: $('deadchat').checked, hangout: $('hangout').checked,
     bots_fill: +$('bots_fill').value, bots_fill_mode: $('bots_fill_mode').value, bots_skill: $('bots_skill').value,
+    fun: Object.fromEntries(Object.keys(S.fun_dvars).map(k => [k, $('fun_' + k).value])),
   };
   return busy(btn, async () => { await api('/api/config', body); Object.assign(S.config, body); render(); toast('saved'); });
+}
+
+// a preset's full set of values: the defaults plus its own changes
+const presetValues = name => ({...Object.fromEntries(Object.entries(S.fun_dvars).map(([k, [, def]]) => [k, def])), ...S.fun_presets[name][1]});
+
+function applyPreset(name) {
+  for (const [k, v] of Object.entries(presetValues(name))) $('fun_' + k).value = v;
+  markPreset();
+}
+
+// highlights the preset the fields match, if any
+function markPreset() {
+  for (const b of document.querySelectorAll('[data-preset]')) {
+    const on = Object.entries(presetValues(b.dataset.preset)).every(([k, v]) => ($('fun_' + k).value.trim() || S.fun_dvars[k][1]) === v);
+    b.className = 'text-[11px] px-2 py-0.5 rounded-full border transition ' + (on ? 'bg-sky-50 border-sky-300 text-sky-700' : 'border-slate-200 text-slate-500 hover:bg-slate-50');
+  }
 }
 
 function kick(num, btn) {
@@ -313,7 +335,7 @@ function startGame(btn) {
   return busy(btn, async () => {
     await api('/api/game', body);
     Object.assign(S.config, body);
-    expect(`loading ${mapName(body.map)}`, s => s.live && s.live.in_game);
+    expect(`loading ${mapName(body.map)}`, s => s.live && s.live.in_game && !s.live.hangout && s.live.map === body.map);
     toast(`starting ${mapName(body.map)}...`);
   });
 }
@@ -324,6 +346,12 @@ function toLobby(btn) {
     expect('ending the match', s => s.live && !s.live.in_game);
     toast('ending the match, everyone goes back to the lobby...');
   });
+}
+
+function matchAct(action, btn) {
+  const label = action === 'fast_restart' ? 'Fast restart' : 'Map restart';
+  if (!confirm(`${label}: the match starts over and scores reset. Continue?`)) return;
+  return busy(btn, async () => { await api(`/api/match/${action}`, {}); toast(`${label.toLowerCase()}...`); });
 }
 
 function sendRcon(e) {

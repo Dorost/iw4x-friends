@@ -47,6 +47,16 @@ tasks:
     cmds:
       - uv run scripts/tools/vultr.py status
 
+  vps:password:
+    desc: Print the Vultr VPS web UI password and copy it to the clipboard
+    cmds:
+      - uv run scripts/tools/vultr.py password
+
+  vps:sync-iw4x:
+    desc: After an IW4x update (task game:update), copy the new IW4x files to the Vultr VPS
+    cmds:
+      - uv run scripts/tools/vultr.py sync-iw4x
+
   stop:
     desc: Stop the dedicated server
     cmds:

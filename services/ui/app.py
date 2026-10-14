@@ -85,15 +85,55 @@ BOT_SKILLS = {
 }
 # per-mode settings (scr_<mode>_<name>), set from the Game panel; empty = the mode's default
 MODE_LIMITS = ["scorelimit", "timelimit", "roundlimit", "winlimit", "roundswitch", "numlives"]
+# Physics and movement dvars from the Fun panel: dvar -> (label, game default, hint).
+# Applied right away on Save, also mid-match.
+FUN_DVARS = {
+    "g_gravity": ("Gravity", "800", "lower = floatier, 200 = moon"),
+    "jump_height": ("Jump height", "39", "higher = jump onto roofs"),
+    "g_speed": ("Move speed", "190", "player run speed"),
+    "g_knockback": ("Knockback", "1000", "push from damage and explosions"),
+    "bg_fallDamageMinHeight": ("Fall damage from", "128", "fall height where damage starts"),
+    "bg_fallDamageMaxHeight": ("Fall death at", "300", "fall height that kills"),
+    "jump_slowdownEnable": ("Jump slowdown", "1", "0 = no slowdown after landing (bunny hop)"),
+    "player_sprintUnlimited": ("Unlimited sprint", "0", "1 = sprint forever"),
+}
+NO_FALL_DAMAGE = {"bg_fallDamageMinHeight": "9998", "bg_fallDamageMaxHeight": "9999"}
+# One-click Fun setups: name -> (hint, dvars that differ from the defaults). They only fill
+# the fields; the numbers stay editable before Save.
+FUN_PRESETS = {
+    "Normal": ("stock MW2", {}),
+    "Moon": ("low gravity, floaty high jumps, soft landings",
+             {"g_gravity": "150", "jump_height": "120", **NO_FALL_DAMAGE}),
+    "Super jump": ("jump onto rooftops, never die from falling",
+                   {"jump_height": "350", **NO_FALL_DAMAGE}),
+    "Speed demon": ("run fast, sprint forever",
+                    {"g_speed": "320", "player_sprintUnlimited": "1", "jump_slowdownEnable": "0"}),
+    "Bunny hop": ("keep speed between jumps",
+                  {"g_speed": "230", "jump_height": "60", "jump_slowdownEnable": "0", "player_sprintUnlimited": "1"}),
+    "Parkour": ("fast, high jumps, no fall damage",
+                {"g_speed": "260", "jump_height": "110", "g_gravity": "650", "jump_slowdownEnable": "0",
+                 "player_sprintUnlimited": "1", **NO_FALL_DAMAGE}),
+    "Rocket ride": ("explosions launch players across the map",
+                    {"g_knockback": "6000", "g_gravity": "500", **NO_FALL_DAMAGE}),
+    "Heavy metal": ("double gravity, slow, short jumps",
+                    {"g_gravity": "1600", "jump_height": "22", "g_speed": "150"}),
+    "Glass legs": ("any small drop hurts, a big one kills",
+                   {"bg_fallDamageMinHeight": "40", "bg_fallDamageMaxHeight": "120"}),
+}
 # The server always runs as a lobby (party) server: players wait in the lobby and the UI
 # picks the map and mode and starts each match. The lobby never starts one by itself.
-LOBBY_ARGS = ["+set", "party_enable", "1", "+playlist", "0"]
+LOBBY_ARGS = ["+set", "party_enable", "1"]
 # ends the match on "sv_tolobby 1", sending everyone back to the lobby
 LOBBY_GSC = Path(__file__).resolve().parent / "lobby.gsc"
 # Our own playlist file: the stock playlists set "rule party_minplayers 4" (re-applied on
 # every return to the lobby), so with enough players the lobby starts the next playlist
 # map by itself, and that list includes DLC maps that aren't installed.
 LOBBY_PLAYLIST = "playlists_lobby.info"
+# Waiting room: instead of idling in the lobby (where IW4x has no voice chat), players wait
+# in a no-limits match on this map and mode until the host presses Start game
+HANGOUT_MAP, HANGOUT_MODE = "mp_rust", "dm"
+# restart the game server when it runs but hasn't answered for this long (it can hang at start)
+WATCHDOG_SECONDS = 90
 STOCK_MAPS = ["mp_afghan", "mp_boneyard", "mp_brecourt", "mp_checkpoint", "mp_derail", "mp_estate",
               "mp_favela", "mp_highrise", "mp_invasion", "mp_nightshift", "mp_quarry", "mp_rundown",
               "mp_rust", "mp_subbase", "mp_terminal", "mp_underpass"]
@@ -166,6 +206,7 @@ def config_view() -> dict:
         "rcon_password": v.get("rcon_password", ""),
         "maxclients": int(v.get("sv_maxclients", "18")),
         "lan_only": v.get("sv_lanOnly", "1") == "1",
+        "fun": {k: v.get(k, d[1]) for k, d in FUN_DVARS.items()},
         "gametype": gt,
         **{k: v.get(f"scr_{gt}_{k}", "") for k in MODE_LIMITS},
         "map": v.get("ui_mapname", ""),
@@ -175,6 +216,7 @@ def config_view() -> dict:
         "voice": v.get("sv_voice", "0") == "1",  # off on dedicated servers unless set
         "alltalk": v.get("sv_alltalk", "0") == "1",
         "deadchat": v.get("g_deadChat", "0") == "1",
+        "hangout": v.get("sv_hangout_enabled", "1") == "1",
     }
 
 
@@ -184,11 +226,13 @@ class Config(BaseModel):
     rcon_password: str
     maxclients: int
     lan_only: bool
+    fun: dict[str, str] = {}
     bots_fill: int
     bots_fill_mode: str
     voice: bool = True
     alltalk: bool = False
     deadchat: bool = False
+    hangout: bool = True
     bots_skill: str
 
 
@@ -200,6 +244,11 @@ def write_cfg(c: Config) -> None:
     if c.bots_skill not in BOT_SKILLS or c.bots_fill_mode not in ("0", "1"):
         raise HTTPException(400, "invalid bot settings")
     v = read_cfg()
+    for key, (_, default, _) in FUN_DVARS.items():  # empty = back to the game's default
+        val = clean(c.fun.get(key, "")) or default
+        if not re.fullmatch(r"-?\d+(\.\d+)?", val):
+            raise HTTPException(400, f"{key} must be a number")
+        v[key] = val
     v.update({
         "sv_hostname": clean(c.hostname),
         "sv_lanOnly": "1" if c.lan_only else "0",
@@ -215,6 +264,7 @@ def write_cfg(c: Config) -> None:
         "sv_voice": "1" if c.voice else "0",          # voice chat on/off
         "sv_alltalk": "1" if c.alltalk else "0",      # 1: everyone hears everyone, 0: own team only
         "g_deadChat": "1" if c.deadchat else "0",     # dead players can talk to the living
+        "sv_hangout_enabled": "1" if c.hangout else "0",  # wait in a match instead of the lobby
     })
     save_cfg(v)
 
@@ -268,39 +318,68 @@ def install_lobby_gsc() -> None:
 
 def install_lobby_playlist() -> bool:
     """Writes userraw/playlists_lobby.info: the stock gametype definitions plus one playlist
-    whose rules never let the lobby start a match itself (needs 18 players and a 27 hour
-    countdown). The UI starts matches with xpartygo, which skips both."""
+    per mode, whose rules never let the lobby start a match itself (needs 18 players and a
+    27 hour countdown). The UI starts matches with xpartygo, which skips both.
+    Clients take the mode name in the lobby and on the loading screen from the playlist
+    entry, hence a playlist per mode. The server reads this file once, at start."""
     stock = GAME_DIR / "main" / "iw4x" / "x86" / "playlists_default.info"
     if not stock.exists():
         return False
     data = stock.read_bytes()
     gametypes_only = data[:m.start()] if (m := re.search(rb"^playlist ", data, re.MULTILINE)) else data
+    # playlist gametype ids differ from the scripts they run (tdm -> war, ffa -> dm, hq -> koth):
+    # the first definition per script is the plain mode, then come hc_ / die_ variants
+    playlist_ids: dict[str, str] = {}
+    for gid, script in re.findall(rb"^gametype (\w+).*?^script (\w+)", gametypes_only, re.MULTILINE | re.DOTALL):
+        playlist_ids.setdefault(script.decode(), gid.decode())
     maxplayers = read_cfg().get("party_maxplayers", "18")
-    playlist = "\n".join([
-        "playlist 1",
-        'name english "Lobby"',
-        "rule party_minplayers 18",
-        f"rule party_maxplayers {maxplayers}",
-        "rule party_matchedplayercount 1",
-        "rule party_gameStartTimerLength 99999",
-        "",
-        *(f"{map_id},tdm,1" for map_id in STOCK_MAPS),
-        "",
-    ])
+    playlists = []
+    for i, mode in enumerate((g for g in gametypes() if g in playlist_ids), 1):
+        playlists += [
+            f"playlist {i}",
+            f'name english "Lobby {mode}"',
+            "rule party_minplayers 18",
+            f"rule party_maxplayers {maxplayers}",
+            "rule party_matchedplayercount 1",
+            "rule party_gameStartTimerLength 99999",
+            "",
+            *(f"{map_id},{playlist_ids[mode]},1" for map_id in STOCK_MAPS),
+            "",
+        ]
     dest = GAME_DIR / "userraw" / LOBBY_PLAYLIST
     dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(gametypes_only + playlist.encode())
+    dest.write_bytes(gametypes_only + "\n".join(playlists).encode())
     return True
 
 
+def lobby_playlist(mode: str) -> str:
+    """Index of the lobby playlist for this mode (0-based, for the playlist command).
+    A mode with no playlist definition (a custom gametype) uses Team Deathmatch's.
+    Read back from the file, which is what the running server loaded."""
+    try:
+        text = (GAME_DIR / "userraw" / LOBBY_PLAYLIST).read_text(errors="replace")
+    except OSError:
+        return "0"
+    lobby_modes = re.findall(r'^name english "Lobby (\w+)"', text, re.MULTILINE)
+    for m in (mode, "war"):
+        if m in lobby_modes:
+            return str(lobby_modes.index(m))
+    return "0"
+
+
 def start_server() -> None:
+    global last_alive
     if server_pids():
         return
+    last_alive = time.monotonic()
     install_lobby_gsc()
     args = ["-dedicated", "+set", "net_port", str(PORT), "+exec", "server.cfg"]
-    if install_lobby_playlist():
-        args += ["+set", "playlistFilename", LOBBY_PLAYLIST]
     args += LOBBY_ARGS
+    if install_lobby_playlist():
+        args += ["+set", "playlistFilename", LOBBY_PLAYLIST,
+                 "+playlist", lobby_playlist(read_cfg().get("g_gametype", "war"))]
+    else:
+        args += ["+playlist", "0"]
     if IS_WINDOWS:
         cmd = [str(GAME_DIR / "iw4x.exe"), *args]
         detach = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS}
@@ -413,8 +492,16 @@ def lan_ip() -> str:
 def show_pick() -> None:
     """Lobby: shows the picked map and mode (saved in server.cfg) to everyone in the lobby.
     Rcon runs one command per request, so these go one by one."""
+    global pick_shown
     v = read_cfg()
     if v.get("ui_mapname") and v.get("ui_gametype"):
+        # switching playlist (= mode) makes the lobby pick a random map from it: switch only
+        # when the mode changed, let that settle, and show the pick again on the next poll
+        index = lobby_playlist(v["ui_gametype"])
+        if f'"playlist" is: "{index}^7"' not in rcon("playlist"):
+            rcon(f"playlist {index}")
+            time.sleep(1)
+            pick_shown = False
         rcon(f"ui_mapname {v['ui_mapname']}")
         rcon(f"ui_gametype {v['ui_gametype']}")
         rcon("xupdatepartystate")
@@ -422,6 +509,28 @@ def show_pick() -> None:
 
 # a match ending makes the lobby show a random playlist map: show the pick again once per lobby visit
 pick_shown = False
+hangout_active = False  # the running match is the waiting room
+starting_match = threading.Event()  # Start game is passing through the lobby: no waiting room
+last_alive = time.monotonic()  # last time the game server answered (watchdog)
+
+
+def hangout_msg() -> str:
+    v = read_cfg()
+    names = {m["id"]: m["name"] for m in installed_maps()}
+    mode = gametypes().get(v.get("ui_gametype", ""), v.get("ui_gametype", "?"))
+    return clean(f"Next: {names.get(v.get('ui_mapname', ''), v.get('ui_mapname', '?'))} - {mode}")
+
+
+def start_hangout() -> None:
+    """Lobby -> waiting room match: no time or score limit, no bots, banner from lobby.gsc."""
+    global hangout_active
+    rcon(f"playlist {lobby_playlist(HANGOUT_MODE)}")
+    time.sleep(1)  # switching playlist re-picks the lobby map: let it settle
+    for cmd in (f"ui_mapname {HANGOUT_MAP}", f"ui_gametype {HANGOUT_MODE}", f"g_gametype {HANGOUT_MODE}",
+                f"set scr_{HANGOUT_MODE}_timelimit 0", f"set scr_{HANGOUT_MODE}_scorelimit 0",
+                "set bots_manage_fill 0", "set sv_hangout 1", f'set sv_hangout_msg "{hangout_msg()}"', "xpartygo"):
+        rcon(cmd)
+    hangout_active = True
 
 
 # ---------- live updates ----------
@@ -445,6 +554,10 @@ def poll_loop() -> None:
             data = {"state": state(), "log": log()["lines"]}
         except Exception as e:  # keep pushing: one failed query must not stop live updates
             data = {"error": str(e)}
+        if server_pids() and time.monotonic() - last_alive > WATCHDOG_SECONDS:
+            print(f"game server not answering for {WATCHDOG_SECONDS} s, restarting it", flush=True)
+            stop_server()
+            start_server()
         with snapshot_lock:
             if data != snapshot["data"]:
                 snapshot["data"] = data
@@ -476,22 +589,30 @@ async def events(request: Request):
 
 @app.get("/api/state")
 def state():
-    global pick_shown
+    global pick_shown, hangout_active, last_alive
     live = live_status()
+    if live:
+        last_alive = time.monotonic()
     if live and not live["in_game"]:
-        if not pick_shown:
-            show_pick()
-            pick_shown = True
+        hangout_active = False
+        if not pick_shown and not starting_match.is_set():
+            pick_shown = True  # before show_pick, which can ask for one more showing
+            if read_cfg().get("sv_hangout_enabled", "1") == "1":
+                start_hangout()
+            else:
+                show_pick()
     else:
         pick_shown = False
     return {
         "running": bool(server_pids()),
-        "live": live,
+        "live": live and {**live, "hangout": live["in_game"] and hangout_active},
         "address": f"{lan_ip()}:{PORT}",
         "config": config_view(),
         "maps": installed_maps(),
         "gametypes": gametypes(),
         "bot_skills": BOT_SKILLS,
+        "fun_dvars": FUN_DVARS,
+        "fun_presets": FUN_PRESETS,
     }
 
 
@@ -550,6 +671,8 @@ def select(p: Pick):
     live = live_status()
     if live and not live["in_game"]:
         show_pick()
+    elif live and hangout_active:
+        rcon(f'set sv_hangout_msg "{hangout_msg()}"')
     changed()
     return {"ok": True}
 
@@ -566,12 +689,35 @@ class Game(Pick):
 @app.post("/api/game")
 def start_game(g: Game):
     """Lobby -> match on the chosen map and mode. Everyone in the lobby goes along, still connected."""
+    global pick_shown
     v = save_pick(g)
     live = live_status()
     if not live:
         raise HTTPException(409, "server not running")
-    if live["in_game"]:
+    if live["in_game"] and not hangout_active:
         raise HTTPException(409, "a match is running: send everyone to the lobby first")
+    starting_match.set()  # keeps the waiting room from starting again in the lobby
+    try:
+        return start_match(g, v, live)
+    finally:
+        # the match takes a while to load and the server reports "lobby" meanwhile: no
+        # waiting room until it's seen in a match again (that resets pick_shown)
+        pick_shown = True
+        starting_match.clear()
+
+
+def start_match(g: Game, v: dict[str, str], live: dict) -> dict:
+    global hangout_active
+    if live["in_game"]:  # waiting room: end it, everyone goes to the lobby, then start
+        rcon("sv_tolobby 1")
+        for _ in range(60):
+            time.sleep(1)
+            if (now := live_status()) and not now["in_game"]:
+                break
+        else:
+            raise HTTPException(504, "the waiting room did not end, try again")
+        hangout_active = False
+    rcon("set sv_hangout 0")
     for limit in MODE_LIMITS:
         key, val = f"scr_{g.gametype}_{limit}", getattr(g, limit)
         if clean(val):
@@ -580,6 +726,8 @@ def start_game(g: Game):
             v.pop(key, None)
             rcon(f"reset {key}")  # back to the mode's default
     save_cfg(v)
+    rcon(f"playlist {lobby_playlist(g.gametype)}")
+    time.sleep(1)  # switching playlist re-picks the lobby map: let it settle, then set ours
     rcon("exec server.cfg")
     output = rcon("xpartygo")
     changed()
@@ -593,6 +741,25 @@ def to_lobby():
     if not live or not live["in_game"]:
         raise HTTPException(409, "no match running")
     output = rcon("sv_tolobby 1")
+    changed()
+    return {"output": output}
+
+
+MATCH_COMMANDS = {
+    "fast_restart": "fast_restart",  # restart the match on the same map, no reload
+    "map_restart": "map_restart",  # reload the map, then restart the match
+}
+
+
+@app.post("/api/match/{action}")
+def match_action(action: str):
+    """Restart the running match; players stay connected."""
+    if action not in MATCH_COMMANDS:
+        raise HTTPException(404)
+    live = live_status()
+    if not live or not live["in_game"]:
+        raise HTTPException(409, "no match running")
+    output = rcon(MATCH_COMMANDS[action])
     changed()
     return {"output": output}
 

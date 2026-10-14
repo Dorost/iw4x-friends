@@ -6,15 +6,19 @@
   uv run scripts/tools/vultr.py up      create the VPS, copy this repo, run setup, start
   uv run scripts/tools/vultr.py down    destroy the VPS (game files and all)
   uv run scripts/tools/vultr.py status  show the VPS address and web UI link
+  uv run scripts/tools/vultr.py sync-iw4x  copy your updated IW4x files to the VPS
+  uv run scripts/tools/vultr.py password   print the web UI password and copy it
 
 Needs VULTR_API_KEY (Vultr: Account -> API) and an SSH key in ~/.ssh. The web UI
 is served on https://<ip>.sslip.io, so no domain is needed. setup.sh asks for the
 setup password (to download the game) unless MW_GAME_URL / MW_MAPS_URL are set.
 """
 
+import hashlib
 import json
 import os
 import shlex
+import sqlite3
 import subprocess
 import sys
 import time
@@ -29,6 +33,13 @@ REGION = "ewr"  # New York (New Jersey)
 PLAN = "vhf-2c-4gb"  # high frequency CPU, 128 GB disk
 OS_NAME = "Ubuntu 24.04 LTS x64"
 REMOTE_DIR = "iw4x"
+GAME_DIR = Path(
+    os.environ.get("IW4X_GAME_DIR")
+    or Path.home()
+    / "Library/Application Support/CrossOver/Bottles"
+    / os.environ.get("IW4X_GAME_BOTTLE", "mw")
+    / "drive_c/Program Files (x86)/Call of Duty Modern Warfare 2"
+)
 SSH_OPTS = [
     "-o", "StrictHostKeyChecking=no",
     "-o", "UserKnownHostsFile=/dev/null",  # a new VPS can get an IP seen before
@@ -79,6 +90,12 @@ def ssh(
         check=check,
         **kw,
     )
+
+
+def ui_password(ip: str) -> str:
+    return ssh(
+        ip, f"sed -n 's/^UI_PASSWORD=//p' {REMOTE_DIR}/.env", capture_output=True, text=True
+    ).stdout.strip()  # fmt: skip
 
 
 def up() -> None:
@@ -143,10 +160,7 @@ def up() -> None:
         tty=True,
         check=True,
     )
-    password = ssh(
-        ip, f"sed -n 's/^UI_PASSWORD=//p' {REMOTE_DIR}/.env", capture_output=True, text=True
-    ).stdout.strip()  # fmt: skip
-    print(f"\nWeb UI:   https://{domain}  (password: {password})")
+    print(f"\nWeb UI:   https://{domain}  (password: {ui_password(ip)})")
     print(f"Players:  connect {ip}:28960")
     print(f"SSH:      ssh root@{ip}")
 
@@ -171,12 +185,84 @@ def status() -> None:
     print(
         f"{inst['status']} / {inst['power_status']}  {inst['plan']} in {inst['region']}"
     )
-    print(f"Web UI:   https://{ip}.sslip.io")
+    print(f"Web UI:   https://{ip}.sslip.io  (password: {ui_password(ip)})")
     print(f"Players:  connect {ip}:28960")
 
 
+def password() -> None:
+    inst = find_instance() or sys.exit("no VPS running")
+    pw = ui_password(inst["main_ip"])
+    subprocess.run(["pbcopy"], input=pw, text=True, check=False)
+    print(f"{pw}  (copied, any username)")
+
+
+def sha256(path: Path) -> str:
+    with path.open("rb") as f:
+        return hashlib.file_digest(f, "sha256").hexdigest()
+
+
+def sync_iw4x() -> None:
+    """Copy the IW4x files that differ from your (updated) game to the VPS."""
+    inst = find_instance() or sys.exit("no VPS running")
+    ip = inst["main_ip"]
+    db = GAME_DIR / "cache/iw4x.db"
+    if not db.exists():
+        sys.exit(f"no IW4x launcher database at {db}, set IW4X_GAME_DIR in .env")
+    # every file the IW4x launcher installs and updates
+    with sqlite3.connect(f"file:{db}?mode=ro", uri=True) as con:
+        rows = con.execute("SELECT path FROM cached_files").fetchall()
+        versions = dict(con.execute("SELECT component, tag FROM component_versions"))
+    prefix = "C:\\Program Files (x86)\\Call of Duty Modern Warfare 2\\"
+    files = sorted(
+        rel
+        for (path,) in rows
+        if path.startswith(prefix)
+        # the launcher's 64-bit zlib1.dll stops the 32-bit server from starting
+        # under Wine, setup.sh moves it aside on the VPS
+        and (rel := path[len(prefix) :].replace("\\", "/")) != "zlib1.dll"
+        and (GAME_DIR / rel).is_file()
+    )
+    print(f"IW4x {versions.get(0, '?')}: comparing {len(files)} files with the VPS...")
+    local = {rel: sha256(GAME_DIR / rel) for rel in files}
+    out = ssh(
+        ip,
+        f"cd {REMOTE_DIR}/game && xargs -0 sha256sum 2>/dev/null",
+        input="\0".join(files).encode(),
+        capture_output=True,
+    ).stdout.decode()
+    remote = {line[66:]: line[:64] for line in out.splitlines() if len(line) > 66}
+    changed = [rel for rel in files if remote.get(rel) != local[rel]]
+    if not changed:
+        print("VPS already has the same IW4x files")
+        return
+    size = sum((GAME_DIR / rel).stat().st_size for rel in changed) // 1048576
+    print(f"Uploading {len(changed)} changed files ({size} MB):")
+    for rel in changed:
+        print(f"  {rel}")
+    tar = subprocess.Popen(
+        ["tar", "--no-xattrs", "--no-mac-metadata", "-czf", "-", "--", *changed],
+        cwd=GAME_DIR, stdout=subprocess.PIPE,
+    )  # fmt: skip
+    ssh(ip, f"tar -xzf - -C {REMOTE_DIR}/game", stdin=tar.stdout, check=True)
+    tar.wait()
+    if (
+        input("Restart the server now to load them (disconnects players)? [y/N] ")
+        == "y"
+    ):
+        ssh(ip, f"cd {REMOTE_DIR} && docker compose restart server", check=True)
+        print("restarted")
+    else:
+        print("Restart it later from the web UI to load the new files")
+
+
 if __name__ == "__main__":
-    cmds = {"up": up, "down": down, "status": status}
+    cmds = {
+        "up": up,
+        "down": down,
+        "status": status,
+        "sync-iw4x": sync_iw4x,
+        "password": password,
+    }
     if len(sys.argv) != 2 or sys.argv[1] not in cmds:
         sys.exit(__doc__)
     cmds[sys.argv[1]]()
