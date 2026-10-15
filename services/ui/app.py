@@ -406,6 +406,8 @@ def fun_value(key: str, raw: str) -> str:
     val = clean(raw) or default
     if not re.fullmatch(r"-?\d+(\.\d+)?", val) or (choices and val not in choices):
         raise HTTPException(400, f"{key}: invalid value")
+    if key in CHEAT_DVARS and float(val) < 1:  # the game rejects these below 1
+        raise HTTPException(400, f"{FUN_DVARS[key][0]}: 1 or more (9999 = no fall damage)")
     return val
 
 

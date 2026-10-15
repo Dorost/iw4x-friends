@@ -8,11 +8,36 @@
 //   up       teleport onto the roof / highest floor above the player
 //   give     give a weapon (argument: weapon name)
 // sv_uistate lists who has esp / radar / ammo on, for the UI: "<num>:<flags e r a> ..."
+// The toggles also go into game["uiFlags"] (by guid), which survives the restart between
+// rounds (S&D) but not a new map, and are turned back on when the player reconnects.
 init()
 {
 	setDvar( "sv_uicmd", "" );
 	setDvar( "sv_uistate", "" );
+	if ( !isDefined( game[ "uiFlags" ] ) )
+		game[ "uiFlags" ] = [];
 	level thread watchCommands();
+	level thread restoreToggles();
+}
+
+restoreToggles()
+{
+	level endon( "game_ended" );
+
+	for ( ;; )
+	{
+		level waittill( "connected", player );
+		flags = game[ "uiFlags" ][ player getGuid() ];
+		if ( !isDefined( flags ) )
+			continue;
+		if ( isSubStr( flags, "e" ) )
+			player toggleEsp();
+		if ( isSubStr( flags, "r" ) )
+			player toggleRadar();
+		if ( isSubStr( flags, "a" ) )
+			player toggleAmmo();
+		updateState();
+	}
 }
 
 watchCommands()
@@ -62,6 +87,7 @@ watchCommands()
 				player giveGun( args[ 2 ] );
 			break;
 		}
+		game[ "uiFlags" ][ player getGuid() ] = player uiFlags();
 		updateState();
 	}
 }
@@ -74,18 +100,24 @@ playerByNum( num )
 	return undefined;
 }
 
+uiFlags()
+{
+	flags = "";
+	if ( isDefined( self.uiEsp ) && self.uiEsp )
+		flags += "e";
+	if ( isDefined( self.uiRadar ) && self.uiRadar )
+		flags += "r";
+	if ( isDefined( self.uiAmmo ) && self.uiAmmo )
+		flags += "a";
+	return flags;
+}
+
 updateState()
 {
 	state = "";
 	foreach ( player in level.players )
 	{
-		flags = "";
-		if ( isDefined( player.uiEsp ) && player.uiEsp )
-			flags += "e";
-		if ( isDefined( player.uiRadar ) && player.uiRadar )
-			flags += "r";
-		if ( isDefined( player.uiAmmo ) && player.uiAmmo )
-			flags += "a";
+		flags = player uiFlags();
 		if ( flags != "" )
 			state += player getEntityNumber() + ":" + flags + " ";
 	}
