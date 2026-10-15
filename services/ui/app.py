@@ -48,6 +48,8 @@ PORT = int(os.environ.get("IW4X_PORT", "28960"))
 UI_PORT = int(os.environ.get("UI_PORT", "8080"))
 UI_HOST = os.environ.get("UI_HOST", "0.0.0.0")
 UI_PASSWORD = os.environ.get("UI_PASSWORD", "")
+# name players connect to (the VPS domain); empty = this machine's LAN address
+JOIN_HOST = os.environ.get("JOIN_HOST", "")
 
 GAMETYPE_NAMES = {
     "war": "Team Deathmatch", "dm": "Free-for-all", "dom": "Domination",
@@ -698,10 +700,14 @@ def state():
                 show_pick()
     else:
         pick_shown = False
+    if live and live["in_game"]:
+        # ask the server: the flag above is lost when a map load briefly reports "lobby"
+        hangout_active = '"sv_hangout" is: "1' in rcon("sv_hangout")
     return {
         "running": bool(server_pids()),
         "live": live and {**live, "hangout": live["in_game"] and hangout_active},
-        "address": f"{lan_ip()}:{PORT}",
+        # no ":port" with a name on the default port: "connect mw2.example.com"
+        "address": JOIN_HOST if JOIN_HOST and PORT == 28960 else f"{JOIN_HOST or lan_ip()}:{PORT}",
         "config": config_view(),
         "maps": installed_maps(),
         "gametypes": gametypes(),

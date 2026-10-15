@@ -123,6 +123,7 @@
       <section class="bg-white rounded-xl shadow-sm p-4 space-y-3">
         <h2 class="title"><svg class="w-4 h-4"><use href="#i-map"/></svg>Game</h2>
         <div id="now" class="text-xs text-slate-500">-</div>
+        <div id="activeFun" class="hidden text-[11px] text-slate-500 flex flex-wrap items-center gap-1"></div>
         <div class="grid grid-cols-2 gap-3">
           <label class="lbl">Game mode<select id="gametype" onchange="modeChanged(); showPick()" class="inp"></select></label>
           <label class="lbl">Map<select id="liveMap" onchange="showPick()" class="inp"></select></label>
@@ -257,6 +258,11 @@ function render() {
     : live.hangout ? `<span class="text-slate-700 font-medium">Waiting room</span> on ${esc(mapName(live.map))}, no guns, voice on · next: ${esc(mapName(S.config.map))} · ${esc(S.gametypes[S.config.gametype] || S.config.gametype)}`
     : live.in_game ? `<span class="text-slate-700 font-medium">${esc(mapName(live.map))}</span> · ${esc(S.gametypes[live.gametype] || live.gametype)} · ${esc(live.hostname)}`
     : `<span class="text-slate-700 font-medium">In the lobby</span>, waiting for Start game · ${esc(live.hostname)}`;
+  // saved Fun settings that differ from stock MW2
+  const fun = Object.entries(allFun()).filter(([k, [, def]]) => S.config.fun[k] !== undefined && S.config.fun[k] !== def);
+  $('activeFun').classList.toggle('hidden', !fun.length);
+  $('activeFun').innerHTML = '<svg class="w-3.5 h-3.5 text-amber-500"><use href="#i-bolt"/></svg><span class="text-slate-600 font-medium">Active:</span>'
+    + fun.map(([k, [label, , , choices]]) => `<span class="px-1.5 rounded bg-amber-50 text-amber-700">${esc(label)} ${esc(choices ? choices[S.config.fun[k]] : S.config.fun[k])}</span>`).join('');
   $('btnGame').disabled = !!pending || !live || (live.in_game && !live.hangout);
   $('btnLobby').disabled = $('btnFast').disabled = $('btnMapRestart').disabled = !!pending || !live || !live.in_game || live.hangout;
   const ps = live ? live.players : [];
@@ -264,10 +270,10 @@ function render() {
   $('pcount').textContent = !live ? '' : lobby ? `(${live.lobby_count} in lobby)` : `(${ps.length})`;
   // an open give-weapon dropdown would close on every live update: leave the table alone meanwhile
   if ($('players').contains(document.activeElement) && document.activeElement.tagName === 'SELECT') return;
-  const tool = (p, action, icon, title, on) => `<button onclick="playerAct(${p.num}, '${action}', this)" title="${title}" class="btn !p-1 ${on ? 'bg-sky-100 text-sky-700' : 'text-slate-400 hover:text-slate-700'}"><svg class="w-3.5 h-3.5"><use href="#${icon}"/></svg></button>`;
+  const tool = (p, action, icon, title, on) => `<button onclick="playerAct(${p.num}, '${action}', this)" title="${title}" class="btn !p-1 ${on ? 'bg-sky-600 text-white hover:bg-sky-700' : 'text-slate-400 hover:text-slate-700'}"><svg class="w-3.5 h-3.5"><use href="#${icon}"/></svg></button>`;
   const give = p => `<select onchange="playerAct(${p.num}, 'give', this, this.value); this.value = ''" title="Give a weapon" class="w-16 bg-slate-50 border border-slate-200 rounded px-1 py-0.5 text-[10px] text-slate-500"><option value="">give...</option>${Object.entries(S.give_weapons).map(([n, id]) => `<option value="${id}">${esc(n)}</option>`).join('')}</select>`;
   $('players').innerHTML = ps.length ? ps.map(p => `<tr class="border-t border-slate-100">
-      <td class="py-1.5">${p.num}</td><td class="font-medium text-slate-700" title="${esc(p.guid)} · ${esc(p.address)}">${esc(p.name)}${p.bot ? ' <span class="text-[10px] text-amber-600 bg-amber-50 px-1 rounded">bot</span>' : ''}</td><td>${esc(p.score)}</td><td>${p.bot ? '-' : esc(p.ping)}</td>
+      <td class="py-1.5">${p.num}</td><td class="font-medium text-slate-700" title="${esc(p.guid)} · ${esc(p.address)}">${esc(p.name)}${p.bot ? ' <span class="text-[10px] text-amber-600 bg-amber-50 px-1 rounded">bot</span>' : ''}${p.esp ? ' <span class="text-[10px] text-sky-700 bg-sky-100 px-1 rounded">wallhack</span>' : ''}${p.radar ? ' <span class="text-[10px] text-emerald-700 bg-emerald-100 px-1 rounded">radar</span>' : ''}</td><td>${esc(p.score)}</td><td>${p.bot ? '-' : esc(p.ping)}</td>
       <td class="text-right whitespace-nowrap">${tool(p, 'esp', 'i-eye', 'Wallhack: see enemies through walls (toggle)', p.esp)}${tool(p, 'radar', 'i-radar', 'Radar: enemies always on the minimap (toggle)', p.radar)}${tool(p, 'launch', 'i-launch', 'Launch into the air', false)}${tool(p, 'up', 'i-roof', 'Teleport onto the roof above', false)}${tool(p, 'kill', 'i-skull', 'Kill', false)}
         ${give(p)}<button onclick="kick(${p.num}, this)" title="Kick" class="btn !p-1 text-rose-400 hover:text-rose-600"><svg class="w-3.5 h-3.5"><use href="#i-x"/></svg></button></td></tr>`).join('')
     : `<tr><td colspan="5" class="py-3 text-center text-slate-400">${lobby ? `${live.lobby_count} in the lobby, names show up here once a game starts` : 'no players'}</td></tr>`;
