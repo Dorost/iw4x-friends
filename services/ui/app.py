@@ -968,15 +968,6 @@ def start_game(g: Game):
 
 def start_match(g: Game, v: dict[str, str], live: dict) -> dict:
     global hangout_active
-    if live["in_game"]:  # waiting room: end it, everyone goes to the lobby, then start
-        rcon("sv_tolobby 1")
-        for _ in range(60):
-            time.sleep(1)
-            if (now := live_status()) and not now["in_game"]:
-                break
-        else:
-            raise HTTPException(504, "the waiting room did not end, try again")
-        hangout_active = False
     rcon("set sv_hangout 0")
     for limit in MODE_LIMITS:
         key, val = f"scr_{g.gametype}_{limit}", getattr(g, limit)
@@ -986,6 +977,17 @@ def start_match(g: Game, v: dict[str, str], live: dict) -> dict:
             v.pop(key, None)
             rcon(f"reset {key}")  # back to the mode's default
     save_cfg(v)
+    if live["in_game"]:  # waiting room: switch the map straight to the match, no scoreboard or lobby
+        rcon("exec server.cfg")
+        output = rcon(f"map {g.map}")
+        time.sleep(5)  # the old match still answers for a moment
+        for _ in range(40):
+            if (now := live_status()) and now["in_game"]:
+                break
+            time.sleep(1)
+        hangout_active = False
+        changed()
+        return {"output": output}
     if not set_playlist(g.gametype):
         raise HTTPException(503, "the server didn't switch to that mode, try again")
     rcon("exec server.cfg")
