@@ -90,6 +90,9 @@ MAP_NAMES = {
     "mp_bo2carrier": "Carrier (BO2)", "mp_bo2plaza": "Plaza (BO2)", "mp_creek": "Creek",
     "mp_summit": "Summit",
 }
+# IW4x DLC maps that need textures from MW2's paid DLC packs (iw_dlc1_00.iwd / iw_dlc2_00.iwd),
+# which IW4x doesn't ship: clients without them get "Couldn't load image" and freeze
+BROKEN_MAPS = {"mp_crash_tropical", "mp_hardhat"}
 BOT_SKILLS = {
     "0": "Mixed", "1": "1 (easiest)", "2": "2", "3": "3", "4": "4", "5": "5", "6": "6",
     "7": "7 (hardest)", "9": "Completely random",
@@ -318,7 +321,7 @@ def installed_maps() -> list[dict]:
     }
     maps = [
         {"id": n, "name": MAP_NAMES.get(n, n), "custom": n in custom and n not in names}
-        for n in names | custom
+        for n in (names | custom) - BROKEN_MAPS
     ]
     return sorted(maps, key=lambda m: m["name"])
 

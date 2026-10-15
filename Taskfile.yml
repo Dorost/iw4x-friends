@@ -89,6 +89,12 @@ tasks:
       - cmd: '{{.PS}} scripts/windows/start-game.ps1 -Update'
         platforms: [windows]
 
+  game:hide:
+    desc: "macOS: hide the game window (like Cmd+H); bring it back from the Dock or Cmd+Tab"
+    platforms: [darwin]
+    cmds:
+      - ./scripts/mac/hide-game.sh
+
   game:kill:
     desc: Stop stuck IW4x launcher/game processes (leaves the dedicated server running)
     cmds:

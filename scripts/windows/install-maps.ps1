@@ -1,5 +1,6 @@
 <#
-Install the custom maps + bots pack (usermaps\ and userraw\) into an MW2 game folder (Windows).
+Install the custom maps + bots pack (usermaps\, userraw\ and main\iw_23.iwd) into an MW2 game folder (Windows).
+iw_23.iwd holds textures some DLC maps (e.g. Shipment) need but IW4x doesn't ship.
 Safe to re-run: skips if already installed, and an interrupted download resumes.
 
 Run it straight from GitHub, in PowerShell:
@@ -25,7 +26,7 @@ param(
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 $ZipName = "mw2-iw4x-maps-bots.zip"
-$Mark = Join-Path $InstallDir ".iw4x-maps-installed"
+$Mark = Join-Path $InstallDir ".iw4x-maps-installed-v2"  # v2: the pack gained main\iw_23.iwd, so older installs update
 # download links, encrypted with the setup password (written by `task links`)
 $LinksEnc = "U2FsdGVkX18BSFqqHMCQ++5w+wJL5cdh3asQpzzejdBx2HWUrjeVW3q15pMGc31tolezaREbLw7dPLBzNarkDGagqk5k81ChbyM7uVo97si+Qc/A/GDQ+Y1Gkje41pLweL2l2zWtdoyWSKS33+xtZ92FbDNb5kYs4B9rHU3DfkJFIP0naKFFciIY7ikspmyrxsHNiTtW8zGg5eFIJbcxXe/vVJiCjUDQyPGbkry3TdA="
 
@@ -100,7 +101,8 @@ $download = Join-Path $HOME "Downloads\$ZipName"
 if (-not $Zip) {
     # reuse a complete copy if one is lying around (a partial download has no zip index yet)
     foreach ($candidate in @($download, (Join-Path $PWD $ZipName))) {
-        $complete = (Test-Path $candidate) -and $(try { [IO.Compression.ZipFile]::OpenRead($candidate).Dispose(); $true } catch { $false })
+        # an older pack without main/iw_23.iwd doesn't count: download the current one
+        $complete = (Test-Path $candidate) -and $(try { $a = [IO.Compression.ZipFile]::OpenRead($candidate); $has = [bool]$a.GetEntry("main/iw_23.iwd"); $a.Dispose(); $has } catch { $false })
         if ($complete) { $Zip = $candidate; if ($candidate -ne $download) { $KeepZip = $true }; break }
     }
 } else { $KeepZip = $true }
@@ -132,7 +134,7 @@ Write-Host "    Extracting..."
 $archive = [IO.Compression.ZipFile]::OpenRead($Zip)
 try {
     foreach ($entry in $archive.Entries) {
-        if ($entry.FullName -notmatch '^(usermaps|userraw)/') { continue }
+        if ($entry.FullName -notmatch '^(usermaps|userraw|main)/') { continue }
         $dest = Join-Path $InstallDir ($entry.FullName -replace "/", "\")
         if ($entry.FullName.EndsWith("/")) { New-Item -ItemType Directory -Force -Path $dest | Out-Null; continue }
         New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null

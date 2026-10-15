@@ -1,5 +1,6 @@
 #!/bin/bash
-# Install the custom maps + bots pack (usermaps/ and userraw/) into an MW2 game folder.
+# Install the custom maps + bots pack (usermaps/, userraw/ and main/iw_23.iwd) into an MW2 game folder.
+# iw_23.iwd holds textures some DLC maps (e.g. Shipment) need but IW4x doesn't ship.
 # macOS (CrossOver bottle) and Linux. Safe to re-run: skips if already installed,
 # and an interrupted download resumes.
 #
@@ -18,7 +19,7 @@
 set -euo pipefail
 
 ZIP_NAME="mw2-iw4x-maps-bots.zip"
-MARK=".iw4x-maps-installed"
+MARK=".iw4x-maps-installed-v2"  # v2: the pack gained main/iw_23.iwd, so older installs update
 # download links, encrypted with the setup password (written by `task links`)
 LINKS_ENC="U2FsdGVkX18BSFqqHMCQ++5w+wJL5cdh3asQpzzejdBx2HWUrjeVW3q15pMGc31tolezaREbLw7dPLBzNarkDGagqk5k81ChbyM7uVo97si+Qc/A/GDQ+Y1Gkje41pLweL2l2zWtdoyWSKS33+xtZ92FbDNb5kYs4B9rHU3DfkJFIP0naKFFciIY7ikspmyrxsHNiTtW8zGg5eFIJbcxXe/vVJiCjUDQyPGbkry3TdA="
 
@@ -82,7 +83,8 @@ fi
 if [[ -z "$ZIP" ]]; then
   # reuse a complete copy if one is lying around (a partial download has no zip index yet)
   for candidate in "$HOME/Downloads/$ZIP_NAME" "$PWD/$ZIP_NAME"; do
-    if [[ -f "$candidate" ]] && unzip -l "$candidate" >/dev/null 2>&1; then
+    # an older pack without main/iw_23.iwd doesn't count: download the current one
+    if [[ -f "$candidate" ]] && unzip -l "$candidate" 'main/iw_23.iwd' >/dev/null 2>&1; then
       ZIP="$candidate"; [[ "$candidate" == "$HOME/Downloads/$ZIP_NAME" ]] || KEEP_ZIP=1
       break
     fi
@@ -130,9 +132,12 @@ tmp="$DIR/.maps-setup-$$"
 trap 'rm -rf "$tmp"' EXIT
 mkdir "$tmp"
 echo "    Extracting..."
-unzip -q -o "$ZIP" 'usermaps/*' 'userraw/*' -d "$tmp"
-for part in usermaps userraw; do
-  [[ -d "$tmp/$part" ]] || die "pack doesn't contain $part/"
+unzip -q -o "$ZIP" 'usermaps/*' 'userraw/*' 'main/*' -d "$tmp" || [[ $? -eq 11 ]]  # 11: an older pack without main/
+for part in usermaps userraw main; do
+  if [[ ! -d "$tmp/$part" ]]; then
+    [[ "$part" == main ]] && continue
+    die "pack doesn't contain $part/"
+  fi
   mkdir -p "$DIR/$part"
   cp -R "$tmp/$part/." "$DIR/$part/"
 done
