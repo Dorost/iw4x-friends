@@ -120,6 +120,8 @@ FUN_RULES = {
                        "4": "shotguns only", "5": "rockets (refill)", "6": "riot shields", "7": "roulette (any)",
                        "8": "akimbo", "9": "one in the chamber", "10": "AC-130 cannons"}),
     "sv_funammo": ("Infinite ammo", "0", "magazine stays full, no reloading, for everyone (weapons.gsc)", ON_OFF),
+    "sv_funlottery": ("AC-130 lottery", "0", "every spawn has this chance to come with an AC-130 cannon (weapons.gsc)",
+                      {"0": "off", "3": "1 in 3", "6": "1 in 6", "10": "1 in 10"}),
     "scr_game_hardpoints": ("Killstreaks", "1", "killstreak rewards", ON_OFF),
     "scr_game_perks": ("Perks", "1", "perks from classes", ON_OFF),
     "scr_game_allowkillcam": ("Killcam", "1", "replay of your death", ON_OFF),

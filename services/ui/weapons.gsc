@@ -6,6 +6,7 @@
 //   6 riot shields, 7 roulette (any weapon), 8 akimbo, 9 one in the chamber (Deagle with
 //   one bullet, one more per kill), 10 AC-130 cannons (ammo refills)
 // sv_funammo 1: the weapon in hand never runs out of ammo, no reloading.
+// sv_funlottery N: every spawn has a 1 in N chance to come with an extra AC-130 cannon.
 init()
 {
 	if ( getDvarInt( "sv_hangout" ) )
@@ -13,7 +14,8 @@ init()
 
 	level.funWeaponMode = getDvarInt( "sv_funweapons" );
 	level.funAmmo = getDvarInt( "sv_funammo" );
-	if ( !level.funWeaponMode && !level.funAmmo )
+	level.funLottery = getDvarInt( "sv_funlottery" );
+	if ( !level.funWeaponMode && !level.funAmmo && !level.funLottery )
 		return;
 
 	snipers = "cheytac_mp barrett_mp wa2000_mp m21_mp";
@@ -62,6 +64,9 @@ onSpawn()
 		wait 0.05;
 		if ( level.funWeapons.size )
 			self giveFunWeapon();
+		// pointless when everyone already has the cannon
+		if ( level.funLottery && level.funWeaponMode != 10 && randomInt( level.funLottery ) == 0 )
+			self giveLotteryCannon();
 		// no endless ammo for modes that live off having none
 		if ( level.funAmmo && level.funWeaponMode != 1 && level.funWeaponMode != 9 )
 			self thread refillAmmo();
@@ -92,6 +97,15 @@ giveFunWeapon()
 		self thread bulletPerKill( weapon );
 		break;
 	}
+}
+
+// AC-130 lottery win: the cannon on top of the loadout, in hand right away
+giveLotteryCannon()
+{
+	self giveWeapon( "ac130_105mm_mp" );
+	self giveMaxAmmo( "ac130_105mm_mp" );
+	self switchToWeapon( "ac130_105mm_mp" );
+	self iPrintLnBold( "You won the AC-130 cannon!" );
 }
 
 // the weapon in hand stays full, magazine included (no reloading), as long as the player lives
