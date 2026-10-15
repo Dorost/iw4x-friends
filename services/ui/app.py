@@ -689,19 +689,32 @@ def hangout_msg() -> str:
     return clean(f"Next: {names.get(v.get('ui_mapname', ''), v.get('ui_mapname', '?'))} - {mode}")
 
 
-def start_hangout(from_match: bool = False) -> None:
-    """Lobby -> waiting room match: no time or score limit, no bots, banner from lobby.gsc.
-    from_match: switch the running match straight to the waiting room map, no lobby in between."""
-    global hangout_active
-    if not from_match:
-        rcon(f"playlist {lobby_playlist(HANGOUT_MODE)}")
+def set_playlist(mode: str) -> bool:
+    """Switches the lobby to the mode's playlist and reads it back: a match takes its mode from
+    the playlist, and a busy server (e.g. right after start) can drop the rcon command."""
+    index = lobby_playlist(mode)
+    for _ in range(3):
+        if f'"playlist" is: "{index}^7"' in rcon("playlist"):
+            return True
+        rcon(f"playlist {index}")
         time.sleep(1)  # switching playlist re-picks the lobby map: let it settle
+    return f'"playlist" is: "{index}^7"' in rcon("playlist")
+
+
+def start_hangout(from_match: bool = False) -> bool:
+    """Lobby -> waiting room match: no time or score limit, no bots, banner from lobby.gsc.
+    from_match: switch the running match straight to the waiting room map, no lobby in between.
+    False when the lobby didn't take the waiting room's playlist (nothing started)."""
+    global hangout_active
+    if not from_match and not set_playlist(HANGOUT_MODE):
+        return False
     for cmd in (f"ui_mapname {HANGOUT_MAP}", f"ui_gametype {HANGOUT_MODE}", f"g_gametype {HANGOUT_MODE}",
                 f"set scr_{HANGOUT_MODE}_timelimit 0", f"set scr_{HANGOUT_MODE}_scorelimit 0",
                 "set bots_manage_fill 0", "set sv_hangout 1", f'set sv_hangout_msg "{hangout_msg()}"',
                 f"map {HANGOUT_MAP}" if from_match else "xpartygo"):
         rcon(cmd)
     hangout_active = True
+    return True
 
 
 # ---------- live updates ----------
@@ -769,7 +782,7 @@ def state():
         if not pick_shown and not starting_match.is_set():
             pick_shown = True  # before show_pick, which can ask for one more showing
             if read_cfg().get("sv_hangout_enabled", "1") == "1":
-                start_hangout()
+                pick_shown = start_hangout()  # not started: try again on the next poll
             else:
                 show_pick()
     else:
@@ -968,8 +981,8 @@ def start_match(g: Game, v: dict[str, str], live: dict) -> dict:
             v.pop(key, None)
             rcon(f"reset {key}")  # back to the mode's default
     save_cfg(v)
-    rcon(f"playlist {lobby_playlist(g.gametype)}")
-    time.sleep(1)  # switching playlist re-picks the lobby map: let it settle, then set ours
+    if not set_playlist(g.gametype):
+        raise HTTPException(503, "the server didn't switch to that mode, try again")
     rcon("exec server.cfg")
     output = rcon("xpartygo")
     changed()
