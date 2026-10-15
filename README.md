@@ -87,14 +87,14 @@ bash scripts/linux/setup.sh
 docker compose up -d --build
 ```
 
-Then open `https://<your-domain>`, log in with the password the setup printed, and press **Start**.
+Then open `https://<your-domain>` and create the passkey that protects the control page: the first visitor sets it, so do this right away. Logged in, **Passkeys** adds more devices. Lost them all? `docker exec iw4x-server-1 rm -f /data/passkeys.json /data/session.key` (on Vultr: `task vps:reset-auth`) starts over.
 
 ### On Vultr, created by script
 
 Creates the VPS (New York, high frequency 2 CPU / 4 GB), copies this repo, runs the setup and starts everything. No domain needed: the web UI gets `https://<ip>.sslip.io`. To use your own name instead, set `VPS_DOMAIN` and `CLOUDFLARE_DNS_TOKEN` in `.env`: `vps:up` then points the name at the VPS (DNS only) and players connect with `connect <your-name>`.
 
 1. Put your Vultr API key in `.env`: `VULTR_API_KEY=...` (Vultr: Account → API, and allow your IP there)
-2. Run `task vps:up`, type the setup password when asked. At the end it prints the web UI link, its password and the `connect` address
+2. Run `task vps:up`, type the setup password when asked. At the end it prints the web UI link and the `connect` address. Open the link right away to create your login passkey
 3. Done playing: `task vps:down` destroys the VPS (billing stops, the game files go with it)
 
 `task vps:status` shows the address again.

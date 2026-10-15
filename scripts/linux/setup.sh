@@ -4,7 +4,7 @@
 #   2. downloads the prepared game package (mw.zip) from Google Drive
 #   3. extracts only the MW2 game folder into game/
 #   4. installs a public server.cfg with a random rcon password
-#   5. fills in .env (domain for the web UI, UI password)
+#   5. fills in .env (domain for the web UI)
 #   6. opens the firewall (ufw) for the game and the web UI
 #
 # Run from the repo:   task setup     (or: bash scripts/linux/setup.sh)
@@ -248,13 +248,7 @@ if [[ -z "${DOMAIN:-}" ]]; then
   setenv DOMAIN "$DOMAIN"
 fi
 ok "web UI domain: $DOMAIN"
-if [[ -z "${UI_PASSWORD:-}" ]]; then
-  UI_PASSWORD=$(random 16)
-  setenv UI_PASSWORD "$UI_PASSWORD"
-  ok "web UI password generated: $UI_PASSWORD (any username, change it in .env)"
-else
-  ok "web UI password set"
-fi
+ok "web UI login: passkey, the first visit creates it"
 
 # ---------------------------------------------------------------- firewall
 step "Firewall"

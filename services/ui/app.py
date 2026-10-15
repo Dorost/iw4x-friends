@@ -1,11 +1,13 @@
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["fastapi", "uvicorn", "psutil"]
+# dependencies = ["fastapi", "uvicorn", "psutil", "webauthn"]
 # ///
 """Small web UI to configure and control the IW4x LAN dedicated server."""
 
 import asyncio
 import base64
+import hashlib
+import hmac
 import json
 import os
 import re
@@ -22,8 +24,13 @@ from pathlib import Path
 import psutil
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, Response, StreamingResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
 from pydantic import BaseModel
+from webauthn import (generate_authentication_options, generate_registration_options, options_to_json,
+                      verify_authentication_response, verify_registration_response)
+from webauthn.helpers import base64url_to_bytes, bytes_to_base64url
+from webauthn.helpers.structs import (AuthenticatorSelectionCriteria, PublicKeyCredentialDescriptor,
+                                      ResidentKeyRequirement)
 
 IS_WINDOWS = sys.platform == "win32"
 IS_LINUX = sys.platform.startswith("linux")
@@ -48,6 +55,8 @@ PORT = int(os.environ.get("IW4X_PORT", "28960"))
 UI_PORT = int(os.environ.get("UI_PORT", "8080"))
 UI_HOST = os.environ.get("UI_HOST", "0.0.0.0")
 UI_PASSWORD = os.environ.get("UI_PASSWORD", "")
+# "passkey": log in with passkeys instead of the password (needs HTTPS on a domain, so the VPS)
+UI_AUTH = os.environ.get("UI_AUTH", "")
 # name players connect to (the VPS domain); empty = this machine's LAN address
 JOIN_HOST = os.environ.get("JOIN_HOST", "")
 
@@ -221,10 +230,74 @@ STOCK_MAPS = ["mp_afghan", "mp_boneyard", "mp_brecourt", "mp_checkpoint", "mp_de
 app = FastAPI()
 
 
+# ---------- passkeys ----------
+# The first visitor registers a passkey; after that only passkeys log in, and logged-in
+# users can add or remove more. Stored in the data dir (a volume in Docker): passkeys.json
+# and session.key, the secret that signs session cookies. Deleting both (task
+# vps:reset-auth) goes back to first-time setup and logs everyone out.
+
+PASSKEYS_FILE = DATA_DIR / "passkeys.json"
+SESSION_KEY_FILE = DATA_DIR / "session.key"
+SESSION_COOKIE = "iw4x_session"
+SESSION_DAYS = 30
+# pages and calls that work without a session: the login page and the passkey ceremonies
+AUTH_OPEN = {"/login", "/api/auth/status", "/api/auth/register/options", "/api/auth/register/verify",
+             "/api/auth/login/options", "/api/auth/login/verify"}
+challenges: dict[str, bytes] = {}  # ceremony token -> challenge, for the verify step
+
+
+def passkeys() -> list[dict]:
+    try:
+        return json.loads(PASSKEYS_FILE.read_text())
+    except (OSError, ValueError):
+        return []
+
+
+def save_passkeys(keys: list[dict]) -> None:
+    PASSKEYS_FILE.write_text(json.dumps(keys, indent=1))
+
+
+def session_key() -> bytes:
+    if not SESSION_KEY_FILE.exists():
+        SESSION_KEY_FILE.write_text(secrets.token_hex(32))
+    return SESSION_KEY_FILE.read_text().strip().encode()
+
+
+def session_cookie() -> str:
+    expires = str(int(time.time()) + SESSION_DAYS * 86400)
+    return expires + "." + hmac.new(session_key(), expires.encode(), hashlib.sha256).hexdigest()
+
+
+def logged_in(request: Request) -> bool:
+    expires, _, sig = request.cookies.get(SESSION_COOKIE, "").partition(".")
+    good = hmac.new(session_key(), expires.encode(), hashlib.sha256).hexdigest()
+    return expires.isdigit() and int(expires) > time.time() and hmac.compare_digest(sig, good)
+
+
+def relying_party(request: Request) -> tuple[str, str]:
+    """(rp id, origin) from the address the browser used; Caddy in front terminates HTTPS."""
+    host = request.headers.get("host", "")
+    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    return host.split(":")[0], f"{proto}://{host}"
+
+
+def new_challenge(challenge: bytes) -> str:
+    token = secrets.token_urlsafe(16)
+    challenges[token] = challenge
+    while len(challenges) > 50:  # abandoned ceremonies
+        challenges.pop(next(iter(challenges)))
+    return token
+
+
 @app.middleware("http")
 async def require_password(request: Request, call_next):
-    """HTTP basic auth when UI_PASSWORD is set (any username)."""
-    if UI_PASSWORD:
+    """Passkey sessions with UI_AUTH=passkey, else HTTP basic auth when UI_PASSWORD is set."""
+    if UI_AUTH == "passkey":
+        if request.url.path not in AUTH_OPEN and not logged_in(request):
+            if request.url.path == "/":
+                return RedirectResponse("/login")
+            return Response(status_code=401)
+    elif UI_PASSWORD:
         auth = request.headers.get("authorization", "")
         try:
             given = base64.b64decode(auth.removeprefix("Basic ")).decode().split(":", 1)[1]
@@ -712,6 +785,7 @@ def state():
         "maps": installed_maps(),
         "gametypes": gametypes(),
         "bot_skills": BOT_SKILLS,
+        "auth": UI_AUTH,
         "give_weapons": GIVE_WEAPONS,
         "fun_dvars": FUN_DVARS,
         "fun_rules": FUN_RULES,
@@ -965,6 +1039,118 @@ def log():
     if not LOG.exists():
         return {"lines": ["(no log yet: start the server from this page to capture its console)"]}
     return {"lines": LOG.read_text(errors="replace").splitlines()[-300:]}
+
+
+@app.get("/api/auth/status")
+def auth_status(request: Request):
+    return {"registered": bool(passkeys()), "logged_in": logged_in(request)}
+
+
+class PasskeyName(BaseModel):
+    name: str = ""
+
+
+@app.post("/api/auth/register/options")
+def register_options(request: Request):
+    """Anyone while no passkey exists (first-time setup), afterwards only logged-in users."""
+    keys = passkeys()
+    if keys and not logged_in(request):
+        raise HTTPException(401)
+    rp_id, _ = relying_party(request)
+    options = generate_registration_options(
+        rp_id=rp_id, rp_name="IW4x Server", user_name="admin", user_id=b"iw4x-admin",
+        user_display_name="IW4x admin",
+        authenticator_selection=AuthenticatorSelectionCriteria(resident_key=ResidentKeyRequirement.REQUIRED),
+        exclude_credentials=[PublicKeyCredentialDescriptor(id=base64url_to_bytes(k["id"])) for k in keys],
+    )
+    return {"token": new_challenge(options.challenge), "options": json.loads(options_to_json(options))}
+
+
+class Ceremony(BaseModel):
+    token: str
+    credential: dict
+    name: str = ""
+
+
+@app.post("/api/auth/register/verify")
+def register_verify(c: Ceremony, request: Request, response: Response):
+    keys = passkeys()
+    if keys and not logged_in(request):
+        raise HTTPException(401)
+    challenge = challenges.pop(c.token, None) or bad_request("passkey setup expired, try again")
+    rp_id, origin = relying_party(request)
+    try:
+        v = verify_registration_response(credential=c.credential, expected_challenge=challenge,
+                                         expected_rp_id=rp_id, expected_origin=origin)
+    except Exception as e:  # any failed check in the library
+        raise HTTPException(400, f"passkey not accepted: {e}")
+    keys.append({
+        "id": bytes_to_base64url(v.credential_id), "public_key": bytes_to_base64url(v.credential_public_key),
+        "sign_count": v.sign_count, "name": clean(c.name)[:40] or f"passkey {len(keys) + 1}",
+        "created": time.strftime("%Y-%m-%d"),
+    })
+    save_passkeys(keys)
+    login_response(response)
+    return {"ok": True}
+
+
+@app.post("/api/auth/login/options")
+def login_options(request: Request):
+    rp_id, _ = relying_party(request)
+    options = generate_authentication_options(rp_id=rp_id)  # discoverable: the device offers its passkeys
+    return {"token": new_challenge(options.challenge), "options": json.loads(options_to_json(options))}
+
+
+@app.post("/api/auth/login/verify")
+def login_verify(c: Ceremony, request: Request, response: Response):
+    challenge = challenges.pop(c.token, None) or bad_request("sign-in expired, try again")
+    keys = passkeys()
+    key = next((k for k in keys if k["id"] == c.credential.get("id")), None) or bad_request("unknown passkey")
+    rp_id, origin = relying_party(request)
+    try:
+        v = verify_authentication_response(
+            credential=c.credential, expected_challenge=challenge, expected_rp_id=rp_id, expected_origin=origin,
+            credential_public_key=base64url_to_bytes(key["public_key"]), credential_current_sign_count=key["sign_count"])
+    except Exception as e:  # any failed check in the library
+        raise HTTPException(400, f"sign-in failed: {e}")
+    key["sign_count"] = v.new_sign_count
+    save_passkeys(keys)
+    login_response(response)
+    return {"ok": True}
+
+
+def bad_request(detail: str):
+    raise HTTPException(400, detail)
+
+
+def login_response(response: Response) -> None:
+    response.set_cookie(SESSION_COOKIE, session_cookie(), max_age=SESSION_DAYS * 86400,
+                        httponly=True, secure=True, samesite="strict")
+
+
+@app.post("/api/auth/logout")
+def logout(response: Response):
+    response.delete_cookie(SESSION_COOKIE)
+    return {"ok": True}
+
+
+@app.get("/api/auth/passkeys")
+def list_passkeys():
+    return {"passkeys": [{k: p[k] for k in ("id", "name", "created")} for p in passkeys()]}
+
+
+@app.delete("/api/auth/passkeys/{key_id}")
+def delete_passkey(key_id: str):
+    keys = passkeys()
+    if len(keys) <= 1:
+        raise HTTPException(400, "can't remove the last passkey (task vps:reset-auth starts over)")
+    save_passkeys([k for k in keys if k["id"] != key_id])
+    return list_passkeys()
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page():
+    return (Path(__file__).parent / "login.html").read_text()
 
 
 @app.get("/", response_class=HTMLResponse)

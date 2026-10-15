@@ -47,10 +47,10 @@ tasks:
     cmds:
       - uv run scripts/tools/vultr.py status
 
-  vps:password:
-    desc: Print the Vultr VPS web UI password and copy it to the clipboard
+  vps:reset-auth:
+    desc: Delete the Vultr VPS web UI passkeys (lost them all); the next visitor creates a new one
     cmds:
-      - uv run scripts/tools/vultr.py password
+      - uv run scripts/tools/vultr.py reset-auth
 
   vps:sync-iw4x:
     desc: After an IW4x update (task game:update), copy the new IW4x files to the Vultr VPS

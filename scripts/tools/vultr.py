@@ -7,7 +7,7 @@
   uv run scripts/tools/vultr.py down    destroy the VPS (game files and all)
   uv run scripts/tools/vultr.py status  show the VPS address and web UI link
   uv run scripts/tools/vultr.py sync-iw4x  copy your updated IW4x files to the VPS
-  uv run scripts/tools/vultr.py password   print the web UI password and copy it
+  uv run scripts/tools/vultr.py reset-auth delete the web UI passkeys: the next visitor creates one
 
 Needs VULTR_API_KEY (Vultr: Account -> API) and an SSH key in ~/.ssh. The web UI
 is served on https://<ip>.sslip.io, so no domain is needed. With VPS_DOMAIN and
@@ -98,10 +98,6 @@ def remote_env(ip: str, key: str) -> str:
     return ssh(
         ip, f"sed -n 's/^{key}=//p' {REMOTE_DIR}/.env", capture_output=True, text=True
     ).stdout.strip()  # fmt: skip
-
-
-def ui_password(ip: str) -> str:
-    return remote_env(ip, "UI_PASSWORD")
 
 
 def cloudflare(method: str, path: str, body: dict | None = None) -> dict:
@@ -206,7 +202,7 @@ def up() -> None:
         tty=True,
         check=True,
     )
-    print(f"\nWeb UI:   https://{domain}  (password: {ui_password(ip)})")
+    print(f"\nWeb UI:   https://{domain}  (log in with a passkey, the first visit creates it)")
     print(f"Players:  connect {domain}")
     print(f"SSH:      ssh root@{ip}")
 
@@ -232,15 +228,16 @@ def status() -> None:
         f"{inst['status']} / {inst['power_status']}  {inst['plan']} in {inst['region']}"
     )
     domain = remote_env(ip, "DOMAIN") or f"{ip}.sslip.io"
-    print(f"Web UI:   https://{domain}  (password: {ui_password(ip)})")
+    print(f"Web UI:   https://{domain}")
     print(f"Players:  connect {domain}")
 
 
-def password() -> None:
+def reset_auth() -> None:
     inst = find_instance() or sys.exit("no VPS running")
-    pw = ui_password(inst["main_ip"])
-    subprocess.run(["pbcopy"], input=pw, text=True, check=False)
-    print(f"{pw}  (copied, any username)")
+    if input("Delete all web UI passkeys? The next visitor creates the first one. [y/N] ") != "y":
+        return
+    ssh(inst["main_ip"], "docker exec iw4x-server-1 rm -f /data/passkeys.json /data/session.key", check=True)
+    print(f"passkeys deleted: open https://{remote_env(inst['main_ip'], 'DOMAIN')} now to create a new one")
 
 
 def sha256(path: Path) -> str:
@@ -308,7 +305,7 @@ if __name__ == "__main__":
         "down": down,
         "status": status,
         "sync-iw4x": sync_iw4x,
-        "password": password,
+        "reset-auth": reset_auth,
     }
     if len(sys.argv) != 2 or sys.argv[1] not in cmds:
         sys.exit(__doc__)

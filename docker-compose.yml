@@ -12,7 +12,7 @@ services:
       IW4X_PORT: ${IW4X_PORT:-28960}
       UI_PORT: ${UI_PORT:-8080}
       UI_HOST: 127.0.0.1 # only reachable through Caddy
-      UI_PASSWORD: ${UI_PASSWORD:?set UI_PASSWORD in .env}
+      UI_AUTH: passkey # log in with passkeys; the first visitor creates the first one
       JOIN_HOST: ${JOIN_HOST:-${DOMAIN:-}} # players connect to this name instead of the IP
       UI_DATA_DIR: /data
       AUTOSTART: "1" # start the game server with the container, e.g. after a reboot
