@@ -2,11 +2,12 @@
 // sv_uicmd "<action> <client number> [argument]" over rcon; this runs it and clears it.
 //   esp      toggle: markers on all enemies, visible through walls
 //   radar    toggle: enemies always on the minimap
+//   ammo     toggle: the weapon in hand never runs out, no reloading
 //   kill     kill the player
 //   launch   throw the player into the air
 //   up       teleport onto the roof / highest floor above the player
 //   give     give a weapon (argument: weapon name)
-// sv_uistate lists who has esp / radar on, for the UI: "<num>:<e|r|er> ..."
+// sv_uistate lists who has esp / radar / ammo on, for the UI: "<num>:<flags e r a> ..."
 init()
 {
 	setDvar( "sv_uicmd", "" );
@@ -40,6 +41,9 @@ watchCommands()
 			break;
 		case "radar":
 			player toggleRadar();
+			break;
+		case "ammo":
+			player toggleAmmo();
 			break;
 		case "kill":
 			if ( isAlive( player ) )
@@ -80,6 +84,8 @@ updateState()
 			flags += "e";
 		if ( isDefined( player.uiRadar ) && player.uiRadar )
 			flags += "r";
+		if ( isDefined( player.uiAmmo ) && player.uiAmmo )
+			flags += "a";
 		if ( flags != "" )
 			state += player getEntityNumber() + ":" + flags + " ";
 	}
@@ -191,6 +197,39 @@ radarLoop()
 		self.hasRadar = true;
 		self.radarMode = "constant_radar";
 		wait 0.5;
+	}
+}
+
+// ---------- infinite ammo ----------
+
+toggleAmmo()
+{
+	self.uiAmmo = !( isDefined( self.uiAmmo ) && self.uiAmmo );
+	self notify( "ui_ammo_off" );
+	if ( self.uiAmmo )
+	{
+		self thread ammoLoop();
+		self iPrintLn( "Infinite ammo ^2on" );
+	}
+	else
+		self iPrintLn( "Infinite ammo ^1off" );
+}
+
+// tops up the weapon in hand, magazine included, through deaths and weapon switches
+ammoLoop()
+{
+	self endon( "disconnect" );
+	self endon( "ui_ammo_off" );
+
+	for ( ;; )
+	{
+		weapon = self getCurrentWeapon();
+		if ( weapon != "none" )
+		{
+			self giveMaxAmmo( weapon );
+			self setWeaponAmmoClip( weapon, weaponClipSize( weapon ) );
+		}
+		wait 0.2;
 	}
 }
 

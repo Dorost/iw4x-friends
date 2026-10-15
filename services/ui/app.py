@@ -206,7 +206,7 @@ LOBBY_GSC = Path(__file__).resolve().parent / "lobby.gsc"
 WEAPONS_GSC = Path(__file__).resolve().parent / "weapons.gsc"
 # per-player actions from the Players table (wallhack, radar, kill, ...) via sv_uicmd
 PLAYERS_GSC = Path(__file__).resolve().parent / "players.gsc"
-PLAYER_ACTIONS = {"esp", "radar", "kill", "launch", "up", "give"}
+PLAYER_ACTIONS = {"esp", "radar", "ammo", "kill", "launch", "up", "give"}
 # weapons the Players table can give: name -> weapon id
 GIVE_WEAPONS = {
     "Intervention": "cheytac_mp", "Barrett .50cal": "barrett_mp", "ACR": "masada_mp", "M4A1": "m4_mp",
@@ -628,6 +628,7 @@ def live_status() -> dict | None:
         for p in players:
             p["esp"] = "e" in flags.get(str(p["num"]), "")
             p["radar"] = "r" in flags.get(str(p["num"]), "")
+            p["ammo"] = "a" in flags.get(str(p["num"]), "")
     lobby_count = 0
     if not in_game:
         # IW4x can't list lobby members, but getinfo counts them
