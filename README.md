@@ -68,7 +68,7 @@ Runs on any Mac or Windows PC with the game installed (see above). No GPU needed
 2. Double-click **Start Server** (`Start Server.command` on Mac, `Start Server.cmd` on Windows). On a Mac the first time: right-click → Open
 3. The control page opens in your browser: press **Start**
 
-The server runs as a lobby, like vanilla MW2: players join the lobby and wait there. In the control page you pick the map and mode and press **Start game** to take everyone into the match, and **Back to lobby** to end it early. When a match ends, everyone goes back to the lobby; no map starts on its own. Nobody gets disconnected in between. You can also add bots, kick players and set a game password. To protect the control page itself, set `UI_PASSWORD=yourpassword` in the `.env` file and start it again.
+The server runs as a lobby, like vanilla MW2: players join the lobby and wait there. In the control page you pick the map and mode and press **Start game** to take everyone into the match, and **Back to lobby** to end it early. When a match ends, everyone goes back to the lobby; no map starts on its own. Nobody gets disconnected in between. You can also add bots, kick players and set a game password. To protect the control page itself, set `UI_PASSWORD=yourpassword` in the `.env` file and start it again: the page then asks for that password.
 
 The server needs the custom maps too: they come with the setup above. If the server runs from its own CrossOver bottle (for example `mw-server`), add them there:
 
@@ -87,14 +87,14 @@ bash scripts/linux/setup.sh
 docker compose up -d --build
 ```
 
-Then open `https://<your-domain>` and create the passkey that protects the control page: the first visitor sets it, so do this right away. Logged in, **Passkeys** adds more devices. Lost them all? `docker exec iw4x-server-1 rm -f /data/passkeys.json /data/session.key` (on Vultr: `task vps:reset-auth`) starts over.
+Then open `https://<your-domain>` and log in with the password from `UI_PASSWORD` in `.env` (setup asks for it). To change it, edit `.env` and run `docker compose up -d`.
 
 ### On Vultr, created by script
 
 Creates the VPS (New York, high frequency 2 CPU / 4 GB), copies this repo, runs the setup and starts everything. No domain needed: the web UI gets `https://<ip>.sslip.io`. To use your own name instead, set `VPS_DOMAIN` and `CLOUDFLARE_DNS_TOKEN` in `.env`: `vps:up` then points the name at the VPS (DNS only) and players connect with `connect <your-name>`.
 
 1. Put your Vultr API key in `.env`: `VULTR_API_KEY=...` (Vultr: Account → API, and allow your IP there)
-2. Run `task vps:up`, type the setup password when asked. At the end it prints the web UI link and the `connect` address. Open the link right away to create your login passkey
+2. Run `task vps:up`, type the setup password when asked. At the end it prints the web UI link and the `connect` address. Log in with `UI_PASSWORD` from your local `.env` (set it before `vps:up`; running `vps:up` again updates it)
 3. Done playing: `task vps:down` destroys the VPS (billing stops, the game files go with it)
 
 `task vps:status` shows the address again.

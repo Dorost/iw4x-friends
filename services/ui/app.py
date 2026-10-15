@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["fastapi", "uvicorn", "psutil", "webauthn"]
+# dependencies = ["fastapi", "uvicorn", "psutil"]
 # ///
 """Small web UI to configure and control the IW4x LAN dedicated server."""
 
@@ -26,11 +26,6 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
 from pydantic import BaseModel
-from webauthn import (generate_authentication_options, generate_registration_options, options_to_json,
-                      verify_authentication_response, verify_registration_response)
-from webauthn.helpers import base64url_to_bytes, bytes_to_base64url
-from webauthn.helpers.structs import (AuthenticatorSelectionCriteria, PublicKeyCredentialDescriptor,
-                                      ResidentKeyRequirement)
 
 IS_WINDOWS = sys.platform == "win32"
 IS_LINUX = sys.platform.startswith("linux")
@@ -54,9 +49,8 @@ WINE = os.environ.get("WINE", "wine" if IS_LINUX else "/Applications/CrossOver.a
 PORT = int(os.environ.get("IW4X_PORT", "28960"))
 UI_PORT = int(os.environ.get("UI_PORT", "8080"))
 UI_HOST = os.environ.get("UI_HOST", "0.0.0.0")
+# login password for the web UI; empty = no login
 UI_PASSWORD = os.environ.get("UI_PASSWORD", "")
-# "passkey": log in with passkeys instead of the password (needs HTTPS on a domain, so the VPS)
-UI_AUTH = os.environ.get("UI_AUTH", "")
 # name players connect to (the VPS domain); empty = this machine's LAN address
 JOIN_HOST = os.environ.get("JOIN_HOST", "")
 
@@ -130,6 +124,10 @@ FUN_RULES = {
                      {"0": "off", "15": "15s fuse", "20": "20s fuse", "30": "30s fuse"}),
     "sv_funairkill": ("Air support per kill", "0", "kills hand out a random air killstreak that stacks up: predator, harrier, choppers, AC-130 (weapons.gsc)",
                       {"0": "off", "1": "every kill", "2": "every 2 kills", "3": "every 3 kills"}),
+    "sv_sdroulette": ("S&D round roulette", "0", "Search & Destroy: every round gets a random modifier (knife round, snipers, moon, ...), replacing Weapons (sdfun.gsc)", ON_OFF),
+    "sv_sdclutch": ("S&D clutch mode", "0", "Search & Destroy: the last player alive on a team gets radar, endless ammo and extra speed (sdfun.gsc)", ON_OFF),
+    "sv_sdhunted": ("S&D hunted carrier", "0", "Search & Destroy: the bomb carrier shows on the enemy minimap but runs faster (sdfun.gsc)", ON_OFF),
+    "sv_sdrevive": ("S&D revive", "0", "Search & Destroy: stand on a dead teammate's green marker for 3s to bring them back, once per round (sdfun.gsc)", ON_OFF),
     "scr_game_hardpoints": ("Killstreaks", "1", "killstreak rewards", ON_OFF),
     "scr_game_perks": ("Perks", "1", "perks from classes", ON_OFF),
     "scr_game_allowkillcam": ("Killcam", "1", "replay of your death", ON_OFF),
@@ -139,6 +137,9 @@ FUN_RULES = {
     "scr_player_maxhealth": ("Health", "100", "player health, 30 = one shot kills, 300 = tank", None),
     "scr_player_healthregentime": ("Health regen (s)", "5", "seconds before health comes back", None),
 }
+# cheat protected: the server ignores them from the config and rcon, so save_cfg also
+# writes a copy as sv_fun_<name> and lobby.gsc applies it from the game script
+CHEAT_DVARS = ("bg_fallDamageMinHeight", "bg_fallDamageMaxHeight")
 NO_FALL_DAMAGE = {"bg_fallDamageMinHeight": "9998", "bg_fallDamageMaxHeight": "9999"}
 # One-click Fun setups, in groups: group -> name -> (hint, dvars that differ from the
 # defaults). They only fill the fields; the numbers stay editable before Save.
@@ -221,6 +222,8 @@ FUN_PRESETS = {
                          "g_knockback": "0"}),
         "Glass cannons": ("hardcore, friendly fire reflects, killcam off",
                           {"scr_hardcore": "1", "scr_team_fftype": "2", "scr_game_allowkillcam": "0"}),
+        "S&D party": ("Search & Destroy with round roulette, clutch mode, hunted carrier and revives",
+                      {"sv_sdroulette": "1", "sv_sdclutch": "1", "sv_sdhunted": "1", "sv_sdrevive": "1"}),
         "Chaos": ("friendly fire on, rockets launch you, moon gravity",
                   {"scr_team_fftype": "1", "g_knockback": "5000", "g_gravity": "200", "jump_height": "100",
                    **NO_FALL_DAMAGE}),
@@ -235,6 +238,8 @@ LOBBY_GSC = Path(__file__).resolve().parent / "lobby.gsc"
 WEAPONS_GSC = Path(__file__).resolve().parent / "weapons.gsc"
 # per-player actions from the Players table (wallhack, radar, kill, ...) via sv_uicmd
 PLAYERS_GSC = Path(__file__).resolve().parent / "players.gsc"
+# Search & Destroy extras from the Fun panel (round roulette, clutch, hunted carrier, revive)
+SD_GSC = Path(__file__).resolve().parent / "sdfun.gsc"
 PLAYER_ACTIONS = {"esp", "radar", "ammo", "kill", "launch", "up", "give"}
 # weapons the Players table can give: name -> weapon id
 GIVE_WEAPONS = {
@@ -264,31 +269,14 @@ STOCK_MAPS = ["mp_afghan", "mp_boneyard", "mp_brecourt", "mp_checkpoint", "mp_de
 app = FastAPI()
 
 
-# ---------- passkeys ----------
-# The first visitor registers a passkey; after that only passkeys log in, and logged-in
-# users can add or remove more. Stored in the data dir (a volume in Docker): passkeys.json
-# and session.key, the secret that signs session cookies. Deleting both (task
-# vps:reset-auth) goes back to first-time setup and logs everyone out.
+# ---------- login ----------
+# One password (UI_PASSWORD) on a login form, then a signed session cookie. The signing
+# secret is session.key in the data dir (a volume in Docker); deleting it logs everyone out.
 
-PASSKEYS_FILE = DATA_DIR / "passkeys.json"
 SESSION_KEY_FILE = DATA_DIR / "session.key"
 SESSION_COOKIE = "iw4x_session"
 SESSION_DAYS = 30
-# pages and calls that work without a session: the login page and the passkey ceremonies
-AUTH_OPEN = {"/login", "/api/auth/status", "/api/auth/register/options", "/api/auth/register/verify",
-             "/api/auth/login/options", "/api/auth/login/verify"}
-challenges: dict[str, bytes] = {}  # ceremony token -> challenge, for the verify step
-
-
-def passkeys() -> list[dict]:
-    try:
-        return json.loads(PASSKEYS_FILE.read_text())
-    except (OSError, ValueError):
-        return []
-
-
-def save_passkeys(keys: list[dict]) -> None:
-    PASSKEYS_FILE.write_text(json.dumps(keys, indent=1))
+AUTH_OPEN = {"/login", "/api/auth/login"}  # work without a session
 
 
 def session_key() -> bytes:
@@ -308,37 +296,22 @@ def logged_in(request: Request) -> bool:
     return expires.isdigit() and int(expires) > time.time() and hmac.compare_digest(sig, good)
 
 
-def relying_party(request: Request) -> tuple[str, str]:
-    """(rp id, origin) from the address the browser used; Caddy in front terminates HTTPS."""
-    host = request.headers.get("host", "")
-    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
-    return host.split(":")[0], f"{proto}://{host}"
-
-
-def new_challenge(challenge: bytes) -> str:
-    token = secrets.token_urlsafe(16)
-    challenges[token] = challenge
-    while len(challenges) > 50:  # abandoned ceremonies
-        challenges.pop(next(iter(challenges)))
-    return token
+def basic_auth_ok(request: Request) -> bool:
+    """HTTP basic auth, for scripts like task stop (curl -u)."""
+    try:
+        given = base64.b64decode(request.headers.get("authorization", "").removeprefix("Basic ")).decode()
+        return secrets.compare_digest(given.split(":", 1)[1].encode(), UI_PASSWORD.encode())
+    except (ValueError, IndexError):
+        return False
 
 
 @app.middleware("http")
 async def require_password(request: Request, call_next):
-    """Passkey sessions with UI_AUTH=passkey, else HTTP basic auth when UI_PASSWORD is set."""
-    if UI_AUTH == "passkey":
-        if request.url.path not in AUTH_OPEN and not logged_in(request):
-            if request.url.path == "/":
-                return RedirectResponse("/login")
-            return Response(status_code=401)
-    elif UI_PASSWORD:
-        auth = request.headers.get("authorization", "")
-        try:
-            given = base64.b64decode(auth.removeprefix("Basic ")).decode().split(":", 1)[1]
-        except (ValueError, IndexError):
-            given = ""
-        if not secrets.compare_digest(given.encode(), UI_PASSWORD.encode()):
-            return Response(status_code=401, headers={"WWW-Authenticate": 'Basic realm="IW4x Server"'})
+    """With UI_PASSWORD set, everything but the login form needs a session."""
+    if UI_PASSWORD and request.url.path not in AUTH_OPEN and not logged_in(request) and not basic_auth_ok(request):
+        if request.url.path == "/":
+            return RedirectResponse("/login")
+        return Response(status_code=401)
     return await call_next(request)
 
 
@@ -467,6 +440,9 @@ def save_cfg(v: dict[str, str]) -> None:
     v["party_enable"] = "1"
     for key in ("sv_mapRotation", "lobby_playlist"):  # left over from rotation / playlist mode
         v.pop(key, None)
+    for key in CHEAT_DVARS:
+        if key in v:
+            v[f"sv_fun_{key}"] = v[key]
     lines = ["// IW4x LAN dedicated server (edited by server-ui)"]
     lines += [f'set {k} "{val}"' for k, val in v.items()]
     CFG.write_text("\n".join(lines) + "\n")
@@ -503,7 +479,7 @@ def server_pids() -> list[int]:
 
 def install_lobby_gsc() -> None:
     """The server loads custom scripts on every map load, so this also reaches a running server."""
-    for src in (LOBBY_GSC, WEAPONS_GSC, PLAYERS_GSC):
+    for src in (LOBBY_GSC, WEAPONS_GSC, PLAYERS_GSC, SD_GSC):
         dest = GAME_DIR / "userraw" / "scripts" / "mp" / src.name
         if GAME_DIR.exists() and (not dest.exists() or dest.read_bytes() != src.read_bytes()):
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -833,7 +809,7 @@ def state():
         "maps": installed_maps(),
         "gametypes": gametypes(),
         "bot_skills": BOT_SKILLS,
-        "auth": UI_AUTH,
+        "auth": bool(UI_PASSWORD),
         "give_weapons": GIVE_WEAPONS,
         "fun_dvars": FUN_DVARS,
         "fun_rules": FUN_RULES,
@@ -1091,111 +1067,26 @@ def log():
     return {"lines": LOG.read_text(errors="replace").splitlines()[-300:]}
 
 
-@app.get("/api/auth/status")
-def auth_status(request: Request):
-    return {"registered": bool(passkeys()), "logged_in": logged_in(request)}
+class Login(BaseModel):
+    password: str
 
 
-class PasskeyName(BaseModel):
-    name: str = ""
-
-
-@app.post("/api/auth/register/options")
-def register_options(request: Request):
-    """Anyone while no passkey exists (first-time setup), afterwards only logged-in users."""
-    keys = passkeys()
-    if keys and not logged_in(request):
-        raise HTTPException(401)
-    rp_id, _ = relying_party(request)
-    options = generate_registration_options(
-        rp_id=rp_id, rp_name="IW4x Server", user_name="admin", user_id=b"iw4x-admin",
-        user_display_name="IW4x admin",
-        authenticator_selection=AuthenticatorSelectionCriteria(resident_key=ResidentKeyRequirement.REQUIRED),
-        exclude_credentials=[PublicKeyCredentialDescriptor(id=base64url_to_bytes(k["id"])) for k in keys],
-    )
-    return {"token": new_challenge(options.challenge), "options": json.loads(options_to_json(options))}
-
-
-class Ceremony(BaseModel):
-    token: str
-    credential: dict
-    name: str = ""
-
-
-@app.post("/api/auth/register/verify")
-def register_verify(c: Ceremony, request: Request, response: Response):
-    keys = passkeys()
-    if keys and not logged_in(request):
-        raise HTTPException(401)
-    challenge = challenges.pop(c.token, None) or bad_request("passkey setup expired, try again")
-    rp_id, origin = relying_party(request)
-    try:
-        v = verify_registration_response(credential=c.credential, expected_challenge=challenge,
-                                         expected_rp_id=rp_id, expected_origin=origin)
-    except Exception as e:  # any failed check in the library
-        raise HTTPException(400, f"passkey not accepted: {e}")
-    keys.append({
-        "id": bytes_to_base64url(v.credential_id), "public_key": bytes_to_base64url(v.credential_public_key),
-        "sign_count": v.sign_count, "name": clean(c.name)[:40] or f"passkey {len(keys) + 1}",
-        "created": time.strftime("%Y-%m-%d"),
-    })
-    save_passkeys(keys)
-    login_response(response)
-    return {"ok": True}
-
-
-@app.post("/api/auth/login/options")
-def login_options(request: Request):
-    rp_id, _ = relying_party(request)
-    options = generate_authentication_options(rp_id=rp_id)  # discoverable: the device offers its passkeys
-    return {"token": new_challenge(options.challenge), "options": json.loads(options_to_json(options))}
-
-
-@app.post("/api/auth/login/verify")
-def login_verify(c: Ceremony, request: Request, response: Response):
-    challenge = challenges.pop(c.token, None) or bad_request("sign-in expired, try again")
-    keys = passkeys()
-    key = next((k for k in keys if k["id"] == c.credential.get("id")), None) or bad_request("unknown passkey")
-    rp_id, origin = relying_party(request)
-    try:
-        v = verify_authentication_response(
-            credential=c.credential, expected_challenge=challenge, expected_rp_id=rp_id, expected_origin=origin,
-            credential_public_key=base64url_to_bytes(key["public_key"]), credential_current_sign_count=key["sign_count"])
-    except Exception as e:  # any failed check in the library
-        raise HTTPException(400, f"sign-in failed: {e}")
-    key["sign_count"] = v.new_sign_count
-    save_passkeys(keys)
-    login_response(response)
-    return {"ok": True}
-
-
-def bad_request(detail: str):
-    raise HTTPException(400, detail)
-
-
-def login_response(response: Response) -> None:
+@app.post("/api/auth/login")
+def login(c: Login, request: Request, response: Response):
+    if not secrets.compare_digest(c.password.encode(), UI_PASSWORD.encode()):
+        time.sleep(1)  # slows down guessing
+        raise HTTPException(401, "wrong password")
+    # Secure only over HTTPS (Caddy on the VPS), so plain http on the LAN still works
+    https = request.headers.get("x-forwarded-proto", request.url.scheme) == "https"
     response.set_cookie(SESSION_COOKIE, session_cookie(), max_age=SESSION_DAYS * 86400,
-                        httponly=True, secure=True, samesite="strict")
+                        httponly=True, secure=https, samesite="strict")
+    return {"ok": True}
 
 
 @app.post("/api/auth/logout")
 def logout(response: Response):
     response.delete_cookie(SESSION_COOKIE)
     return {"ok": True}
-
-
-@app.get("/api/auth/passkeys")
-def list_passkeys():
-    return {"passkeys": [{k: p[k] for k in ("id", "name", "created")} for p in passkeys()]}
-
-
-@app.delete("/api/auth/passkeys/{key_id}")
-def delete_passkey(key_id: str):
-    keys = passkeys()
-    if len(keys) <= 1:
-        raise HTTPException(400, "can't remove the last passkey (task vps:reset-auth starts over)")
-    save_passkeys([k for k in keys if k["id"] != key_id])
-    return list_passkeys()
 
 
 @app.get("/login", response_class=HTMLResponse)

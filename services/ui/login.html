@@ -14,68 +14,43 @@
   <symbol id="i-spin" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
 </svg>
 
-<main class="bg-white rounded-xl shadow-sm p-6 w-full max-w-xs space-y-4 text-center">
+<form id="form" class="bg-white rounded-xl shadow-sm p-6 w-full max-w-xs space-y-4 text-center">
   <div class="mx-auto w-10 h-10 rounded-full bg-sky-50 text-sky-600 flex items-center justify-center"><svg class="w-5 h-5"><use href="#i-key"/></svg></div>
   <div>
     <h1 class="text-base font-semibold text-slate-800">IW4x Server</h1>
-    <p id="hint" class="text-xs text-slate-400 mt-1">checking...</p>
+    <p class="text-xs text-slate-400 mt-1">Enter the password to continue</p>
   </div>
-  <input id="name" class="hidden w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-sky-400" placeholder="name for this passkey, e.g. MacBook" maxlength="40">
-  <button id="go" disabled class="w-full inline-flex items-center justify-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-40 transition">
-    <svg class="w-3.5 h-3.5"><use href="#i-key"/></svg><span id="label">Sign in with passkey</span>
+  <input id="password" type="password" autocomplete="current-password" autofocus required class="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-sky-400" placeholder="password">
+  <button id="go" class="w-full inline-flex items-center justify-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-40 transition">
+    <svg class="w-3.5 h-3.5"><use href="#i-key"/></svg>Sign in
   </button>
   <p id="error" class="hidden text-[11px] text-rose-600"></p>
-</main>
+</form>
 
 <script>
 const $ = id => document.getElementById(id);
-let registered = true;
 
-const post = async (path, body) => {
-  const r = await fetch(path, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body || {})});
-  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
-  return r.json();
-};
-
-async function init() {
-  const s = await (await fetch('/api/auth/status')).json();
-  if (s.logged_in) return location.replace('/');
-  registered = s.registered;
-  $('hint').textContent = registered ? 'Sign in with your passkey' : 'First visit: create the passkey that will protect this server';
-  $('label').textContent = registered ? 'Sign in with passkey' : 'Create passkey';
-  $('name').classList.toggle('hidden', registered);
-  $('go').disabled = false;
-}
-
-// registration or sign-in, with the browser's own passkey dialog
-async function go() {
+$('form').onsubmit = async e => {
+  e.preventDefault();
   $('error').classList.add('hidden');
   $('go').disabled = true;
   $('go').querySelector('use').setAttribute('href', '#i-spin');
   $('go').querySelector('svg').classList.add('animate-spin');
   try {
-    if (registered) {
-      const {token, options} = await post('/api/auth/login/options');
-      const cred = await navigator.credentials.get({publicKey: PublicKeyCredential.parseRequestOptionsFromJSON(options)});
-      await post('/api/auth/login/verify', {token, credential: cred.toJSON()});
-    } else {
-      const {token, options} = await post('/api/auth/register/options');
-      const cred = await navigator.credentials.create({publicKey: PublicKeyCredential.parseCreationOptionsFromJSON(options)});
-      await post('/api/auth/register/verify', {token, credential: cred.toJSON(), name: $('name').value});
-    }
+    const r = await fetch('/api/auth/login', {method: 'POST', headers: {'Content-Type': 'application/json'},
+                                              body: JSON.stringify({password: $('password').value})});
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
     location.replace('/');
-  } catch (e) {
-    $('error').textContent = e.name === 'NotAllowedError' ? 'cancelled or timed out' : e.message;
+  } catch (err) {
+    $('error').textContent = err.message;
     $('error').classList.remove('hidden');
+    $('password').select();
   } finally {
     $('go').disabled = false;
     $('go').querySelector('use').setAttribute('href', '#i-key');
     $('go').querySelector('svg').classList.remove('animate-spin');
   }
-}
-
-$('go').onclick = go;
-init().catch(e => { $('hint').textContent = 'error: ' + e.message; });
+};
 </script>
 </body>
 </html>

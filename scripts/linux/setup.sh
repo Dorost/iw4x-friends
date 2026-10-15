@@ -248,7 +248,12 @@ if [[ -z "${DOMAIN:-}" ]]; then
   setenv DOMAIN "$DOMAIN"
 fi
 ok "web UI domain: $DOMAIN"
-ok "web UI login: passkey, the first visit creates it"
+if [[ -z "${UI_PASSWORD:-}" ]]; then
+  read -rsp "    Password for the web UI: " UI_PASSWORD; echo
+  [[ -n "$UI_PASSWORD" ]] || die "a password is needed for the web UI"
+  setenv UI_PASSWORD "$UI_PASSWORD"
+fi
+ok "web UI login: password (UI_PASSWORD in .env)"
 
 # ---------------------------------------------------------------- firewall
 step "Firewall"

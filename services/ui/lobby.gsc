@@ -3,10 +3,13 @@
 // In the waiting room match (sv_hangout 1, started by the web UI instead of idling in
 // the lobby, so voice chat works) it shows a banner with the next map and mode, and
 // nobody has weapons or takes damage.
+// It also applies the cheat protected Fun dvars (fall damage), which the server ignores
+// from server.cfg and rcon: the web UI saves a copy as sv_fun_<name>.
 init()
 {
 	setDvar( "sv_tolobby", 0 );
 	level thread watchToLobby();
+	level thread applyCheatDvars();
 
 	if ( getDvarInt( "sv_hangout" ) )
 	{
@@ -25,6 +28,25 @@ watchToLobby()
 
 	setDvar( "sv_tolobby", 0 );
 	maps\mp\gametypes\_gamelogic::forceEnd();
+}
+
+// re-checked every second: Save in the web UI changes them mid-match
+applyCheatDvars()
+{
+	level endon( "game_ended" );
+
+	names = strTok( "bg_fallDamageMinHeight bg_fallDamageMaxHeight", " " );
+	for ( ;; )
+	{
+		foreach ( name in names )
+		{
+			// as a number: a string value reaches these float dvars as 0, which is out of range
+			val = getDvarFloat( "sv_fun_" + name );
+			if ( val >= 1 && getDvarFloat( name ) != val )
+				setDvar( name, val );
+		}
+		wait 1;
+	}
 }
 
 hangoutBanner()

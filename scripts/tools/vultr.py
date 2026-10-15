@@ -7,7 +7,6 @@
   uv run scripts/tools/vultr.py down    destroy the VPS (game files and all)
   uv run scripts/tools/vultr.py status  show the VPS address and web UI link
   uv run scripts/tools/vultr.py sync-iw4x  copy your updated IW4x files to the VPS
-  uv run scripts/tools/vultr.py reset-auth delete the web UI passkeys: the next visitor creates one
 
 Needs VULTR_API_KEY (Vultr: Account -> API) and an SSH key in ~/.ssh. The web UI
 is served on https://<ip>.sslip.io, so no domain is needed. With VPS_DOMAIN and
@@ -190,6 +189,9 @@ def up() -> None:
         if os.environ.get("VPS_DOMAIN")
         else f"([ -f .env ] || printf 'DOMAIN={domain}\\n' > .env)"
     )
+    if os.environ.get("UI_PASSWORD"):  # the web UI login, replaces the one on the VPS
+        set_domain += (f" && sed -i '/^UI_PASSWORD=/d' .env"
+                       f" && echo UI_PASSWORD={shlex.quote(os.environ['UI_PASSWORD'])} >> .env")
     env = " ".join(
         f"{k}={shlex.quote(os.environ[k])}"
         for k in ("MW_GAME_URL", "MW_MAPS_URL")
@@ -202,7 +204,7 @@ def up() -> None:
         tty=True,
         check=True,
     )
-    print(f"\nWeb UI:   https://{domain}  (log in with a passkey, the first visit creates it)")
+    print(f"\nWeb UI:   https://{domain}  (log in with UI_PASSWORD)")
     print(f"Players:  connect {domain}")
     print(f"SSH:      ssh root@{ip}")
 
@@ -230,14 +232,6 @@ def status() -> None:
     domain = remote_env(ip, "DOMAIN") or f"{ip}.sslip.io"
     print(f"Web UI:   https://{domain}")
     print(f"Players:  connect {domain}")
-
-
-def reset_auth() -> None:
-    inst = find_instance() or sys.exit("no VPS running")
-    if input("Delete all web UI passkeys? The next visitor creates the first one. [y/N] ") != "y":
-        return
-    ssh(inst["main_ip"], "docker exec iw4x-server-1 rm -f /data/passkeys.json /data/session.key", check=True)
-    print(f"passkeys deleted: open https://{remote_env(inst['main_ip'], 'DOMAIN')} now to create a new one")
 
 
 def sha256(path: Path) -> str:
@@ -305,7 +299,6 @@ if __name__ == "__main__":
         "down": down,
         "status": status,
         "sync-iw4x": sync_iw4x,
-        "reset-auth": reset_auth,
     }
     if len(sys.argv) != 2 or sys.argv[1] not in cmds:
         sys.exit(__doc__)

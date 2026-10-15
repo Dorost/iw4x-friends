@@ -54,22 +54,10 @@
     <div class="ml-auto flex gap-2">
       <button id="btnStart" onclick="act('start', this)" class="btn bg-emerald-50 text-emerald-700 hover:bg-emerald-100"><svg class="w-3.5 h-3.5"><use href="#i-play"/></svg>Start</button>
       <button id="btnRestart" onclick="act('restart', this)" title="Restarts the server process: disconnects everyone" class="btn bg-sky-50 text-sky-700 hover:bg-sky-100"><svg class="w-3.5 h-3.5"><use href="#i-restart"/></svg>Restart</button>
-      <button id="btnKeys" onclick="togglePasskeys()" title="Passkeys that can log in to this page" class="btn hidden bg-slate-100 text-slate-600 hover:bg-slate-200"><svg class="w-3.5 h-3.5"><use href="#i-key"/></svg>Passkeys</button>
+      <button id="btnLogout" onclick="logout()" title="Log out of this page" class="btn hidden bg-slate-100 text-slate-600 hover:bg-slate-200"><svg class="w-3.5 h-3.5"><use href="#i-key"/></svg>Log out</button>
       <button id="btnStop" onclick="act('stop', this)" class="btn bg-rose-50 text-rose-700 hover:bg-rose-100"><svg class="w-3.5 h-3.5"><use href="#i-stop"/></svg>Stop</button>
     </div>
   </header>
-
-  <!-- passkeys (UI_AUTH=passkey) -->
-  <section id="keysPanel" class="hidden bg-white rounded-xl shadow-sm p-4 space-y-2">
-    <h2 class="title"><svg class="w-4 h-4"><use href="#i-key"/></svg>Passkeys
-      <button onclick="logout()" class="btn ml-auto bg-slate-100 text-slate-600 hover:bg-slate-200">Log out</button></h2>
-    <ul id="keysList" class="text-xs divide-y divide-slate-100"></ul>
-    <div class="flex gap-2">
-      <input id="keyName" class="inp !mt-0 flex-1" placeholder="name for the new passkey, e.g. iPhone" maxlength="40">
-      <button onclick="addPasskey(this)" class="btn bg-sky-600 text-white hover:bg-sky-700"><svg class="w-3.5 h-3.5"><use href="#i-key"/></svg>Add passkey</button>
-    </div>
-    <p class="text-[11px] text-slate-400">Anyone with one of these passkeys can open this page. Lost them all? <code>task vps:reset-auth</code> starts over (the next visitor creates the first passkey).</p>
-  </section>
 
   <!-- join -->
   <section class="bg-white rounded-xl shadow-sm p-4 space-y-2">
@@ -197,7 +185,7 @@ const LIMITS = ['scorelimit', 'timelimit', 'roundlimit', 'winlimit', 'roundswitc
 const $ = id => document.getElementById(id);
 const api = async (path, body) => {
   const r = await fetch(path, body === undefined ? {} : {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
-  if (r.status === 401 && S && S.auth === 'passkey') location.href = '/login';  // session expired
+  if (r.status === 401 && S && S.auth) location.href = '/login';  // session expired
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
   return r.json();
 };
@@ -268,7 +256,7 @@ function render() {
   $('statusText').textContent = pending ? pending.label + '...'
     : live ? `running ${live.version} · ${live.in_game ? 'in game' : 'lobby'}` : run ? 'starting...' : 'stopped';
   $('joinCmd').textContent = joinCmd();
-  $('btnKeys').classList.toggle('hidden', S.auth !== 'passkey');
+  $('btnLogout').classList.toggle('hidden', !S.auth);
   $('btnStart').disabled = !!pending || run;
   $('btnRestart').disabled = !!pending || !run;
   $('btnStop').disabled = !!pending || !run;
@@ -421,39 +409,7 @@ function playerAct(num, action, el, weapon = '') {
   return busy(el.tagName === 'BUTTON' ? el : null, async () => { await api('/api/player', {num, action, weapon}); toast(`${who}: ${ACTION_DONE[action]}`); });
 }
 
-// ---------- passkeys ----------
-async function togglePasskeys() {
-  const panel = $('keysPanel');
-  panel.classList.toggle('hidden');
-  if (!panel.classList.contains('hidden')) await busy(null, loadPasskeys);
-}
-
-async function loadPasskeys(keys) {
-  keys = keys || (await api('/api/auth/passkeys')).passkeys;
-  $('keysList').innerHTML = keys.map(k => `<li class="flex items-center gap-2 py-1.5"><svg class="w-3.5 h-3.5 text-slate-400"><use href="#i-key"/></svg>
-    <span class="font-medium text-slate-700">${esc(k.name)}</span><span class="text-slate-400">added ${esc(k.created)}</span>
-    <button data-id="${esc(k.id)}" data-name="${esc(k.name)}" onclick="removePasskey(this)" title="Remove" class="btn !p-1 ml-auto text-rose-400 hover:text-rose-600 ${keys.length < 2 ? 'invisible' : ''}"><svg class="w-3.5 h-3.5"><use href="#i-x"/></svg></button></li>`).join('');
-}
-
-function addPasskey(btn) {
-  return busy(btn, async () => {
-    const {token, options} = await api('/api/auth/register/options', {});
-    const cred = await navigator.credentials.create({publicKey: PublicKeyCredential.parseCreationOptionsFromJSON(options)});
-    await api('/api/auth/register/verify', {token, credential: cred.toJSON(), name: $('keyName').value});
-    $('keyName').value = '';
-    await loadPasskeys(); toast('passkey added');
-  });
-}
-
-function removePasskey(btn) {
-  if (!confirm(`Remove passkey ${btn.dataset.name}?`)) return;
-  return busy(btn, async () => {
-    const r = await fetch('/api/auth/passkeys/' + encodeURIComponent(btn.dataset.id), {method: 'DELETE'});
-    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
-    await loadPasskeys((await r.json()).passkeys); toast('passkey removed');
-  });
-}
-
+// ---------- login ----------
 async function logout() {
   await fetch('/api/auth/logout', {method: 'POST'});
   location.href = '/login';
