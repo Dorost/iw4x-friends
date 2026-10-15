@@ -14,6 +14,8 @@
 // die), then it moves to another random living player.
 // sv_funpotato N: one random player carries a bomb that explodes after N seconds; a kill
 // passes it to someone else.
+// sv_funairkill N: every Nth kill hands out a random handheld aircraft weapon (level.airWeapons),
+// replacing the previous one.
 init()
 {
 	if ( getDvarInt( "sv_hangout" ) )
@@ -24,7 +26,9 @@ init()
 	level.funLottery = getDvarInt( "sv_funlottery" );
 	level.funRotate = getDvarInt( "sv_funrotate" );
 	level.funPotato = getDvarInt( "sv_funpotato" );
-	if ( !level.funWeaponMode && !level.funAmmo && !level.funLottery && !level.funRotate && !level.funPotato )
+	level.funAirKill = getDvarInt( "sv_funairkill" );
+	if ( !level.funWeaponMode && !level.funAmmo && !level.funLottery && !level.funRotate && !level.funPotato
+		&& !level.funAirKill )
 		return;
 
 	snipers = "cheytac_mp barrett_mp wa2000_mp m21_mp";
@@ -59,6 +63,9 @@ init()
 	level thread onConnect();
 	if ( level.funPotato )
 		level thread hotPotato();
+	// the guns of the air killstreaks, as hand weapons; names for the announcement
+	level.airWeapons = strTok( "remotemissile_projectile_mp harrier_20mm_mp cobra_player_minigun_mp cobra_20mm_mp pavelow_minigun_mp ac130_105mm_mp ac130_40mm_mp ac130_25mm_mp", " " );
+	level.airNames = strTok( "Predator missile,Harrier cannon,Chopper gunner minigun,Attack helicopter gun,Pave Low minigun,AC-130 105mm,AC-130 40mm,AC-130 25mm", "," );
 	// pointless when everyone already has the cannon
 	if ( level.funRotate && level.funWeaponMode != 10 )
 		level thread rotateCannon();
@@ -87,6 +94,9 @@ onSpawn()
 		// pointless when everyone already has the cannon
 		if ( level.funLottery && level.funWeaponMode != 10 && randomInt( level.funLottery ) == 0 )
 			self giveLotteryCannon();
+		// gun game takes all weapons on every kill: it would drop the air weapon right away
+		if ( level.funAirKill && level.funWeaponMode != 15 )
+			self thread airPerKill();
 		// no endless ammo for modes that live off having none
 		if ( level.funAmmo && level.funWeaponMode != 1 && level.funWeaponMode != 9 )
 			self thread refillAmmo();
@@ -277,6 +287,30 @@ hotPotato()
 				player iPrintLnBold( carrier.name + " exploded!" );
 		}
 		wait 2;
+	}
+}
+
+// air support per kill: every level.funAirKill kills swap the last air weapon for a random one
+airPerKill()
+{
+	self endon( "disconnect" );
+	self endon( "death" );
+
+	kills = self.pers[ "kills" ];
+	for ( ;; )
+	{
+		wait 0.1;
+		if ( self.pers[ "kills" ] - kills < level.funAirKill )
+			continue;
+		kills = self.pers[ "kills" ];
+		if ( isDefined( self.airWeapon ) && self hasWeapon( self.airWeapon ) )
+			self takeWeapon( self.airWeapon );
+		i = randomInt( level.airWeapons.size );
+		self.airWeapon = level.airWeapons[ i ];
+		self giveWeapon( self.airWeapon );
+		self giveMaxAmmo( self.airWeapon );
+		self switchToWeapon( self.airWeapon );
+		self iPrintLnBold( "Air support: " + level.airNames[ i ] + "!" );
 	}
 }
 

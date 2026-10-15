@@ -128,6 +128,8 @@ FUN_RULES = {
                      {"0": "off", "30": "30s each", "60": "60s each", "120": "2 min each"}),
     "sv_funpotato": ("Hot potato", "0", "one random player carries a bomb: get a kill to pass it on, or explode (weapons.gsc)",
                      {"0": "off", "15": "15s fuse", "20": "20s fuse", "30": "30s fuse"}),
+    "sv_funairkill": ("Air support per kill", "0", "kills hand out a random handheld aircraft gun: predator, harrier, choppers, AC-130 (weapons.gsc)",
+                      {"0": "off", "1": "every kill", "2": "every 2 kills", "3": "every 3 kills"}),
     "scr_game_hardpoints": ("Killstreaks", "1", "killstreak rewards", ON_OFF),
     "scr_game_perks": ("Perks", "1", "perks from classes", ON_OFF),
     "scr_game_allowkillcam": ("Killcam", "1", "replay of your death", ON_OFF),
@@ -205,6 +207,7 @@ FUN_PRESETS = {
                           {"sv_funweapons": "2", "g_gravity": "100", "jump_height": "200", **NO_FALL_DAMAGE}),
         "Roulette": ("random weapon every spawn", {"sv_funweapons": "7"}),
         "Hot potato": ("one player carries a 20s bomb: get a kill or explode", {"sv_funpotato": "20"}),
+        "Air raid": ("every kill hands out a random aircraft gun, endless ammo", {"sv_funairkill": "1", "sv_funammo": "1"}),
         "Spray and pray": ("random weapon every spawn, ammo never runs out",
                            {"sv_funweapons": "7", "sv_funammo": "1"}),
         "Old school": ("CoD classic: no killstreaks, no perks, high jumps, no fall damage",
@@ -239,8 +242,11 @@ GIVE_WEAPONS = {
     "AK-47": "ak47_mp", "Vector": "kriss_mp", "UMP45": "ump45_mp", "AA-12": "aa12_mp", "SPAS-12": "spas12_mp",
     "M240": "m240_mp", "Desert Eagle": "deserteagle_mp", "Akimbo 1887s": "model1887_akimbo_mp",
     "RPG-7": "rpg_mp", "Javelin": "javelin_mp", "Riot shield": "riotshield_mp",
-    # the AC-130 gunship's 105mm cannon as a hand weapon
-    "AC-130 cannon": "ac130_105mm_mp",
+    # the guns of the air killstreaks as hand weapons
+    "AC-130 cannon": "ac130_105mm_mp", "AC-130 40mm": "ac130_40mm_mp", "AC-130 25mm": "ac130_25mm_mp",
+    "Predator missile": "remotemissile_projectile_mp", "Harrier cannon": "harrier_20mm_mp",
+    "Chopper gunner minigun": "cobra_player_minigun_mp", "Attack heli gun": "cobra_20mm_mp",
+    "Pave Low minigun": "pavelow_minigun_mp",
 }
 # Our own playlist file: the stock playlists set "rule party_minplayers 4" (re-applied on
 # every return to the lobby), so with enough players the lobby starts the next playlist
