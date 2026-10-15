@@ -118,7 +118,7 @@ FUN_RULES = {
     "sv_funweapons": ("Weapons", "0", "everyone gets a random weapon of this kind on every spawn (weapons.gsc)",
                       {"0": "classes (normal)", "1": "knife only", "2": "snipers only", "3": "pistols only",
                        "4": "shotguns only", "5": "rockets (refill)", "6": "riot shields", "7": "roulette (any)",
-                       "8": "akimbo", "9": "one in the chamber"}),
+                       "8": "akimbo", "9": "one in the chamber", "10": "AC-130 cannons"}),
     "sv_funammo": ("Infinite ammo", "0", "magazine stays full, no reloading, for everyone (weapons.gsc)", ON_OFF),
     "scr_game_hardpoints": ("Killstreaks", "1", "killstreak rewards", ON_OFF),
     "scr_game_perks": ("Perks", "1", "perks from classes", ON_OFF),
@@ -172,6 +172,9 @@ FUN_PRESETS = {
                                {"sv_funweapons": "9", "scr_player_maxhealth": "30", "scr_game_hardpoints": "0",
                                 "scr_game_perks": "0"}),
         "Shield bash": ("riot shields only, melee to kill", {"sv_funweapons": "6", "scr_game_hardpoints": "0"}),
+        "Gunship war": ("everyone holds an AC-130 cannon, floaty jumps, blasts launch you",
+                        {"sv_funweapons": "10", "g_knockback": "5000", "g_gravity": "400", "jump_height": "80",
+                         "scr_game_hardpoints": "0", **NO_FALL_DAMAGE}),
     },
     "Party": {
         "Rocket ride": ("explosions launch players across the map",

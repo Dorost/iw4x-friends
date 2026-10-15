@@ -4,7 +4,7 @@
 // picked at random per spawn.
 //   0 classes, 1 knife only, 2 snipers, 3 pistols, 4 shotguns, 5 launchers (ammo refills),
 //   6 riot shields, 7 roulette (any weapon), 8 akimbo, 9 one in the chamber (Deagle with
-//   one bullet, one more per kill)
+//   one bullet, one more per kill), 10 AC-130 cannons (ammo refills)
 // sv_funammo 1: the weapon in hand never runs out of ammo, no reloading.
 init()
 {
@@ -35,6 +35,7 @@ init()
 	case 6: list = "riotshield_mp"; break;
 	case 8: list = akimbo; break;
 	case 9: list = "deserteagle_mp"; break;
+	case 10: list = "ac130_105mm_mp"; break;  // the gunship's 105mm cannon in hand
 	default: list = snipers + " " + pistols + " " + shotguns + " " + rifles + " " + smgs + " " + lmgs + " rpg_mp riotshield_mp"; break;
 	}
 	level.funWeapons = strTok( list, " " );
@@ -82,6 +83,7 @@ giveFunWeapon()
 		self setWeaponAmmoStock( weapon, 0 );
 		break;
 	case 5:
+	case 10:
 		self thread refillAmmo();
 		break;
 	case 9:
