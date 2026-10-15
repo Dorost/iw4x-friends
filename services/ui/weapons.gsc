@@ -5,7 +5,7 @@
 //   0 classes, 1 knife only, 2 snipers, 3 pistols, 4 shotguns, 5 launchers (ammo refills),
 //   6 riot shields, 7 roulette (any weapon), 8 akimbo, 9 one in the chamber (Deagle with
 //   one bullet, one more per kill)
-// sv_funammo 1: the weapon in hand never runs out of ammo.
+// sv_funammo 1: the weapon in hand never runs out of ammo, no reloading.
 init()
 {
 	if ( getDvarInt( "sv_hangout" ) )
@@ -92,7 +92,7 @@ giveFunWeapon()
 	}
 }
 
-// the weapon in hand gets full ammo every few seconds, as long as the player lives
+// the weapon in hand stays full, magazine included (no reloading), as long as the player lives
 refillAmmo()
 {
 	self endon( "disconnect" );
@@ -100,10 +100,13 @@ refillAmmo()
 
 	for ( ;; )
 	{
-		wait 2;
+		wait 0.2;
 		weapon = self getCurrentWeapon();
 		if ( weapon != "none" )
+		{
 			self giveMaxAmmo( weapon );
+			self setWeaponAmmoClip( weapon, weaponClipSize( weapon ) );
+		}
 	}
 }
 

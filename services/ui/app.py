@@ -119,7 +119,7 @@ FUN_RULES = {
                       {"0": "classes (normal)", "1": "knife only", "2": "snipers only", "3": "pistols only",
                        "4": "shotguns only", "5": "rockets (refill)", "6": "riot shields", "7": "roulette (any)",
                        "8": "akimbo", "9": "one in the chamber"}),
-    "sv_funammo": ("Infinite ammo", "0", "magazines refill by themselves (weapons.gsc)", ON_OFF),
+    "sv_funammo": ("Infinite ammo", "0", "magazine stays full, no reloading, for everyone (weapons.gsc)", ON_OFF),
     "scr_game_hardpoints": ("Killstreaks", "1", "killstreak rewards", ON_OFF),
     "scr_game_perks": ("Perks", "1", "perks from classes", ON_OFF),
     "scr_game_allowkillcam": ("Killcam", "1", "replay of your death", ON_OFF),
@@ -216,6 +216,8 @@ GIVE_WEAPONS = {
     "AK-47": "ak47_mp", "Vector": "kriss_mp", "UMP45": "ump45_mp", "AA-12": "aa12_mp", "SPAS-12": "spas12_mp",
     "M240": "m240_mp", "Desert Eagle": "deserteagle_mp", "Akimbo 1887s": "model1887_akimbo_mp",
     "RPG-7": "rpg_mp", "Javelin": "javelin_mp", "Riot shield": "riotshield_mp",
+    # the AC-130 gunship's 105mm cannon as a hand weapon
+    "AC-130 cannon": "ac130_105mm_mp",
 }
 # Our own playlist file: the stock playlists set "rule party_minplayers 4" (re-applied on
 # every return to the lobby), so with enough players the lobby starts the next playlist
