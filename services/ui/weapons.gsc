@@ -7,6 +7,7 @@
 //   one bullet, one more per kill), 10 AC-130 cannons (ammo refills)
 // sv_funammo 1: the weapon in hand never runs out of ammo, no reloading.
 // sv_funlottery N: every spawn has a 1 in N chance to come with an extra AC-130 cannon.
+// sv_funrotate N: every N seconds the AC-130 cannon moves to another random living player.
 init()
 {
 	if ( getDvarInt( "sv_hangout" ) )
@@ -15,7 +16,8 @@ init()
 	level.funWeaponMode = getDvarInt( "sv_funweapons" );
 	level.funAmmo = getDvarInt( "sv_funammo" );
 	level.funLottery = getDvarInt( "sv_funlottery" );
-	if ( !level.funWeaponMode && !level.funAmmo && !level.funLottery )
+	level.funRotate = getDvarInt( "sv_funrotate" );
+	if ( !level.funWeaponMode && !level.funAmmo && !level.funLottery && !level.funRotate )
 		return;
 
 	snipers = "cheytac_mp barrett_mp wa2000_mp m21_mp";
@@ -42,6 +44,9 @@ init()
 	}
 	level.funWeapons = strTok( list, " " );
 	level thread onConnect();
+	// pointless when everyone already has the cannon
+	if ( level.funRotate && level.funWeaponMode != 10 )
+		level thread rotateCannon();
 }
 
 onConnect()
@@ -106,6 +111,37 @@ giveLotteryCannon()
 	self giveMaxAmmo( "ac130_105mm_mp" );
 	self switchToWeapon( "ac130_105mm_mp" );
 	self iPrintLnBold( "You won the AC-130 cannon!" );
+}
+
+// AC-130 rotation: one holder at a time, the cannon moves on every level.funRotate seconds
+rotateCannon()
+{
+	level endon( "game_ended" );
+
+	for ( ;; )
+	{
+		wait level.funRotate;
+		holder = level.cannonHolder;
+		if ( isDefined( holder ) && isAlive( holder ) && holder hasWeapon( "ac130_105mm_mp" ) )
+		{
+			inHand = holder getCurrentWeapon() == "ac130_105mm_mp";
+			holder takeWeapon( "ac130_105mm_mp" );
+			primaries = holder getWeaponsListPrimaries();
+			if ( inHand && primaries.size )
+				holder switchToWeapon( primaries[ 0 ] );
+		}
+
+		candidates = [];
+		foreach ( player in level.players )
+			if ( isAlive( player ) && ( !isDefined( holder ) || player != holder ) )
+				candidates[ candidates.size ] = player;
+		if ( !candidates.size )
+			continue;
+
+		level.cannonHolder = candidates[ randomInt( candidates.size ) ];
+		level.cannonHolder giveLotteryCannon();
+		iPrintLn( level.cannonHolder.name + " has the AC-130 cannon" );
+	}
 }
 
 // the weapon in hand stays full, magazine included (no reloading), as long as the player lives
