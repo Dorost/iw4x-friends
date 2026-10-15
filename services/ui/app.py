@@ -193,6 +193,16 @@ LOBBY_ARGS = ["+set", "party_enable", "1"]
 LOBBY_GSC = Path(__file__).resolve().parent / "lobby.gsc"
 # weapon modes (knife only, snipers, ...) from the Fun panel's sv_funweapons
 WEAPONS_GSC = Path(__file__).resolve().parent / "weapons.gsc"
+# per-player actions from the Players table (wallhack, radar, kill, ...) via sv_uicmd
+PLAYERS_GSC = Path(__file__).resolve().parent / "players.gsc"
+PLAYER_ACTIONS = {"esp", "radar", "kill", "launch", "up", "give"}
+# weapons the Players table can give: name -> weapon id
+GIVE_WEAPONS = {
+    "Intervention": "cheytac_mp", "Barrett .50cal": "barrett_mp", "ACR": "masada_mp", "M4A1": "m4_mp",
+    "AK-47": "ak47_mp", "Vector": "kriss_mp", "UMP45": "ump45_mp", "AA-12": "aa12_mp", "SPAS-12": "spas12_mp",
+    "M240": "m240_mp", "Desert Eagle": "deserteagle_mp", "Akimbo 1887s": "model1887_akimbo_mp",
+    "RPG-7": "rpg_mp", "Javelin": "javelin_mp", "Riot shield": "riotshield_mp",
+}
 # Our own playlist file: the stock playlists set "rule party_minplayers 4" (re-applied on
 # every return to the lobby), so with enough players the lobby starts the next playlist
 # map by itself, and that list includes DLC maps that aren't installed.
@@ -384,7 +394,7 @@ def server_pids() -> list[int]:
 
 def install_lobby_gsc() -> None:
     """The server loads custom scripts on every map load, so this also reaches a running server."""
-    for src in (LOBBY_GSC, WEAPONS_GSC):
+    for src in (LOBBY_GSC, WEAPONS_GSC, PLAYERS_GSC):
         dest = GAME_DIR / "userraw" / "scripts" / "mp" / src.name
         if GAME_DIR.exists() and (not dest.exists() or dest.read_bytes() != src.read_bytes()):
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -536,6 +546,13 @@ def live_status() -> dict | None:
                 "name": strip_colors(m[5]), "address": m[7], "bot": m[4].startswith("bot"),
             })
     in_game = status.lstrip().startswith("map:")
+    if in_game and players:
+        # who has wallhack / radar on (players.gsc): "3:e 5:er "
+        m = re.search(r'"sv_uistate" is: "(.*?)\^7"', rcon("sv_uistate"))
+        flags = dict(f.split(":", 1) for f in (m[1].split() if m else []) if ":" in f)
+        for p in players:
+            p["esp"] = "e" in flags.get(str(p["num"]), "")
+            p["radar"] = "r" in flags.get(str(p["num"]), "")
     lobby_count = 0
     if not in_game:
         # IW4x can't list lobby members, but getinfo counts them
@@ -689,6 +706,7 @@ def state():
         "maps": installed_maps(),
         "gametypes": gametypes(),
         "bot_skills": BOT_SKILLS,
+        "give_weapons": GIVE_WEAPONS,
         "fun_dvars": FUN_DVARS,
         "fun_rules": FUN_RULES,
         "fun_presets": {**FUN_PRESETS, "Custom": custom_presets()},
@@ -760,6 +778,25 @@ def server_action(action: str):
         start_server()
     else:
         raise HTTPException(404)
+    changed()
+    return {"ok": True}
+
+
+class PlayerAction(BaseModel):
+    num: int
+    action: str
+    weapon: str = ""
+
+
+@app.post("/api/player")
+def player_action(a: PlayerAction):
+    """Runs a Players table action in the match through players.gsc."""
+    if a.action not in PLAYER_ACTIONS or (a.action == "give" and a.weapon not in GIVE_WEAPONS.values()):
+        raise HTTPException(400, "invalid action")
+    live = live_status()
+    if not live or not live["in_game"]:
+        raise HTTPException(409, "no match running")
+    rcon(f'set sv_uicmd "{a.action} {a.num} {a.weapon}"')
     changed()
     return {"ok": True}
 
