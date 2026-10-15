@@ -4,11 +4,16 @@
 // picked at random per spawn.
 //   0 classes, 1 knife only, 2 snipers, 3 pistols, 4 shotguns, 5 launchers (ammo refills),
 //   6 riot shields, 7 roulette (any weapon), 8 akimbo, 9 one in the chamber (Deagle with
-//   one bullet, one more per kill), 10 AC-130 cannons (ammo refills)
+//   one bullet, one more per kill), 10 AC-130 cannons (ammo refills), 11 semtex (knife
+//   plus semtex that refills), 12 bomberman (knife plus C4 or claymores, refill), 13 throwing
+//   knives (refill), 14 noob tubes (Thumpers, ammo refills), 15 gun game (every kill moves
+//   you to the next weapon of level.gunGame, a kill with the last one wins)
 // sv_funammo 1: the weapon in hand never runs out of ammo, no reloading.
 // sv_funlottery N: every spawn has a 1 in N chance to come with an extra AC-130 cannon.
 // sv_funrotate N: one player at a time holds the AC-130 cannon for N seconds (or until they
 // die), then it moves to another random living player.
+// sv_funpotato N: one random player carries a bomb that explodes after N seconds; a kill
+// passes it to someone else.
 init()
 {
 	if ( getDvarInt( "sv_hangout" ) )
@@ -18,7 +23,8 @@ init()
 	level.funAmmo = getDvarInt( "sv_funammo" );
 	level.funLottery = getDvarInt( "sv_funlottery" );
 	level.funRotate = getDvarInt( "sv_funrotate" );
-	if ( !level.funWeaponMode && !level.funAmmo && !level.funLottery && !level.funRotate )
+	level.funPotato = getDvarInt( "sv_funpotato" );
+	if ( !level.funWeaponMode && !level.funAmmo && !level.funLottery && !level.funRotate && !level.funPotato )
 		return;
 
 	snipers = "cheytac_mp barrett_mp wa2000_mp m21_mp";
@@ -41,10 +47,18 @@ init()
 	case 8: list = akimbo; break;
 	case 9: list = "deserteagle_mp"; break;
 	case 10: list = "ac130_105mm_mp"; break;  // the gunship's 105mm cannon in hand
+	case 11:
+	case 12:
+	case 13: list = "usp_tactical_mp"; break;  // knife in hand, the fun is the offhand item
+	case 14: list = "m79_mp"; break;  // Thumper grenade launcher
+	case 15: list = "usp_mp"; break;  // not used: gun game hands out level.gunGame in order
 	default: list = snipers + " " + pistols + " " + shotguns + " " + rifles + " " + smgs + " " + lmgs + " rpg_mp riotshield_mp"; break;
 	}
 	level.funWeapons = strTok( list, " " );
+	level.gunGame = strTok( "usp_mp deserteagle_mp ump45_mp kriss_mp p90_mp m4_mp ak47_mp scar_mp aa12_mp spas12_mp m240_mp barrett_mp cheytac_mp rpg_mp ac130_105mm_mp usp_tactical_mp", " " );
 	level thread onConnect();
+	if ( level.funPotato )
+		level thread hotPotato();
 	// pointless when everyone already has the cannon
 	if ( level.funRotate && level.funWeaponMode != 10 )
 		level thread rotateCannon();
@@ -82,6 +96,12 @@ onSpawn()
 giveFunWeapon()
 {
 	weapon = level.funWeapons[ randomInt( level.funWeapons.size ) ];
+	if ( level.funWeaponMode == 15 )
+	{
+		if ( !isDefined( self.gunLevel ) )
+			self.gunLevel = 0;
+		weapon = level.gunGame[ self.gunLevel ];
+	}
 	self takeAllWeapons();
 	self giveWeapon( weapon, 0, level.funWeaponMode == 8 );
 	self giveMaxAmmo( weapon );
@@ -95,13 +115,168 @@ giveFunWeapon()
 		break;
 	case 5:
 	case 10:
+	case 14:
 		self thread refillAmmo();
+		break;
+	case 11:
+		self emptyKnife( weapon );
+		self giveOffhand( "semtex_mp", "other" );
+		break;
+	case 12:
+		self emptyKnife( weapon );
+		if ( randomInt( 2 ) )
+			self giveOffhand( "c4_mp", "other" );
+		else
+			self giveOffhand( "claymore_mp", "other" );
+		break;
+	case 13:
+		self emptyKnife( weapon );
+		self giveOffhand( "throwingknife_mp", "throwingknife" );
+		break;
+	case 15:
+		if ( weapon == "usp_tactical_mp" )
+			self emptyKnife( weapon );
+		self thread gunGameLoop();
 		break;
 	case 9:
 		self setWeaponAmmoClip( weapon, 1 );
 		self setWeaponAmmoStock( weapon, 0 );
 		self thread bulletPerKill( weapon );
 		break;
+	}
+}
+
+// the knife-only USP: no bullets, melee only
+emptyKnife( weapon )
+{
+	self setWeaponAmmoClip( weapon, 0 );
+	self setWeaponAmmoStock( weapon, 0 );
+}
+
+// a lethal (semtex, C4, claymore, throwing knife) that refills itself while the player lives
+giveOffhand( item, offhandClass )
+{
+	self setOffhandPrimaryClass( offhandClass );
+	self giveWeapon( item );
+	self giveMaxAmmo( item );
+	self thread refillOffhand( item );
+}
+
+refillOffhand( item )
+{
+	self endon( "disconnect" );
+	self endon( "death" );
+
+	for ( ;; )
+	{
+		wait 1;
+		self giveMaxAmmo( item );
+		self setWeaponAmmoClip( item, weaponClipSize( item ) );
+	}
+}
+
+// gun game: every kill hands out the next weapon of level.gunGame; a kill with the last wins
+gunGameLoop()
+{
+	self endon( "disconnect" );
+	self endon( "death" );
+
+	kills = self.pers[ "kills" ];
+	for ( ;; )
+	{
+		wait 0.1;
+		if ( self.pers[ "kills" ] <= kills )
+			continue;
+		kills = self.pers[ "kills" ];
+		self.gunLevel++;
+		if ( self.gunLevel >= level.gunGame.size )
+		{
+			self gunGameWin();
+			return;
+		}
+		weapon = level.gunGame[ self.gunLevel ];
+		self takeAllWeapons();
+		self giveWeapon( weapon );
+		self giveMaxAmmo( weapon );
+		if ( weapon == "usp_tactical_mp" )
+			self emptyKnife( weapon );
+		self switchToWeapon( weapon );
+		self iPrintLnBold( "Gun game: level " + ( self.gunLevel + 1 ) + " of " + level.gunGame.size );
+	}
+}
+
+gunGameWin()
+{
+	if ( isDefined( level.gunGameWon ) )
+		return;
+	level.gunGameWon = true;
+	foreach ( player in level.players )
+		player iPrintLnBold( self.name + " won gun game!" );
+	winner = self;
+	if ( level.teamBased )
+		winner = self.team;
+	level thread maps\mp\gametypes\_gamelogic::endGame( winner, game[ "strings" ][ "score_limit_reached" ] );
+}
+
+// hot potato: one carrier at a time with a bomb timer; a kill passes the bomb to someone
+// else, the timer running out blows the carrier up (the AC-130 shell makes the explosion)
+hotPotato()
+{
+	level endon( "game_ended" );
+
+	last = undefined;
+	for ( ;; )
+	{
+		candidates = [];
+		foreach ( player in level.players )
+			if ( isAlive( player ) && ( !isDefined( last ) || player != last ) )
+				candidates[ candidates.size ] = player;
+		if ( !candidates.size )
+		{
+			last = undefined;  // a lone player may get it again
+			wait 1;
+			continue;
+		}
+
+		carrier = candidates[ randomInt( candidates.size ) ];
+		foreach ( player in level.players )
+			if ( player != carrier )
+				player iPrintLnBold( carrier.name + " has the bomb!" );
+		carrier iPrintLnBold( "You have the bomb! Get a kill within " + level.funPotato + "s or explode" );
+		timer = newClientHudElem( carrier );
+		timer.alignX = "center";
+		timer.horzAlign = "center";
+		timer.y = 80;
+		timer.fontScale = 2;
+		timer.color = ( 1, 0.35, 0.25 );
+		timer.archived = false;
+		timer setTimer( level.funPotato );
+
+		kills = carrier.pers[ "kills" ];
+		start = getTime();
+		while ( getTime() - start < level.funPotato * 1000 && isDefined( carrier ) && isAlive( carrier )
+			&& carrier.pers[ "kills" ] == kills )
+			wait 0.1;
+		if ( isDefined( timer ) )
+			timer destroy();
+
+		last = undefined;
+		if ( isDefined( carrier ) && isAlive( carrier ) )
+		{
+			if ( carrier.pers[ "kills" ] != kills )
+			{
+				carrier iPrintLnBold( "Bomb passed on!" );
+				last = carrier;
+				continue;
+			}
+			magicBullet( "ac130_105mm_mp", carrier.origin + ( 0, 0, 50 ), carrier.origin, carrier );
+			wait 0.1;
+			if ( isDefined( carrier ) && isAlive( carrier ) )
+				carrier suicide();
+			foreach ( player in level.players )
+				player iPrintLnBold( carrier.name + " exploded!" );
+		}
+		wait 2;
 	}
 }
 
@@ -171,7 +346,8 @@ refillAmmo()
 	{
 		wait 0.2;
 		weapon = self getCurrentWeapon();
-		if ( weapon != "none" )
+		// the knife-only USP stays without bullets
+		if ( weapon != "none" && weapon != "usp_tactical_mp" )
 		{
 			self giveMaxAmmo( weapon );
 			self setWeaponAmmoClip( weapon, weaponClipSize( weapon ) );
