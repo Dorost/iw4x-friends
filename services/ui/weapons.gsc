@@ -7,7 +7,8 @@
 //   one bullet, one more per kill), 10 AC-130 cannons (ammo refills)
 // sv_funammo 1: the weapon in hand never runs out of ammo, no reloading.
 // sv_funlottery N: every spawn has a 1 in N chance to come with an extra AC-130 cannon.
-// sv_funrotate N: every N seconds the AC-130 cannon moves to another random living player.
+// sv_funrotate N: one player at a time holds the AC-130 cannon for N seconds (or until they
+// die), then it moves to another random living player.
 init()
 {
 	if ( getDvarInt( "sv_hangout" ) )
@@ -113,14 +114,40 @@ giveLotteryCannon()
 	self iPrintLnBold( "You won the AC-130 cannon!" );
 }
 
-// AC-130 rotation: one holder at a time, the cannon moves on every level.funRotate seconds
+// AC-130 rotation: one holder at a time; the cannon moves on after level.funRotate seconds,
+// or right away when the holder dies or leaves, and every new holder gets the full time
 rotateCannon()
 {
 	level endon( "game_ended" );
 
 	for ( ;; )
 	{
-		wait level.funRotate;
+		holder = level.cannonHolder;
+		candidates = [];
+		foreach ( player in level.players )
+			if ( isAlive( player ) && ( !isDefined( holder ) || player != holder ) )
+				candidates[ candidates.size ] = player;
+		// nobody else alive: the same player may keep it
+		if ( !candidates.size && isDefined( holder ) && isAlive( holder ) )
+			candidates[ 0 ] = holder;
+		if ( !candidates.size )
+		{
+			wait 1;
+			continue;
+		}
+
+		level.cannonHolder = candidates[ randomInt( candidates.size ) ];
+		level.cannonHolder giveLotteryCannon();
+		// big, centered, for everyone (the killfeed line was easy to miss)
+		foreach ( player in level.players )
+			if ( player != level.cannonHolder )
+				player iPrintLnBold( level.cannonHolder.name + " has the AC-130 cannon!" );
+
+		// a player who leaves becomes undefined, one who dies stops being alive
+		start = getTime();
+		while ( getTime() - start < level.funRotate * 1000 && isDefined( level.cannonHolder ) && isAlive( level.cannonHolder ) )
+			wait 0.25;
+
 		holder = level.cannonHolder;
 		if ( isDefined( holder ) && isAlive( holder ) && holder hasWeapon( "ac130_105mm_mp" ) )
 		{
@@ -129,18 +156,8 @@ rotateCannon()
 			primaries = holder getWeaponsListPrimaries();
 			if ( inHand && primaries.size )
 				holder switchToWeapon( primaries[ 0 ] );
+			holder iPrintLnBold( "Time's up, the AC-130 cannon moves on" );
 		}
-
-		candidates = [];
-		foreach ( player in level.players )
-			if ( isAlive( player ) && ( !isDefined( holder ) || player != holder ) )
-				candidates[ candidates.size ] = player;
-		if ( !candidates.size )
-			continue;
-
-		level.cannonHolder = candidates[ randomInt( candidates.size ) ];
-		level.cannonHolder giveLotteryCannon();
-		iPrintLn( level.cannonHolder.name + " has the AC-130 cannon" );
 	}
 }
 
