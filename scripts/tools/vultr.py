@@ -10,7 +10,9 @@
   uv run scripts/tools/vultr.py password   print the web UI password and copy it
 
 Needs VULTR_API_KEY (Vultr: Account -> API) and an SSH key in ~/.ssh. The web UI
-is served on https://<ip>.sslip.io, so no domain is needed. setup.sh asks for the
+is served on https://<ip>.sslip.io, so no domain is needed. With VPS_DOMAIN and
+CLOUDFLARE_DNS_TOKEN set, up points that name at the VPS (DNS only, the game needs
+plain UDP) and the web UI and players use it instead. setup.sh asks for the
 setup password (to download the game) unless MW_GAME_URL / MW_MAPS_URL are set.
 """
 
@@ -92,10 +94,47 @@ def ssh(
     )
 
 
-def ui_password(ip: str) -> str:
+def remote_env(ip: str, key: str) -> str:
     return ssh(
-        ip, f"sed -n 's/^UI_PASSWORD=//p' {REMOTE_DIR}/.env", capture_output=True, text=True
+        ip, f"sed -n 's/^{key}=//p' {REMOTE_DIR}/.env", capture_output=True, text=True
     ).stdout.strip()  # fmt: skip
+
+
+def ui_password(ip: str) -> str:
+    return remote_env(ip, "UI_PASSWORD")
+
+
+def cloudflare(method: str, path: str, body: dict | None = None) -> dict:
+    req = urllib.request.Request(
+        "https://api.cloudflare.com/client/v4" + path,
+        method=method,
+        data=json.dumps(body).encode() if body else None,
+        headers={
+            "Authorization": f"Bearer {os.environ['CLOUDFLARE_DNS_TOKEN']}",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return json.loads(resp.read())["result"]
+    except urllib.error.HTTPError as e:
+        sys.exit(f"Cloudflare API {method} {path}: {e.code} {e.read().decode()}")
+
+
+def point_dns(name: str, ip: str) -> None:
+    """A record name -> ip, DNS only (Cloudflare's proxy doesn't pass the game's UDP)."""
+    labels = name.split(".")
+    zone = next(  # the zone is the longest suffix of name that Cloudflare knows
+        (z for i in range(len(labels) - 1) for z in cloudflare("GET", f"/zones?name={'.'.join(labels[i:])}")),
+        None,
+    ) or sys.exit(f"no Cloudflare zone for {name} (check CLOUDFLARE_DNS_TOKEN)")
+    record = {"type": "A", "name": name, "content": ip, "ttl": 300, "proxied": False}
+    existing = cloudflare("GET", f"/zones/{zone['id']}/dns_records?type=A&name={name}")
+    if existing:
+        cloudflare("PATCH", f"/zones/{zone['id']}/dns_records/{existing[0]['id']}", record)
+    else:
+        cloudflare("POST", f"/zones/{zone['id']}/dns_records", record)
+    print(f"DNS: {name} -> {ip}")
 
 
 def up() -> None:
@@ -147,7 +186,14 @@ def up() -> None:
     ).stdout  # fmt: skip
     ssh(ip, f"mkdir -p {REMOTE_DIR} && tar -xzf - -C {REMOTE_DIR}", input=tar, check=True)  # fmt: skip
 
-    domain = f"{ip}.sslip.io"
+    domain = os.environ.get("VPS_DOMAIN") or f"{ip}.sslip.io"
+    if os.environ.get("VPS_DOMAIN") and os.environ.get("CLOUDFLARE_DNS_TOKEN"):
+        point_dns(domain, ip)
+    set_domain = (  # VPS_DOMAIN replaces the domain; otherwise only a new .env gets one
+        f"touch .env && sed -i '/^DOMAIN=/d' .env && echo 'DOMAIN={domain}' >> .env"
+        if os.environ.get("VPS_DOMAIN")
+        else f"([ -f .env ] || printf 'DOMAIN={domain}\\n' > .env)"
+    )
     env = " ".join(
         f"{k}={shlex.quote(os.environ[k])}"
         for k in ("MW_GAME_URL", "MW_MAPS_URL")
@@ -155,13 +201,13 @@ def up() -> None:
     )
     ssh(
         ip,
-        f"cd {REMOTE_DIR} && ([ -f .env ] || printf 'DOMAIN={domain}\\n' > .env)"
+        f"cd {REMOTE_DIR} && {set_domain}"
         f" && {env} bash scripts/linux/setup.sh && docker compose up -d --build",
         tty=True,
         check=True,
     )
     print(f"\nWeb UI:   https://{domain}  (password: {ui_password(ip)})")
-    print(f"Players:  connect {ip}:28960")
+    print(f"Players:  connect {domain}")
     print(f"SSH:      ssh root@{ip}")
 
 
@@ -185,8 +231,9 @@ def status() -> None:
     print(
         f"{inst['status']} / {inst['power_status']}  {inst['plan']} in {inst['region']}"
     )
-    print(f"Web UI:   https://{ip}.sslip.io  (password: {ui_password(ip)})")
-    print(f"Players:  connect {ip}:28960")
+    domain = remote_env(ip, "DOMAIN") or f"{ip}.sslip.io"
+    print(f"Web UI:   https://{domain}  (password: {ui_password(ip)})")
+    print(f"Players:  connect {domain}")
 
 
 def password() -> None:

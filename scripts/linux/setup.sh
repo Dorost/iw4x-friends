@@ -272,4 +272,4 @@ warn "if your provider has its own firewall (security group), open $port/udp and
 step "Done"
 echo "    Start it:   task up"
 echo "    Web UI:     https://$DOMAIN"
-echo "    Players:    connect $(curl -s --max-time 5 https://api.ipify.org || echo '<server-ip>'):$port"
+echo "    Players:    connect $DOMAIN$([ "$port" = 28960 ] || echo ":$port")"

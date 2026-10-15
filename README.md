@@ -91,7 +91,7 @@ Then open `https://<your-domain>`, log in with the password the setup printed, a
 
 ### On Vultr, created by script
 
-Creates the VPS (New York, high frequency 2 CPU / 4 GB), copies this repo, runs the setup and starts everything. No domain needed: the web UI gets `https://<ip>.sslip.io`.
+Creates the VPS (New York, high frequency 2 CPU / 4 GB), copies this repo, runs the setup and starts everything. No domain needed: the web UI gets `https://<ip>.sslip.io`. To use your own name instead, set `VPS_DOMAIN` and `CLOUDFLARE_DNS_TOKEN` in `.env`: `vps:up` then points the name at the VPS (DNS only) and players connect with `connect <your-name>`.
 
 1. Put your Vultr API key in `.env`: `VULTR_API_KEY=...` (Vultr: Account → API, and allow your IP there)
 2. Run `task vps:up`, type the setup password when asked. At the end it prints the web UI link, its password and the `connect` address
