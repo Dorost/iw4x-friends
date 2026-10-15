@@ -14,8 +14,8 @@
 // die), then it moves to another random living player.
 // sv_funpotato N: one random player carries a bomb that explodes after N seconds; a kill
 // passes it to someone else.
-// sv_funairkill N: every Nth kill hands out a random handheld aircraft weapon (level.airWeapons),
-// replacing the previous one.
+// sv_funairkill N: every Nth kill hands out a random air killstreak (level.airStreaks); they
+// stack up in the killstreak slot like care package rewards.
 init()
 {
 	if ( getDvarInt( "sv_hangout" ) )
@@ -63,9 +63,9 @@ init()
 	level thread onConnect();
 	if ( level.funPotato )
 		level thread hotPotato();
-	// the guns of the air killstreaks, as hand weapons; names for the announcement
-	level.airWeapons = strTok( "remotemissile_projectile_mp harrier_20mm_mp cobra_player_minigun_mp cobra_20mm_mp pavelow_minigun_mp ac130_105mm_mp ac130_40mm_mp ac130_25mm_mp", " " );
-	level.airNames = strTok( "Predator missile,Harrier cannon,Chopper gunner minigun,Attack helicopter gun,Pave Low minigun,AC-130 105mm,AC-130 40mm,AC-130 25mm", "," );
+	// air killstreaks for air support per kill; names for the announcement
+	level.airStreaks = strTok( "predator_missile harrier_airstrike helicopter helicopter_flares helicopter_minigun ac130", " " );
+	level.airNames = strTok( "Predator missile,Harrier strike,Attack helicopter,Pave Low,Chopper gunner,AC-130", "," );
 	// pointless when everyone already has the cannon
 	if ( level.funRotate && level.funWeaponMode != 10 )
 		level thread rotateCannon();
@@ -94,8 +94,7 @@ onSpawn()
 		// pointless when everyone already has the cannon
 		if ( level.funLottery && level.funWeaponMode != 10 && randomInt( level.funLottery ) == 0 )
 			self giveLotteryCannon();
-		// gun game takes all weapons on every kill: it would drop the air weapon right away
-		if ( level.funAirKill && level.funWeaponMode != 15 )
+		if ( level.funAirKill )
 			self thread airPerKill();
 		// no endless ammo for modes that live off having none
 		if ( level.funAmmo && level.funWeaponMode != 1 && level.funWeaponMode != 9 )
@@ -290,7 +289,7 @@ hotPotato()
 	}
 }
 
-// air support per kill: every level.funAirKill kills swap the last air weapon for a random one
+// air support per kill: every level.funAirKill kills add a random air killstreak to the stack
 airPerKill()
 {
 	self endon( "disconnect" );
@@ -303,14 +302,10 @@ airPerKill()
 		if ( self.pers[ "kills" ] - kills < level.funAirKill )
 			continue;
 		kills = self.pers[ "kills" ];
-		if ( isDefined( self.airWeapon ) && self hasWeapon( self.airWeapon ) )
-			self takeWeapon( self.airWeapon );
-		i = randomInt( level.airWeapons.size );
-		self.airWeapon = level.airWeapons[ i ];
-		self giveWeapon( self.airWeapon );
-		self giveMaxAmmo( self.airWeapon );
-		self switchToWeapon( self.airWeapon );
-		self iPrintLnBold( "Air support: " + level.airNames[ i ] + "!" );
+		i = randomInt( level.airStreaks.size );
+		// not earned: doesn't count toward the player's own streak, same as a care package
+		self maps\mp\killstreaks\_killstreaks::giveKillstreak( level.airStreaks[ i ], false, false, self );
+		self iPrintLnBold( "Air support: " + level.airNames[ i ] + "! Use it with the killstreak key" );
 	}
 }
 
