@@ -236,11 +236,11 @@ LOBBY_ARGS = ["+set", "party_enable", "1"]
 LOBBY_GSC = Path(__file__).resolve().parent / "lobby.gsc"
 # weapon modes (knife only, snipers, ...) from the Fun panel's sv_funweapons
 WEAPONS_GSC = Path(__file__).resolve().parent / "weapons.gsc"
-# per-player actions from the Players table (wallhack, radar, kill, ...) via sv_uicmd
+# per-player actions from the Players table (kill, launch, give, ...) via sv_uicmd
 PLAYERS_GSC = Path(__file__).resolve().parent / "players.gsc"
 # Search & Destroy extras from the Fun panel (round roulette, clutch, hunted carrier, revive)
 SD_GSC = Path(__file__).resolve().parent / "sdfun.gsc"
-PLAYER_ACTIONS = {"esp", "radar", "ammo", "clear", "kill", "launch", "up", "give"}
+PLAYER_ACTIONS = {"kill", "launch", "up", "give"}
 # weapons the Players table can give: name -> weapon id
 GIVE_WEAPONS = {
     "Intervention": "cheytac_mp", "Barrett .50cal": "barrett_mp", "ACR": "masada_mp", "M4A1": "m4_mp",
@@ -633,14 +633,6 @@ def live_status() -> dict | None:
                 "name": strip_colors(m[5]), "address": m[7], "bot": m[4].startswith("bot"),
             })
     in_game = status.lstrip().startswith("map:")
-    if in_game and players:
-        # who has wallhack / radar on (players.gsc): "3:e 5:er "
-        m = re.search(r'"sv_uistate" is: "(.*?)\^7"', rcon("sv_uistate"))
-        flags = dict(f.split(":", 1) for f in (m[1].split() if m else []) if ":" in f)
-        for p in players:
-            p["esp"] = "e" in flags.get(str(p["num"]), "")
-            p["radar"] = "r" in flags.get(str(p["num"]), "")
-            p["ammo"] = "a" in flags.get(str(p["num"]), "")
     lobby_count = 0
     if not in_game:
         # IW4x can't list lobby members, but getinfo counts them

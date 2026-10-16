@@ -31,14 +31,10 @@
   <symbol id="i-join" viewBox="0 0 24 24"><path d="M10 17l5-5-5-5M15 12H3M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-spin" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
   <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
-  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
-  <symbol id="i-radar" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 12l6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="15.5" cy="15" r="1.3" fill="currentColor"/></symbol>
   <symbol id="i-launch" viewBox="0 0 24 24"><path d="M12 3l5 6h-3v5h-4V9H7zM6 20h12M9 17h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-roof" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7M6 9.5V20h12V9.5M12 18v-6M9.5 14.5 12 12l2.5 2.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-skull" viewBox="0 0 24 24"><path d="M12 3a8 8 0 0 0-5 14.2V20h10v-2.8A8 8 0 0 0 12 3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="9" cy="11.5" r="1.6" fill="currentColor"/><circle cx="15" cy="11.5" r="1.6" fill="currentColor"/><path d="M10 20v-2M14 20v-2" stroke="currentColor" stroke-width="1.6"/></symbol>
   <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M11 12l9-9M17 6l3 3M14 9l2 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
-  <symbol id="i-ammo" viewBox="0 0 24 24"><path d="M7 21V9c0-2 1-4 2-5 1 1 2 3 2 5v12zM13 21V9c0-2 1-4 2-5 1 1 2 3 2 5v12zM5 21h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></symbol>
-  <symbol id="i-clear" viewBox="0 0 24 24"><path d="M14 4l6 6-9 9H6l-3-3zM9 9l6 6M8 20h12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-send" viewBox="0 0 24 24"><path d="M4 12 20 4l-6 16-3-7z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
 </svg>
 
@@ -277,11 +273,11 @@ function render() {
   $('pcount').textContent = !live ? '' : lobby ? `(${live.lobby_count} in lobby)` : `(${ps.length})`;
   // an open give-weapon dropdown would close on every live update: leave the table alone meanwhile
   if ($('players').contains(document.activeElement) && document.activeElement.tagName === 'SELECT') return;
-  const tool = (p, action, icon, title, on) => `<button onclick="playerAct(${p.num}, '${action}', this)" title="${title}" class="btn !p-1 ${on ? 'bg-sky-600 text-white hover:bg-sky-700' : 'text-slate-400 hover:text-slate-700'}"><svg class="w-3.5 h-3.5"><use href="#${icon}"/></svg></button>`;
+  const tool = (p, action, icon, title) => `<button onclick="playerAct(${p.num}, '${action}', this)" title="${title}" class="btn !p-1 text-slate-400 hover:text-slate-700"><svg class="w-3.5 h-3.5"><use href="#${icon}"/></svg></button>`;
   const give = p => `<select onchange="playerAct(${p.num}, 'give', this, this.value); this.value = ''" title="Give a weapon" class="w-16 bg-slate-50 border border-slate-200 rounded px-1 py-0.5 text-[10px] text-slate-500"><option value="">give...</option>${Object.entries(S.give_weapons).map(([n, id]) => `<option value="${id}">${esc(n)}</option>`).join('')}</select>`;
   $('players').innerHTML = ps.length ? ps.map(p => `<tr class="border-t border-slate-100">
-      <td class="py-1.5">${p.num}</td><td class="font-medium text-slate-700" title="${esc(p.guid)} · ${esc(p.address)}">${esc(p.name)}${p.bot ? ' <span class="text-[10px] text-amber-600 bg-amber-50 px-1 rounded">bot</span>' : ''}${p.esp ? ' <span class="text-[10px] text-sky-700 bg-sky-100 px-1 rounded">wallhack</span>' : ''}${p.radar ? ' <span class="text-[10px] text-emerald-700 bg-emerald-100 px-1 rounded">radar</span>' : ''}${p.ammo ? ' <span class="text-[10px] text-amber-700 bg-amber-100 px-1 rounded">ammo</span>' : ''}</td><td>${esc(p.score)}</td><td>${p.bot ? '-' : esc(p.ping)}</td>
-      <td class="text-right whitespace-nowrap">${tool(p, 'esp', 'i-eye', 'Wallhack: see enemies through walls (toggle)', p.esp)}${tool(p, 'radar', 'i-radar', 'Radar: enemies always on the minimap (toggle)', p.radar)}${tool(p, 'ammo', 'i-ammo', 'Infinite ammo, no reloading (toggle)', p.ammo)}${p.esp || p.radar || p.ammo ? tool(p, 'clear', 'i-clear', 'Remove wallhack, radar and infinite ammo', false) : ''}${tool(p, 'launch', 'i-launch', 'Launch into the air', false)}${tool(p, 'up', 'i-roof', 'Teleport onto the roof above', false)}${tool(p, 'kill', 'i-skull', 'Kill', false)}
+      <td class="py-1.5">${p.num}</td><td class="font-medium text-slate-700" title="${esc(p.guid)} · ${esc(p.address)}">${esc(p.name)}${p.bot ? ' <span class="text-[10px] text-amber-600 bg-amber-50 px-1 rounded">bot</span>' : ''}</td><td>${esc(p.score)}</td><td>${p.bot ? '-' : esc(p.ping)}</td>
+      <td class="text-right whitespace-nowrap">${tool(p, 'launch', 'i-launch', 'Launch into the air')}${tool(p, 'up', 'i-roof', 'Teleport onto the roof above')}${tool(p, 'kill', 'i-skull', 'Kill')}
         ${give(p)}<button onclick="kick(${p.num}, this)" title="Kick" class="btn !p-1 text-rose-400 hover:text-rose-600"><svg class="w-3.5 h-3.5"><use href="#i-x"/></svg></button></td></tr>`).join('')
     : `<tr><td colspan="5" class="py-3 text-center text-slate-400">${lobby ? `${live.lobby_count} in the lobby, names show up here once a game starts` : 'no players'}</td></tr>`;
 }
@@ -403,7 +399,7 @@ function markPreset() {
   }
 }
 
-const ACTION_DONE = {esp: 'wallhack toggled', radar: 'radar toggled', ammo: 'infinite ammo toggled', clear: 'wallhack, radar and ammo removed', launch: 'launched', up: 'teleported up', kill: 'killed', give: 'weapon given'};
+const ACTION_DONE = {launch: 'launched', up: 'teleported up', kill: 'killed', give: 'weapon given'};
 function playerAct(num, action, el, weapon = '') {
   if (action === 'give' && !weapon) return;
   const p = S.live && S.live.players.find(p => p.num === num), who = p ? p.name : '#' + num;
