@@ -973,6 +973,9 @@ def start_game(g: Game):
 
 def save_limits(gametype: str, limits: Limits, v: dict[str, str]) -> None:
     """Saves the mode's limits to server.cfg; the caller runs exec server.cfg to apply them."""
+    if clean(limits.roundlimit) and not clean(limits.winlimit):
+        # the mode's default win limit (S&D: 4) would end the match before the rounds are played
+        limits = limits.model_copy(update={"winlimit": "0"})
     for limit in MODE_LIMITS:
         key, val = f"scr_{gametype}_{limit}", getattr(limits, limit)
         if clean(val):
