@@ -232,7 +232,8 @@ FUN_PRESETS = {
 # The server always runs as a lobby (party) server: players wait in the lobby and the UI
 # picks the map and mode and starts each match. The lobby never starts one by itself.
 LOBBY_ARGS = ["+set", "party_enable", "1"]
-# ends the match on "sv_tolobby 1", sending everyone back to the lobby
+# ends the match on "sv_tolobby 1", sending everyone back to the lobby; a match ending by
+# itself goes to the waiting room after the scoreboard instead (with the waiting room on)
 LOBBY_GSC = Path(__file__).resolve().parent / "lobby.gsc"
 # weapon modes (knife only, snipers, ...) from the Fun panel's sv_funweapons
 WEAPONS_GSC = Path(__file__).resolve().parent / "weapons.gsc"
@@ -783,7 +784,8 @@ def state():
         last_alive = time.monotonic()
     if live and not live["in_game"]:
         hangout_active = False
-        if not pick_shown and not starting_match.is_set():
+        # sv_hangout 1 here: lobby.gsc is switching an ended match to the waiting room
+        if not pick_shown and not starting_match.is_set() and '"sv_hangout" is: "1' not in rcon("sv_hangout"):
             pick_shown = True  # before show_pick, which can ask for one more showing
             if read_cfg().get("sv_hangout_enabled", "1") == "1":
                 pick_shown = start_hangout()  # not started: try again on the next poll
@@ -930,7 +932,7 @@ def select(p: Pick):
     live = live_status()
     if live and not live["in_game"]:
         show_pick()
-    elif live and hangout_active:
+    elif live:  # also during a match: lobby.gsc moves it to the waiting room when it ends
         rcon(f'set sv_hangout_msg "{hangout_msg()}"')
     changed()
     return {"ok": True}
@@ -1004,6 +1006,7 @@ def to_lobby():
     if not live or not live["in_game"]:
         raise HTTPException(409, "no match running")
     if read_cfg().get("sv_hangout_enabled", "1") != "1":
+        rcon("set sv_hangout 0")  # in the lobby, sv_hangout 1 means "waiting room loading"
         output = rcon("sv_tolobby 1")
         changed()
         return {"output": output}

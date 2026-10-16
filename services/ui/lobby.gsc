@@ -3,6 +3,8 @@
 // In the waiting room match (sv_hangout 1, started by the web UI instead of idling in
 // the lobby, so voice chat works) it shows a banner with the next map and mode, and
 // nobody has weapons or takes damage.
+// A match that ends by itself (score or time limit) shows the scoreboard, then switches
+// straight to the waiting room instead of the lobby (when the web UI has it on).
 // It also applies the cheat protected Fun dvars (fall damage), which the server ignores
 // from server.cfg and rcon: the web UI saves a copy as sv_fun_<name>.
 init()
@@ -17,6 +19,8 @@ init()
 		level thread hangoutWelcome();
 		level thread hangoutNoDamage();
 	}
+	else if ( getDvar( "sv_hangout_enabled" ) != "0" )
+		level thread endToHangout();
 }
 
 watchToLobby()
@@ -28,6 +32,28 @@ watchToLobby()
 
 	setDvar( "sv_tolobby", 0 );
 	maps\mp\gametypes\_gamelogic::forceEnd();
+}
+
+// same commands as start_hangout( from_match=True ) in app.py (HANGOUT_MAP, HANGOUT_MODE)
+endToHangout()
+{
+	level waittill( "spawning_intermission" );  // final scoreboard is up
+
+	// endGame calls exitLevel (back to the lobby) at least 4 s after the scoreboard shows,
+	// plus the intermission outside matchmaking: switch just before that
+	delay = 3.5;
+	if ( !maps\mp\_utility::matchMakingGame() )
+	{
+		if ( getDvarInt( "party_host" ) )
+			delay += 10;
+		else
+			delay += level.intermissionTime;
+	}
+	wait delay;
+
+	cmds = strTok( "ui_mapname mp_rust;ui_gametype dm;g_gametype dm;set scr_dm_timelimit 0;set scr_dm_scorelimit 0;set bots_manage_fill 0;set sv_hangout 1;map mp_rust", ";" );
+	foreach ( cmd in cmds )
+		exec( cmd );
 }
 
 // re-checked every second: Save in the web UI changes them mid-match
