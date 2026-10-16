@@ -29,8 +29,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 API = "https://api.vultr.com/v2"
-LABEL = "iw4x"
-REGION = "ewr"  # New York (New Jersey)
+# VPS_LABEL / VPS_REGION run a second server next to the default one, e.g. ams = Amsterdam
+LABEL = os.environ.get("VPS_LABEL", "iw4x")
+REGION = os.environ.get("VPS_REGION", "ewr")  # New York (New Jersey)
 PLAN = "vhf-2c-4gb"  # high frequency CPU, 128 GB disk
 OS_NAME = "Ubuntu 24.04 LTS x64"
 REMOTE_DIR = "iw4x"

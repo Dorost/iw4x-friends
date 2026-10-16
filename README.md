@@ -99,6 +99,8 @@ Creates the VPS (New York, high frequency 2 CPU / 4 GB), copies this repo, runs 
 
 `task vps:status` shows the address again.
 
+A second server next to it (e.g. Amsterdam): put `VPS_LABEL`, `VPS_REGION` and `VPS_DOMAIN` in front of each command, e.g. `VPS_LABEL=iw4x-nl VPS_REGION=ams VPS_DOMAIN=mw2-nl.example.com uv run scripts/tools/vultr.py up` (also `status`, `down`, `sync-iw4x`).
+
 ## Repo layout
 
 - `scripts/windows/`, `scripts/mac/`, `scripts/linux/`: setup and helper scripts per system
