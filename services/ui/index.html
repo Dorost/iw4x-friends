@@ -111,7 +111,7 @@
         <div id="fun" oninput="markPreset()" class="grid grid-cols-4 gap-3"></div>
         <p class="text-[11px] text-slate-400 mt-1 mb-2">Physics and movement: applies right away on Save, also mid-match.</p>
         <div id="funRules" oninput="markPreset()" class="grid grid-cols-4 gap-3"></div>
-        <p class="text-[11px] text-slate-400 mt-1">Match rules: apply from the next Start game or map restart. A preset fills in all fields, change any of them, then Save. Hover for what each does.</p>
+        <p class="text-[11px] text-slate-400 mt-1">Match rules: apply from the next Start game, Fast restart or Map restart. A preset fills in all fields, change any of them, then Save. Hover for what each does.</p>
       </div>
       <div class="flex gap-2 pt-1">
         <button onclick="save(this)" class="btn bg-sky-600 text-white hover:bg-sky-700"><svg class="w-3.5 h-3.5"><use href="#i-save"/></svg>Save</button>
@@ -440,7 +440,7 @@ function toLobby(btn) {
 function matchAct(action, btn) {
   const label = action === 'fast_restart' ? 'Fast restart' : 'Map restart';
   if (!confirm(`${label}: the match starts over and scores reset. Continue?`)) return;
-  return busy(btn, async () => { await api(`/api/match/${action}`, {}); toast(`${label.toLowerCase()}...`); });
+  return busy(btn, async () => { await api(`/api/match/${action}`, Object.fromEntries(LIMITS.map(k => [k, $(k).value]))); toast(`${label.toLowerCase()}...`); });
 }
 
 function sendRcon(e) {

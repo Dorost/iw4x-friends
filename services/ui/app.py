@@ -938,13 +938,17 @@ def select(p: Pick):
     return {"ok": True}
 
 
-class Game(Pick):
+class Limits(BaseModel):
     scorelimit: str = ""
     timelimit: str = ""
     roundlimit: str = ""
     winlimit: str = ""
     roundswitch: str = ""
     numlives: str = ""
+
+
+class Game(Pick, Limits):
+    pass
 
 
 @app.post("/api/game")
@@ -967,17 +971,22 @@ def start_game(g: Game):
         starting_match.clear()
 
 
-def start_match(g: Game, v: dict[str, str], live: dict) -> dict:
-    global hangout_active
-    rcon("set sv_hangout 0")
+def save_limits(gametype: str, limits: Limits, v: dict[str, str]) -> None:
+    """Saves the mode's limits to server.cfg; the caller runs exec server.cfg to apply them."""
     for limit in MODE_LIMITS:
-        key, val = f"scr_{g.gametype}_{limit}", getattr(g, limit)
+        key, val = f"scr_{gametype}_{limit}", getattr(limits, limit)
         if clean(val):
             v[key] = clean(val)
         else:
             v.pop(key, None)
             rcon(f"reset {key}")  # back to the mode's default
     save_cfg(v)
+
+
+def start_match(g: Game, v: dict[str, str], live: dict) -> dict:
+    global hangout_active
+    rcon("set sv_hangout 0")
+    save_limits(g.gametype, g, v)
     if live["in_game"]:  # waiting room: switch the map straight to the match, no scoreboard or lobby
         rcon("exec server.cfg")
         output = rcon(f"map {g.map}")
@@ -1034,13 +1043,16 @@ MATCH_COMMANDS = {
 
 
 @app.post("/api/match/{action}")
-def match_action(action: str):
-    """Restart the running match; players stay connected."""
+def match_action(action: str, limits: Limits):
+    """Restart the running match with the form's limits (rounds, side switch, ...); players stay connected."""
     if action not in MATCH_COMMANDS:
         raise HTTPException(404)
     live = live_status()
     if not live or not live["in_game"]:
         raise HTTPException(409, "no match running")
+    if live["gametype"] in gametypes():
+        save_limits(live["gametype"], limits, read_cfg())
+        rcon("exec server.cfg")
     output = rcon(MATCH_COMMANDS[action])
     changed()
     return {"output": output}
