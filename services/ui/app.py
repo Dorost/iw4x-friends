@@ -240,7 +240,7 @@ WEAPONS_GSC = Path(__file__).resolve().parent / "weapons.gsc"
 PLAYERS_GSC = Path(__file__).resolve().parent / "players.gsc"
 # Search & Destroy extras from the Fun panel (round roulette, clutch, hunted carrier, revive)
 SD_GSC = Path(__file__).resolve().parent / "sdfun.gsc"
-PLAYER_ACTIONS = {"esp", "radar", "ammo", "kill", "launch", "up", "give"}
+PLAYER_ACTIONS = {"esp", "radar", "ammo", "clear", "kill", "launch", "up", "give"}
 # weapons the Players table can give: name -> weapon id
 GIVE_WEAPONS = {
     "Intervention": "cheytac_mp", "Barrett .50cal": "barrett_mp", "ACR": "masada_mp", "M4A1": "m4_mp",

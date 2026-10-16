@@ -3,6 +3,7 @@
 //   esp      toggle: markers on all enemies, visible through walls
 //   radar    toggle: enemies always on the minimap
 //   ammo     toggle: the weapon in hand never runs out, no reloading
+//   clear    turn off wallhack, radar and ammo for the player
 //   kill     kill the player
 //   launch   throw the player into the air
 //   up       teleport onto the roof / highest floor above the player
@@ -69,6 +70,14 @@ watchCommands()
 			break;
 		case "ammo":
 			player toggleAmmo();
+			break;
+		case "clear":
+			if ( isDefined( player.uiEsp ) && player.uiEsp )
+				player toggleEsp();
+			if ( isDefined( player.uiRadar ) && player.uiRadar )
+				player toggleRadar();
+			if ( isDefined( player.uiAmmo ) && player.uiAmmo )
+				player toggleAmmo();
 			break;
 		case "kill":
 			if ( isAlive( player ) )
