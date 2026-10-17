@@ -143,7 +143,7 @@
           <button id="btnFast" onclick="matchAct('fast_restart', this)" title="Restart the match on the same map right away: scores reset, everyone stays" class="btn bg-sky-50 text-sky-700 hover:bg-sky-100 disabled:opacity-40 disabled:pointer-events-none"><svg class="w-3.5 h-3.5"><use href="#i-restart"/></svg>Fast restart</button>
           <button id="btnMapRestart" onclick="matchAct('map_restart', this)" title="Reload the map and restart the match: scores reset, everyone stays" class="btn bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-40 disabled:pointer-events-none"><svg class="w-3.5 h-3.5"><use href="#i-map"/></svg>Map restart</button>
         </div>
-        <p class="text-[11px] text-slate-400">Players stay connected both ways. When a match ends everyone goes back to the lobby and waits for the next Start game.</p>
+        <p class="text-[11px] text-slate-400">Players stay connected both ways. Start game during a match switches straight to the new one. When a match ends everyone goes back to the lobby and waits for the next Start game.</p>
       </section>
 
       <!-- players -->
@@ -266,7 +266,7 @@ function render() {
   $('activeFun').classList.toggle('hidden', !fun.length);
   $('activeFun').innerHTML = '<svg class="w-3.5 h-3.5 text-amber-500"><use href="#i-bolt"/></svg><span class="text-slate-600 font-medium">Active:</span>'
     + fun.map(([k, [label, , , choices]]) => `<span class="px-1.5 rounded bg-amber-50 text-amber-700">${esc(label)} ${esc(choices ? choices[S.config.fun[k]] : S.config.fun[k])}</span>`).join('');
-  $('btnGame').disabled = !!pending || !live || (live.in_game && !live.hangout);
+  $('btnGame').disabled = !!pending || !live;
   $('btnLobby').disabled = $('btnFast').disabled = $('btnMapRestart').disabled = !!pending || !live || !live.in_game || live.hangout;
   const ps = live ? live.players : [];
   const lobby = live && !live.in_game;
@@ -423,7 +423,7 @@ function startGame(btn) {
   return busy(btn, async () => {
     await api('/api/game', body);
     Object.assign(S.config, body);
-    expect(`loading ${mapName(body.map)}`, s => s.live && s.live.in_game && !s.live.hangout && s.live.map === body.map);
+    expect(`loading ${mapName(body.map)}`, s => s.live && s.live.in_game && !s.live.hangout && s.live.map === body.map && s.live.gametype === body.gametype);
     toast(`starting ${mapName(body.map)}...`);
   });
 }

@@ -953,14 +953,13 @@ class Game(Pick, Limits):
 
 @app.post("/api/game")
 def start_game(g: Game):
-    """Lobby -> match on the chosen map and mode. Everyone in the lobby goes along, still connected."""
+    """Lobby, waiting room or a running match -> match on the chosen map and mode.
+    Everyone goes along, still connected."""
     global pick_shown
     v = save_pick(g)
     live = live_status()
     if not live:
         raise HTTPException(409, "server not running")
-    if live["in_game"] and not hangout_active:
-        raise HTTPException(409, "a match is running: send everyone to the lobby first")
     starting_match.set()  # keeps the waiting room from starting again in the lobby
     try:
         return start_match(g, v, live)
@@ -990,7 +989,7 @@ def start_match(g: Game, v: dict[str, str], live: dict) -> dict:
     global hangout_active
     rcon("set sv_hangout 0")
     save_limits(g.gametype, g, v)
-    if live["in_game"]:  # waiting room: switch the map straight to the match, no scoreboard or lobby
+    if live["in_game"]:  # waiting room or a match: switch the map straight to the new match, no scoreboard or lobby
         rcon("exec server.cfg")
         output = rcon(f"map {g.map}")
         time.sleep(5)  # the old match still answers for a moment
