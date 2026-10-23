@@ -13,6 +13,12 @@ init()
 	level thread watchToLobby();
 	level thread applyCheatDvars();
 
+	// sv_hangout left on in a real match (it's only for the waiting room's map and mode, see
+	// endToHangout) would take everyone's guns: clear it. This runs before sdfun.gsc and
+	// weapons.gsc read it, scripts start in name order.
+	if ( getDvarInt( "sv_hangout" ) && ( getDvar( "mapname" ) != "mp_rust" || getDvar( "g_gametype" ) != "dm" ) )
+		setDvar( "sv_hangout", 0 );
+
 	if ( getDvarInt( "sv_hangout" ) )
 	{
 		level thread hangoutBanner();
