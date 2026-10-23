@@ -259,7 +259,7 @@ GIVE_WEAPONS = {
 # map by itself, and that list includes DLC maps that aren't installed.
 LOBBY_PLAYLIST = "playlists_lobby.info"
 # Waiting room: instead of idling in the lobby (where IW4x has no voice chat), players wait
-# in a no-limits match on this map and mode until the host presses Start game
+# in a no-limits match on this map and mode until the host presses Start game (lobby.gsc has them too)
 HANGOUT_MAP, HANGOUT_MODE = "mp_rust", "dm"
 # restart the game server when it runs but hasn't answered for this long (it can hang at start)
 WATCHDOG_SECONDS = 90
@@ -626,6 +626,9 @@ def live_status() -> dict | None:
     players = []
     row = re.compile(r"^\s*(\d+)\s+(-?\d+)\s+(\S+)\s+(\S+)\s+(.*?)\s+(\d+)\s+(\S+)\s+(-?\d+)\s+(\d+)\s*$")
     status = rcon("status")  # "map: ..." during a match, "Server is not running." in the lobby
+    if not status.lstrip().startswith("map:") and "Server is not running" not in status:
+        # no answer in time, e.g. while the server restarts an S&D round: ask once more
+        status = rcon("status")
     for line in status.splitlines():
         m = row.match(line)
         if m:
@@ -634,6 +637,10 @@ def live_status() -> dict | None:
                 "name": strip_colors(m[5]), "address": m[7], "bot": m[4].startswith("bot"),
             })
     in_game = status.lstrip().startswith("map:")
+    # neither: no usable answer, so not known whether a match runs (never taken as the lobby)
+    lobby = "Server is not running" in status
+    if not in_game and not lobby:
+        print(f"rcon status: no usable answer ({status.strip()[:60]!r}), lobby or match unknown", flush=True)
     lobby_count = 0
     if not in_game:
         # IW4x can't list lobby members, but getinfo counts them
@@ -645,6 +652,7 @@ def live_status() -> dict | None:
         "gametype": kv.get("g_gametype", ""),
         "version": kv.get("shortversion", ""),
         "in_game": in_game,
+        "lobby": lobby,
         "players": players,
         "lobby_count": lobby_count,
     }
@@ -685,6 +693,9 @@ pick_shown = False
 hangout_active = False  # the running match is the waiting room
 starting_match = threading.Event()  # Start game is passing through the lobby: no waiting room
 last_alive = time.monotonic()  # last time the game server answered (watchdog)
+# a match can report "lobby" for a moment (e.g. while it loads): the lobby counts once it lasts this long
+LOBBY_CONFIRM_SECONDS = 5
+lobby_since = 0.0  # when the server started reporting the lobby; 0 = it doesn't
 
 
 def hangout_msg() -> str:
@@ -778,20 +789,24 @@ async def events(request: Request):
 
 @app.get("/api/state")
 def state():
-    global pick_shown, hangout_active, last_alive
+    global pick_shown, hangout_active, last_alive, lobby_since
     live = live_status()
     if live:
         last_alive = time.monotonic()
-    if live and not live["in_game"]:
+    lobby_since = (lobby_since or time.monotonic()) if live and live["lobby"] else 0.0
+    if live and live["lobby"]:
         hangout_active = False
         # sv_hangout 1 here: lobby.gsc is switching an ended match to the waiting room
-        if not pick_shown and not starting_match.is_set() and '"sv_hangout" is: "1' not in rcon("sv_hangout"):
+        if (not pick_shown and not starting_match.is_set()
+                and time.monotonic() - lobby_since >= LOBBY_CONFIRM_SECONDS
+                and '"sv_hangout" is: "1' not in rcon("sv_hangout")):
             pick_shown = True  # before show_pick, which can ask for one more showing
             if read_cfg().get("sv_hangout_enabled", "1") == "1":
+                print(f"in the lobby for {time.monotonic() - lobby_since:.0f} s: starting the waiting room", flush=True)
                 pick_shown = start_hangout()  # not started: try again on the next poll
             else:
                 show_pick()
-    else:
+    elif not live or live["in_game"]:  # an unknown answer changes nothing
         pick_shown = False
     if live and live["in_game"]:
         # ask the server: the flag above is lost when a map load briefly reports "lobby"
@@ -930,7 +945,7 @@ def select(p: Pick):
     """Saves the picked map and mode and shows them in the lobby, so players see what's next."""
     save_cfg(save_pick(p))
     live = live_status()
-    if live and not live["in_game"]:
+    if live and live["lobby"]:
         show_pick()
     elif live:  # also during a match: lobby.gsc moves it to the waiting room when it ends
         rcon(f'set sv_hangout_msg "{hangout_msg()}"')
@@ -960,6 +975,8 @@ def start_game(g: Game):
     live = live_status()
     if not live:
         raise HTTPException(409, "server not running")
+    if not live["in_game"] and not live["lobby"]:
+        raise HTTPException(503, "the server didn't answer, try again")
     starting_match.set()  # keeps the waiting room from starting again in the lobby
     try:
         return start_match(g, v, live)
