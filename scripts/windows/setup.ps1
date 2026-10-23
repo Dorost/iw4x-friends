@@ -320,7 +320,7 @@ if (Test-Path (Join-Path $game $MarkConfigured)) {
 # "+exec client_tweaks.cfg", so they also cover settings the game itself never saves.
 # BEGIN client.cfg (generated from config/client.cfg by scripts/tools/sync-config.py, don't edit here)
 $ClientCfg = @'
-// Game settings for every player, applied on each game start (macOS and Windows).
+// Game settings for every player, applied on each game start (macOS, Windows and Linux).
 // The setup scripts install this as main/client_tweaks.cfg and the launchers start
 // the game with "+exec client_tweaks.cfg", so it also covers settings the game
 // itself never saves. Edit here, then run: task sync-config

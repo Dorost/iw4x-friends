@@ -18,10 +18,19 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 MAC = ROOT / "scripts" / "mac" / "setup.sh"
 WINDOWS = ROOT / "scripts" / "windows" / "setup.ps1"
+LINUX = ROOT / "scripts" / "linux" / "setup-game.sh"
 # config file -> {script: (opening line of the embedded block, closing line)}
 BLOCKS = {
-    "client.cfg": {MAC: ("CLIENT_CFG=$(cat <<'CFG'", "CFG"), WINDOWS: ("$ClientCfg = @'", "'@")},
-    "classes.cfg": {MAC: ("CLASSES_CFG=$(cat <<'CFG'", "CFG"), WINDOWS: ("$ClassesCfg = @'", "'@")},
+    "client.cfg": {
+        MAC: ("CLIENT_CFG=$(cat <<'CFG'", "CFG"),
+        WINDOWS: ("$ClientCfg = @'", "'@"),
+        LINUX: ("CLIENT_CFG=$(cat <<'CFG'", "CFG"),
+    },
+    "classes.cfg": {
+        MAC: ("CLASSES_CFG=$(cat <<'CFG'", "CFG"),
+        WINDOWS: ("$ClassesCfg = @'", "'@"),
+        LINUX: ("CLASSES_CFG=$(cat <<'CFG'", "CFG"),
+    },
 }
 
 

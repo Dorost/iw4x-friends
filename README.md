@@ -1,6 +1,6 @@
 # IW4x: MW2 with friends
 
-Play Modern Warfare 2 ([IW4x](https://iw4x.io)) with friends, on Windows or Mac:
+Play Modern Warfare 2 ([IW4x](https://iw4x.io)) with friends, on Windows, Mac or Linux:
 
 1. **[Install the game](#install-the-game)**: one script sets up MW2 + IW4x, the custom maps and bots, and a Desktop icon
 2. **[Join a game](#joining-a-game)**: on your LAN or over the internet
@@ -9,7 +9,7 @@ Play Modern Warfare 2 ([IW4x](https://iw4x.io)) with friends, on Windows or Mac:
 ## Install the game
 
 From whoever invites you:
-- the two setup files for your system, in the same folder: [`scripts/windows/`](scripts/windows) `setup.ps1` + `install-maps.ps1`, or [`scripts/mac/`](scripts/mac) `setup.sh` + `install-maps.sh`
+- the two setup files for your system, in the same folder: [`scripts/windows/`](scripts/windows) `setup.ps1` + `install-maps.ps1`, or [`scripts/mac/`](scripts/mac) `setup.sh` + `install-maps.sh`, or on Linux [`scripts/linux/setup-game.sh`](scripts/linux/setup-game.sh) + [`scripts/mac/install-maps.sh`](scripts/mac/install-maps.sh)
 - the **setup password**, or the files themselves: `mw.zip` and `mw2-iw4x-maps-bots.zip`
 
 Zips in your **Downloads** folder (or the folder you run setup from) are found automatically. Otherwise the setup asks for the password and downloads them. Press Enter at the password prompt to paste a download link or the path to a zip instead (or drag the zip file into the window).
@@ -43,6 +43,22 @@ Only need the custom maps and bots? Run `powershell -ExecutionPolicy Bypass -Fil
 5. Start the game with the **IW4x** icon on your Desktop
 
 Only need the custom maps and bots? Run `bash install-maps.sh` instead.
+
+### Linux
+
+On an x86_64 PC with a Vulkan graphics driver. The game runs in Wine with DXVK; no Steam needed.
+
+1. Open a terminal in the folder with the setup files (or the repo), e.g. `cd ~/Downloads`
+2. Run:
+
+   ```sh
+   bash setup-game.sh
+   ```
+
+3. Type your own password if it asks to install Wine, then the setup password, and wait (~17 GB). If it stops, run the same command again, it continues where it left off. Short on disk space? Download `mw.zip` to another drive and add `--zip /path/to/mw.zip`
+4. Start the game with **IW4x** in your app menu
+
+It installs into `~/Games/iw4x` (change it with `--dir`). Only need the custom maps and bots? Run `bash install-maps.sh --dir ~/Games/iw4x/game` instead.
 
 ## Joining a game
 
