@@ -31,6 +31,7 @@ ITERATIONS = 200_000
 TARGETS = {
     "mac/setup.sh": re.compile(r'^LINKS_ENC=".*"$', re.MULTILINE),
     "linux/setup.sh": re.compile(r'^LINKS_ENC=".*"$', re.MULTILINE),
+    "linux/setup-game.sh": re.compile(r'^LINKS_ENC=".*"$', re.MULTILINE),
     "mac/install-maps.sh": re.compile(r'^LINKS_ENC=".*"$', re.MULTILINE),
     "windows/setup.ps1": re.compile(r'^\$LinksEnc = ".*"$', re.MULTILINE),
     "windows/install-maps.ps1": re.compile(r'^\$LinksEnc = ".*"$', re.MULTILINE),
