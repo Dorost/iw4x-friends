@@ -104,6 +104,10 @@
           <label class="flex items-center gap-2 text-xs pb-1.5"><input id="deadchat" type="checkbox" class="accent-sky-600">Dead can talk to living</label>
         </div>
         <label class="flex items-center gap-2 text-xs mt-2" title="IW4x has no voice chat in the lobby. Players wait in a match on Rust instead, without guns or damage, until you press Start game"><input id="hangout" type="checkbox" class="accent-sky-600">Waiting room between matches (voice works there, no guns)</label>
+        <div class="grid grid-cols-3 gap-3 items-end mt-2">
+          <label class="flex items-center gap-2 text-xs pb-1.5" title="When a match ends by itself, everyone votes for the next map in the waiting room (needs the waiting room on). Chat: !1 .. !4 or press F"><input id="vote" type="checkbox" class="accent-sky-600">Map vote after each match</label>
+          <label class="lbl col-span-2" title="Can type !gt &lt;mode&gt; (next game type), !gt (list on screen), !vote and !cancel in the game chat. Names or GUIDs (hover a player in the Players table), comma separated. Empty: the first player who joined">In-game admins<input id="admins" class="inp" placeholder="names or GUIDs, comma separated (empty = first player)"></label>
+        </div>
       </div>
       <div>
         <span class="text-xs font-medium text-slate-600 flex items-center gap-1 mb-1.5"><svg class="w-3.5 h-3.5"><use href="#i-bolt"/></svg>Fun</span>
@@ -227,6 +231,7 @@ function fillForm(c) {
   $('funRules').innerHTML = funFields(S.fun_rules, c.fun);
   renderPresets();
   $('voice').checked = c.voice; $('alltalk').value = c.alltalk ? '1' : '0'; $('deadchat').checked = c.deadchat; $('hangout').checked = c.hangout;
+  $('vote').checked = c.vote; $('admins').value = c.admins;
   const opts = Object.entries(S.gametypes).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
   $('gametype').innerHTML = opts; $('gametype').value = c.gametype;
   $('liveMap').innerHTML = S.maps.map(m => `<option value="${m.id}">${esc(m.name)}${m.custom ? ' (custom)' : ''}</option>`).join('');
@@ -320,6 +325,7 @@ function save(btn) {
     hostname: $('hostname').value, password: $('password').value, rcon_password: $('rcon_password').value,
     maxclients: +$('maxclients').value, lan_only: $('lan_only').checked,
     voice: $('voice').checked, alltalk: $('alltalk').value === '1', deadchat: $('deadchat').checked, hangout: $('hangout').checked,
+    vote: $('vote').checked, admins: $('admins').value,
     bots_fill: +$('bots_fill').value, bots_fill_mode: $('bots_fill_mode').value, bots_skill: $('bots_skill').value,
     fun: funFieldValues(),
   };

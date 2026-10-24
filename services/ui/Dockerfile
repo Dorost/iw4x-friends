@@ -23,7 +23,7 @@ RUN wineboot -i \
  && wineserver -w
 
 WORKDIR /app
-COPY app.py index.html login.html lobby.gsc weapons.gsc players.gsc sdfun.gsc ./
+COPY app.py index.html login.html lobby.gsc weapons.gsc players.gsc sdfun.gsc vote.gsc ./
 RUN uv sync --script app.py
 
 CMD ["sh", "-c", "Xvfb :99 -nolisten tcp & exec uv run app.py"]

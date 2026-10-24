@@ -243,6 +243,9 @@ WEAPONS_GSC = Path(__file__).resolve().parent / "weapons.gsc"
 PLAYERS_GSC = Path(__file__).resolve().parent / "players.gsc"
 # Search & Destroy extras from the Fun panel (round roulette, clutch, hunted carrier, revive)
 SD_GSC = Path(__file__).resolve().parent / "sdfun.gsc"
+# in-game map vote and admin game type pick over chat (!1, !gt, !vote); reads VOTE_LIST
+VOTE_GSC = Path(__file__).resolve().parent / "vote.gsc"
+VOTE_LIST = "scriptdata/vote.txt"  # in userraw, where IW4x's FileRead looks
 PLAYER_ACTIONS = {"kill", "launch", "up", "give"}
 # weapons the Players table can give: name -> weapon id
 GIVE_WEAPONS = {
@@ -380,6 +383,8 @@ def config_view() -> dict:
         "alltalk": v.get("sv_alltalk", "0") == "1",
         "deadchat": v.get("g_deadChat", "0") == "1",
         "hangout": v.get("sv_hangout_enabled", "1") == "1",
+        "vote": v.get("sv_vote_enabled", "1") == "1",
+        "admins": v.get("sv_vote_admins", ""),
     }
 
 
@@ -396,6 +401,8 @@ class Config(BaseModel):
     alltalk: bool = False
     deadchat: bool = False
     hangout: bool = True
+    vote: bool = True
+    admins: str = ""
     bots_skill: str
 
 
@@ -436,6 +443,8 @@ def write_cfg(c: Config) -> None:
         "sv_alltalk": "1" if c.alltalk else "0",      # 1: everyone hears everyone, 0: own team only
         "g_deadChat": "1" if c.deadchat else "0",     # dead players can talk to the living
         "sv_hangout_enabled": "1" if c.hangout else "0",  # wait in a match instead of the lobby
+        "sv_vote_enabled": "1" if c.vote else "0",  # map vote in the waiting room after a match (vote.gsc)
+        "sv_vote_admins": clean(c.admins),  # in-game admins: names or GUIDs, comma separated
     })
     save_cfg(v)
 
@@ -484,11 +493,18 @@ def server_pids() -> list[int]:
 
 def install_lobby_gsc() -> None:
     """The server loads custom scripts on every map load, so this also reaches a running server."""
-    for src in (LOBBY_GSC, WEAPONS_GSC, PLAYERS_GSC, SD_GSC):
+    for src in (LOBBY_GSC, WEAPONS_GSC, PLAYERS_GSC, SD_GSC, VOTE_GSC):
         dest = GAME_DIR / "userraw" / "scripts" / "mp" / src.name
         if GAME_DIR.exists() and (not dest.exists() or dest.read_bytes() != src.read_bytes()):
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(src.read_bytes())
+    if GAME_DIR.exists():
+        # maps and modes for vote.gsc: map<TAB>id<TAB>name, mode<TAB>id<TAB>name
+        lines = [f"map\t{m['id']}\t{m['name']}" for m in installed_maps()]
+        lines += [f"mode\t{g}\t{name}" for g, name in gametypes().items()]
+        dest = GAME_DIR / "userraw" / VOTE_LIST
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(("\n".join(lines) + "\n").encode())
 
 
 def install_lobby_playlist() -> bool:
@@ -726,7 +742,9 @@ def start_hangout(from_match: bool = False) -> bool:
     global hangout_active
     if not from_match and not set_playlist(HANGOUT_MODE):
         return False
-    for cmd in (f"ui_mapname {HANGOUT_MAP}", f"ui_gametype {HANGOUT_MODE}", f"g_gametype {HANGOUT_MODE}",
+    # from the lobby: a map vote there (vote.gsc) starts the mode picked in this UI
+    pick = [] if from_match else [f"set sv_vote_prevmode {read_cfg().get('ui_gametype', 'war')}"]
+    for cmd in (*pick, f"ui_mapname {HANGOUT_MAP}", f"ui_gametype {HANGOUT_MODE}", f"g_gametype {HANGOUT_MODE}",
                 f"set scr_{HANGOUT_MODE}_timelimit 0", f"set scr_{HANGOUT_MODE}_scorelimit 0",
                 "set bots_manage_fill 0", "set sv_hangout 1", f'set sv_hangout_msg "{hangout_msg()}"',
                 f"map {HANGOUT_MAP}" if from_match else "xpartygo"):
