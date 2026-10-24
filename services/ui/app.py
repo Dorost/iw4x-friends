@@ -243,7 +243,7 @@ WEAPONS_GSC = Path(__file__).resolve().parent / "weapons.gsc"
 PLAYERS_GSC = Path(__file__).resolve().parent / "players.gsc"
 # Search & Destroy extras from the Fun panel (round roulette, clutch, hunted carrier, revive)
 SD_GSC = Path(__file__).resolve().parent / "sdfun.gsc"
-# in-game map vote and admin game type pick over chat (!1, !gt, !vote); reads VOTE_LIST
+# in-game map vote, game type and map picks for everyone (!1, !gt, !map, !menu); reads VOTE_LIST
 VOTE_GSC = Path(__file__).resolve().parent / "vote.gsc"
 VOTE_LIST = "scriptdata/vote.txt"  # in userraw, where IW4x's FileRead looks
 PLAYER_ACTIONS = {"kill", "launch", "up", "give"}
@@ -384,7 +384,6 @@ def config_view() -> dict:
         "deadchat": v.get("g_deadChat", "0") == "1",
         "hangout": v.get("sv_hangout_enabled", "1") == "1",
         "vote": v.get("sv_vote_enabled", "1") == "1",
-        "admins": v.get("sv_vote_admins", ""),
     }
 
 
@@ -402,7 +401,6 @@ class Config(BaseModel):
     deadchat: bool = False
     hangout: bool = True
     vote: bool = True
-    admins: str = ""
     bots_skill: str
 
 
@@ -444,7 +442,6 @@ def write_cfg(c: Config) -> None:
         "g_deadChat": "1" if c.deadchat else "0",     # dead players can talk to the living
         "sv_hangout_enabled": "1" if c.hangout else "0",  # wait in a match instead of the lobby
         "sv_vote_enabled": "1" if c.vote else "0",  # map vote in the waiting room after a match (vote.gsc)
-        "sv_vote_admins": clean(c.admins),  # in-game admins: names or GUIDs, comma separated
     })
     save_cfg(v)
 
