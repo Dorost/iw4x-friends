@@ -13,6 +13,8 @@
 //           !menu opens a menu on screen (also: hold F for 1 s in the waiting room). Controls
 //           frozen while it is open: aim (right mouse) up, fire (left mouse) down, F select,
 //           melee (V) back / close. Closes after 20 s without input, on death and at match end.
+// Lists:    ! alone (or !?) shows the commands on screen for 6 s; an unknown command shows the
+//           ones that match it, an unknown or unclear !map / !gt name the maps or modes that do
 // sv_vote_enabled 1: a match that ends by itself is followed by a map vote in the waiting room
 //   (sv_hangout_enabled, lobby.gsc). The winner starts with the picked game type, or the
 //   game type of the match that just ended.
@@ -160,17 +162,21 @@ modeAlias( mode )
 // runs inside the chat message: no waits here. Returning 0 keeps the message out of the chat.
 onSay( text, mode )
 {
-	if ( !isDefined( text ) || text.size < 2 || text[ 0 ] != "!" )
+	if ( !isDefined( text ) || !text.size || text[ 0 ] != "!" )
 		return 1;
 	// IW4x can run the callback twice for one message (it is registered on every map load)
 	key = getTime() + text;
 	if ( isDefined( self.voteLastSay ) && self.voteLastSay == key )
 		return 0;
 	self.voteLastSay = key;
+	self sayListClose();  // the next command hides a list
 
 	args = strTok( toLowerAscii( getSubStr( text, 1, text.size ) ), " " );
-	if ( !args.size )
-		return 1;
+	if ( !args.size || args[ 0 ] == "?" )
+	{
+		self commandList( "", "CHAT COMMANDS" );
+		return 0;
+	}
 	cmd = args[ 0 ];
 
 	if ( cmd == "v" && args.size > 1 )
@@ -228,6 +234,7 @@ onSay( text, mode )
 			foreach ( m in level.voteModes )
 				list += m + " ";
 			self iPrintLn( "Unknown game type. Pick one of: " + list );
+			self modeList( args[ 1 ] );
 			return 0;
 		}
 		self setNextMode( pick );
@@ -240,7 +247,152 @@ onSay( text, mode )
 		self cancelVote();
 		return 0;
 	}
-	return 1;  // not one of ours: show it
+	if ( !isSubStr( "abcdefghijklmnopqrstuvwxyz", cmd[ 0 ] ) )
+		return 1;  // not one of ours ("!!!"): show it
+	self iPrintLn( "Unknown command: !" + cmd );
+	self commandList( cmd, "DID YOU MEAN" );
+	return 0;
+}
+
+// ---------- suggestion lists (! alone, unknown names) ----------
+
+// the chat commands with a name containing q ("" = all of them), as a list on screen
+commandList( q, title )
+{
+	all = [];
+	all[ all.size ] = "1 2 3 4 5|!1 .. !5|vote for a map (or F)";
+	all[ all.size ] = "next|!next|next map and game type";
+	all[ all.size ] = "gt gametype mode|!gt <mode>|next game type";
+	all[ all.size ] = "gt gametype mode|!gt|game type list";
+	all[ all.size ] = "map|!map <name>|next map";
+	all[ all.size ] = "map|!map <name> now|switch map now";
+	all[ all.size ] = "map|!map|map list";
+	all[ all.size ] = "map|!map clear|drop the map pick";
+	all[ all.size ] = "vote mapvote|!vote|start a map vote";
+	all[ all.size ] = "cancel|!cancel|stop the map vote";
+	all[ all.size ] = "menu|!menu|menu (or hold F)";
+	all[ all.size ] = "help|!help|commands in chat";
+	left = [];
+	right = [];
+	foreach ( c in all )
+	{
+		parts = strTok( c, "|" );
+		hit = ( q == "" );
+		foreach ( name in strTok( parts[ 0 ], " " ) )
+			if ( isSubStr( name, q ) )
+				hit = true;
+		if ( hit )
+		{
+			left[ left.size ] = parts[ 1 ];
+			right[ right.size ] = parts[ 2 ];
+		}
+	}
+	if ( !left.size )
+	{
+		self commandList( "", "CHAT COMMANDS" );
+		return;
+	}
+	self thread sayList( title, left, right );
+}
+
+// game types whose id or name contains q, else all of them
+modeList( q )
+{
+	title = "DID YOU MEAN";
+	left = [];
+	right = [];
+	for ( pass = 0; pass < 2; pass++ )
+	{
+		left = [];
+		right = [];
+		for ( i = 0; i < level.voteModes.size; i++ )
+		{
+			if ( pass == 0 && !isSubStr( toLowerAscii( level.voteModes[ i ] ), q )
+				&& !isSubStr( toLowerAscii( level.voteModeNames[ i ] ), q ) )
+				continue;
+			left[ left.size ] = "!gt " + level.voteModes[ i ];
+			right[ right.size ] = level.voteModeNames[ i ];
+		}
+		if ( left.size )
+			break;
+		title = "GAME TYPES";
+	}
+	self thread sayList( title, left, right );
+}
+
+// a list on screen for this player only, gone after 6 s or with the next command
+sayList( title, left, right )
+{
+	self sayListClose();  // a new list replaces the old one
+	self endon( "disconnect" );
+	self endon( "say_list" );
+
+	n = left.size;
+	more = ( n > 15 );
+	if ( more )
+		n = 14;
+	lines = n;
+	if ( more )
+		lines++;
+	x = -150;
+	top = -20 - lines * 8;
+	elems = [];
+	bg = newClientHudElem( self );
+	bg.horzAlign = "center";
+	bg.vertAlign = "middle";
+	bg.alignX = "left";
+	bg.alignY = "top";
+	bg.x = x - 8;
+	bg.y = top - 12;
+	bg.color = ( 0, 0, 0 );
+	bg.alpha = 0.6;
+	bg.sort = -2;
+	bg.hideWhenInMenu = true;
+	bg.archived = false;
+	bg setShader( "white", 316, lines * 16 + 48 );
+	elems[ elems.size ] = bg;
+	head = self hudMenuText( x, top, 1.5, "objective" );
+	head setText( title );
+	head.color = ( 0.55, 0.85, 1 );
+	elems[ elems.size ] = head;
+	for ( i = 0; i < n; i++ )
+	{
+		row = self hudMenuText( x, top + 26 + i * 16, 1.2, "default" );
+		row setText( left[ i ] );
+		elems[ elems.size ] = row;
+		if ( !isDefined( right ) )
+			continue;
+		desc = self hudMenuText( x + 130, top + 26 + i * 16, 1.2, "default" );
+		desc setText( right[ i ] );
+		desc.color = ( 0.7, 0.7, 0.7 );
+		elems[ elems.size ] = desc;
+	}
+	if ( more )
+	{
+		row = self hudMenuText( x, top + 26 + n * 16, 1.2, "default" );
+		row setText( "... type more letters" );
+		row.color = ( 0.7, 0.7, 0.7 );
+		elems[ elems.size ] = row;
+	}
+	self.sayListHud = elems;
+	wait 6;
+	self sayListDestroy();
+}
+
+sayListClose()
+{
+	self notify( "say_list" );
+	self sayListDestroy();
+}
+
+sayListDestroy()
+{
+	if ( !isDefined( self.sayListHud ) )
+		return;
+	foreach ( e in self.sayListHud )
+		if ( isDefined( e ) )
+			e destroy();
+	self.sayListHud = undefined;
 }
 
 // ---------- actions, announced to everyone (self = the player) ----------
@@ -355,6 +507,7 @@ modeMenu()
 	sel = modeIndex( nextMode() );
 	if ( sel < 0 )
 		sel = 0;
+	startSel = sel;  // nothing picked unless F is pressed
 
 	elems = [];
 	title = self menuText( -20 - level.voteModes.size * 14 / 2, 1.4, "objective" );
@@ -398,7 +551,7 @@ modeMenu()
 		idle++;
 		wait 0.05;
 	}
-	if ( level.voteModes[ sel ] != getDvar( "sv_vote_mode" ) )
+	if ( sel != startSel && level.voteModes[ sel ] != getDvar( "sv_vote_mode" ) )
 		self setNextMode( level.voteModes[ sel ] );
 	foreach ( e in elems )
 		e destroy();
@@ -678,12 +831,23 @@ mapCommand( args )
 		self iPrintLn( "Usage: !map <name> [now]" );
 		return;
 	}
-	map = findMap( query );
-	if ( map == "" )
+	maps = findMaps( query );
+	if ( !maps.size )
 	{
 		self iPrintLn( "Unknown map: " + query + ". Try: " + mapSuggestions( query ) );
+		self thread sayList( "DID YOU MEAN", mapSuggestionList( query ) );
 		return;
 	}
+	if ( maps.size > 1 )
+	{
+		self iPrintLn( "More than one map matches " + query + ": type more letters" );
+		names = [];
+		foreach ( m in maps )
+			names[ names.size ] = mapName( m );
+		self thread sayList( "DID YOU MEAN", names );
+		return;
+	}
+	map = maps[ 0 ];
 	if ( !now )
 	{
 		self setNextMap( map );
@@ -700,10 +864,12 @@ switchNow( map )
 	startMatch( map, mode );
 }
 
-// exact id or name, then the start of one, then anywhere in it; "" when nothing matches
-findMap( query )
+// exact id or name, then the start of one, then anywhere in it: the maps of the first of
+// these that matches (one for an exact match), none when nothing matches
+findMaps( query )
 {
 	q = toLowerAscii( query );
+	found = [];
 	for ( pass = 0; pass < 3; pass++ )
 	{
 		for ( i = 0; i < level.voteMaps.size; i++ )
@@ -714,14 +880,19 @@ findMap( query )
 				bare = getSubStr( id, 3, id.size );
 			name = toLowerAscii( level.voteMapNames[ i ] );
 			if ( pass == 0 && ( q == id || q == bare || q == name ) )
-				return level.voteMaps[ i ];
+			{
+				found[ 0 ] = level.voteMaps[ i ];
+				return found;
+			}
 			if ( pass == 1 && ( startsWith( bare, q ) || startsWith( name, q ) ) )
-				return level.voteMaps[ i ];
+				found[ found.size ] = level.voteMaps[ i ];
 			if ( pass == 2 && ( isSubStr( bare, q ) || isSubStr( name, q ) ) )
-				return level.voteMaps[ i ];
+				found[ found.size ] = level.voteMaps[ i ];
 		}
+		if ( found.size )
+			return found;
 	}
-	return "";
+	return found;
 }
 
 startsWith( s, prefix )
@@ -755,6 +926,19 @@ mapSuggestions( query )
 			n++;
 		}
 	}
+	return out;
+}
+
+// map names sharing the first letter of the query, else all of them
+mapSuggestionList( query )
+{
+	first = getSubStr( toLowerAscii( query ), 0, 1 );
+	out = [];
+	foreach ( name in level.voteMapNames )
+		if ( startsWith( toLowerAscii( name ), first ) )
+			out[ out.size ] = name;
+	if ( !out.size )
+		out = level.voteMapNames;
 	return out;
 }
 
