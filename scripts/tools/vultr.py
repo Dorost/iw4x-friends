@@ -7,6 +7,7 @@
   uv run scripts/tools/vultr.py down    destroy the VPS (game files and all)
   uv run scripts/tools/vultr.py status  show the VPS address and web UI link
   uv run scripts/tools/vultr.py sync-iw4x  copy your updated IW4x files to the VPS
+  uv run scripts/tools/vultr.py sync-ui    copy changed web UI and game scripts (services/ui) to the VPS
 
 Needs VULTR_API_KEY (Vultr: Account -> API) and an SSH key in ~/.ssh. The web UI
 is served on https://<ip>.sslip.io, so no domain is needed. With VPS_DOMAIN and
@@ -293,6 +294,45 @@ def sync_iw4x() -> None:
     else:
         print("Restart it later from the web UI to load the new files")
 
+def sync_ui() -> None:
+    """Copy the services/ui files that differ from the VPS. Game scripts (*.gsc) load on
+    the next match without a restart; the container rebuild makes everything stick (the
+    image's copies replace the game scripts on every container start) and loads the web UI."""
+    inst = find_instance() or sys.exit("no VPS running")
+    ip = inst["main_ip"]
+    ui = ROOT / "services/ui"
+    files = sorted(p.name for p in ui.iterdir() if p.suffix in (".py", ".html", ".gsc"))
+    out = ssh(
+        ip, f"cd {REMOTE_DIR}/services/ui && sha256sum {' '.join(files)} 2>/dev/null",
+        capture_output=True, text=True,
+    ).stdout  # fmt: skip
+    remote = {line[66:]: line[:64] for line in out.splitlines() if len(line) > 66}
+    changed = [f for f in files if remote.get(f) != sha256(ui / f)]
+    if not changed:
+        print("VPS already has the same web UI and game scripts")
+        return
+    print("These differ from the VPS and replace its copies (local fixes there are lost):")
+    for f in changed:
+        print(f"  services/ui/{f}")
+    if input("Upload them? [y/N] ") != "y":
+        return
+    tar = subprocess.run(
+        ["tar", "--no-xattrs", "--no-mac-metadata", "-czf", "-", "--", *changed],
+        cwd=ui, capture_output=True, check=True,
+    ).stdout  # fmt: skip
+    ssh(ip, f"tar -xzf - -C {REMOTE_DIR}/services/ui", input=tar, check=True)
+    gsc = [f for f in changed if f.endswith(".gsc")]
+    if gsc:  # where the server loads them from, also reached without a rebuild
+        src = " ".join(f"services/ui/{f}" for f in gsc)
+        ssh(ip, f"cd {REMOTE_DIR} && cp {src} game/userraw/scripts/mp/", check=True)
+        print("Game scripts take effect on the next match")
+    if input("Rebuild the server container now (restarts the game server, disconnects players)? [y/N] ") == "y":
+        ssh(ip, f"cd {REMOTE_DIR} && docker compose up -d --build server", check=True)
+        print("rebuilt")
+    else:
+        print(f"Rebuild later, or a container restart brings back the old scripts:"
+              f" ssh root@{ip} 'cd {REMOTE_DIR} && docker compose up -d --build server'")
+
 
 if __name__ == "__main__":
     cmds = {
@@ -300,6 +340,7 @@ if __name__ == "__main__":
         "down": down,
         "status": status,
         "sync-iw4x": sync_iw4x,
+        "sync-ui": sync_ui,
     }
     if len(sys.argv) != 2 or sys.argv[1] not in cmds:
         sys.exit(__doc__)

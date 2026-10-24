@@ -7,7 +7,8 @@
 //   one bullet, one more per kill), 10 AC-130 cannons (ammo refills), 11 semtex (knife
 //   plus semtex that refills), 12 bomberman (knife plus C4 or claymores, refill), 13 throwing
 //   knives (refill), 14 noob tubes (Thumpers, ammo refills), 15 gun game (every kill moves
-//   you to the next weapon of level.gunGame, a kill with the last one wins)
+//   you to the next weapon of level.gunGame, a kill with the last one wins), 16 gun game
+//   extended (same rules, the ladder is the whole MW2 arsenal, edit it in init())
 // sv_funammo 1: the weapon in hand never runs out of ammo, no reloading.
 // sv_funlottery N: every spawn has a 1 in N chance to come with an extra AC-130 cannon.
 // sv_funrotate N: one player at a time holds the AC-130 cannon for N seconds (or until they
@@ -55,11 +56,29 @@ init()
 	case 12:
 	case 13: list = "usp_tactical_mp"; break;  // knife in hand, the fun is the offhand item
 	case 14: list = "m79_mp"; break;  // Thumper grenade launcher
-	case 15: list = "usp_mp"; break;  // not used: gun game hands out level.gunGame in order
+	case 15:
+	case 16: list = "usp_mp"; break;  // not used: gun game hands out level.gunGame in order
 	default: list = snipers + " " + pistols + " " + shotguns + " " + rifles + " " + smgs + " " + lmgs + " rpg_mp riotshield_mp"; break;
 	}
 	level.funWeapons = strTok( list, " " );
 	level.gunGame = strTok( "usp_mp deserteagle_mp ump45_mp kriss_mp p90_mp m4_mp ak47_mp scar_mp aa12_mp spas12_mp m240_mp barrett_mp cheytac_mp rpg_mp ac130_105mm_mp usp_tactical_mp", " " );
+	if ( level.funWeaponMode == 16 )
+	{
+		// one kill per level, a kill with the last one wins; edit the order here
+		level.gunGame = strTok(
+			"usp_mp beretta_mp coltanaconda_mp deserteagle_mp "                              // pistols
+			+ "pp2000_mp glock_mp beretta393_mp tmp_mp "                                     // machine pistols
+			+ "mp5k_mp uzi_mp ump45_mp kriss_mp p90_mp "                                     // SMGs
+			+ "m4_mp famas_mp scar_mp tavor_mp fal_mp m16_mp masada_mp fn2000_mp ak47_mp "   // assault rifles
+			+ "ranger_mp model1887_mp striker_mp m1014_mp aa12_mp spas12_mp "                // shotguns
+			+ "sa80_mp rpd_mp mg4_mp aug_mp m240_mp "                                        // LMGs
+			+ "m21_mp wa2000_mp barrett_mp cheytac_mp "                                      // snipers
+			+ "m79_mp at4_mp rpg_mp "                                                        // launchers
+			+ "model1887_akimbo_mp riotshield_mp ac130_105mm_mp usp_tactical_mp", " " );     // finishers, knife last
+		// 44 levels: the stock score limit (30 kills in Free-for-all) would end the match first
+		if ( getDvar( "g_gametype" ) == "dm" || getDvar( "g_gametype" ) == "war" )
+			setDvar( "scr_" + getDvar( "g_gametype" ) + "_scorelimit", 0 );
+	}
 	level thread onConnect();
 	if ( level.funPotato )
 		level thread hotPotato();
@@ -105,14 +124,14 @@ onSpawn()
 giveFunWeapon()
 {
 	weapon = level.funWeapons[ randomInt( level.funWeapons.size ) ];
-	if ( level.funWeaponMode == 15 )
+	if ( level.funWeaponMode == 15 || level.funWeaponMode == 16 )
 	{
 		if ( !isDefined( self.gunLevel ) )
 			self.gunLevel = 0;
 		weapon = level.gunGame[ self.gunLevel ];
 	}
 	self takeAllWeapons();
-	self giveWeapon( weapon, 0, level.funWeaponMode == 8 );
+	self giveWeapon( weapon, 0, level.funWeaponMode == 8 || isSubStr( weapon, "_akimbo" ) );
 	self giveMaxAmmo( weapon );
 	self setSpawnWeapon( weapon );
 
@@ -143,6 +162,7 @@ giveFunWeapon()
 		self giveOffhand( "throwingknife_mp", "throwingknife" );
 		break;
 	case 15:
+	case 16:
 		if ( weapon == "usp_tactical_mp" )
 			self emptyKnife( weapon );
 		self thread gunGameLoop();
@@ -205,7 +225,7 @@ gunGameLoop()
 		}
 		weapon = level.gunGame[ self.gunLevel ];
 		self takeAllWeapons();
-		self giveWeapon( weapon );
+		self giveWeapon( weapon, 0, isSubStr( weapon, "_akimbo" ) );
 		self giveMaxAmmo( weapon );
 		if ( weapon == "usp_tactical_mp" )
 			self emptyKnife( weapon );

@@ -52,6 +52,11 @@ tasks:
     cmds:
       - uv run scripts/tools/vultr.py sync-iw4x
 
+  vps:sync-ui:
+    desc: Copy changed web UI and game scripts (services/ui, e.g. weapons.gsc) to the Vultr VPS
+    cmds:
+      - uv run scripts/tools/vultr.py sync-ui
+
   stop:
     desc: Stop the dedicated server
     cmds:
