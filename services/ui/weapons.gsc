@@ -1,5 +1,4 @@
-// Weapon modes from the web UI's Fun panel (read when a match starts). Off in the waiting
-// room (sv_hangout), which has no weapons at all.
+// Weapon modes from the web UI's Fun panel (read when a match starts).
 // sv_funweapons: after every spawn the class loadout is swapped for a weapon of the mode,
 // picked at random per spawn.
 //   0 classes, 1 knife only, 2 snipers, 3 pistols, 4 shotguns, 5 launchers (ammo refills),
@@ -19,9 +18,6 @@
 // stack up in the killstreak slot like care package rewards.
 init()
 {
-	if ( getDvarInt( "sv_hangout" ) )
-		return;
-
 	level.funWeaponMode = getDvarInt( "sv_funweapons" );
 	level.funAmmo = getDvarInt( "sv_funammo" );
 	level.funLottery = getDvarInt( "sv_funlottery" );

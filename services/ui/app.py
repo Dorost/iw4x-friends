@@ -85,8 +85,9 @@ MAP_NAMES = {
     "mp_summit": "Summit",
 }
 # IW4x DLC maps that need textures from MW2's paid DLC packs (iw_dlc1_00.iwd / iw_dlc2_00.iwd),
-# which IW4x doesn't ship: clients without them get "Couldn't load image" and freeze
-BROKEN_MAPS = {"mp_crash_tropical", "mp_hardhat"}
+# which IW4x doesn't ship: clients without them get "Couldn't load image" and freeze.
+# mp_backlot: the dedicated server fails to load it ("Invalid trigger index") and drops to the lobby
+BROKEN_MAPS = {"mp_crash_tropical", "mp_hardhat", "mp_backlot"}
 BOT_SKILLS = {
     "0": "Mixed", "1": "1 (easiest)", "2": "2", "3": "3", "4": "4", "5": "5", "6": "6",
     "7": "7 (hardest)", "9": "Completely random",
@@ -231,11 +232,11 @@ FUN_PRESETS = {
                    **NO_FALL_DAMAGE}),
     },
 }
-# The server always runs as a lobby (party) server: players wait in the lobby and the UI
-# picks the map and mode and starts each match. The lobby never starts one by itself.
+# The server runs as a lobby (party) server, so map changes keep everyone connected. It only
+# sits in the lobby at start: the UI then starts the saved map and mode, and every match
+# that ends loads the next one itself (vote.gsc). The lobby never starts one by itself.
 LOBBY_ARGS = ["+set", "party_enable", "1"]
-# ends the match on "sv_tolobby 1", sending everyone back to the lobby; a match ending by
-# itself goes to the waiting room after the scoreboard instead (with the waiting room on)
+# ends the match on "sv_tolobby 1" (End match): the scoreboard shows, then the next map loads
 LOBBY_GSC = Path(__file__).resolve().parent / "lobby.gsc"
 # weapon modes (knife only, snipers, ...) from the Fun panel's sv_funweapons
 WEAPONS_GSC = Path(__file__).resolve().parent / "weapons.gsc"
@@ -263,9 +264,6 @@ GIVE_WEAPONS = {
 # every return to the lobby), so with enough players the lobby starts the next playlist
 # map by itself, and that list includes DLC maps that aren't installed.
 LOBBY_PLAYLIST = "playlists_lobby.info"
-# Waiting room: instead of idling in the lobby (where IW4x has no voice chat), players wait
-# in a no-limits match on this map and mode until the host presses Start game (lobby.gsc has them too)
-HANGOUT_MAP, HANGOUT_MODE = "mp_rust", "dm"
 # restart the game server when it runs but hasn't answered for this long (it can hang at start)
 WATCHDOG_SECONDS = 90
 STOCK_MAPS = ["mp_afghan", "mp_boneyard", "mp_brecourt", "mp_checkpoint", "mp_derail", "mp_estate",
@@ -382,7 +380,6 @@ def config_view() -> dict:
         "voice": v.get("sv_voice", "0") == "1",  # off on dedicated servers unless set
         "alltalk": v.get("sv_alltalk", "0") == "1",
         "deadchat": v.get("g_deadChat", "0") == "1",
-        "hangout": v.get("sv_hangout_enabled", "1") == "1",
         "vote": v.get("sv_vote_enabled", "1") == "1",
     }
 
@@ -399,7 +396,6 @@ class Config(BaseModel):
     voice: bool = True
     alltalk: bool = False
     deadchat: bool = False
-    hangout: bool = True
     vote: bool = True
     bots_skill: str
 
@@ -440,8 +436,7 @@ def write_cfg(c: Config) -> None:
         "sv_voice": "1" if c.voice else "0",          # voice chat on/off
         "sv_alltalk": "1" if c.alltalk else "0",      # 1: everyone hears everyone, 0: own team only
         "g_deadChat": "1" if c.deadchat else "0",     # dead players can talk to the living
-        "sv_hangout_enabled": "1" if c.hangout else "0",  # wait in a match instead of the lobby
-        "sv_vote_enabled": "1" if c.vote else "0",  # map vote in the waiting room after a match (vote.gsc)
+        "sv_vote_enabled": "1" if c.vote else "0",  # map vote near the end of each match (vote.gsc)
     })
     save_cfg(v)
 
@@ -449,7 +444,7 @@ def write_cfg(c: Config) -> None:
 def save_cfg(v: dict[str, str]) -> None:
     # always a lobby server: an old "party_enable 0" would end the lobby on "exec server.cfg"
     v["party_enable"] = "1"
-    for key in ("sv_mapRotation", "lobby_playlist"):  # left over from rotation / playlist mode
+    for key in ("sv_mapRotation", "lobby_playlist", "sv_hangout_enabled"):  # left over from older versions
         v.pop(key, None)
     for key in CHEAT_DVARS:
         if key in v:
@@ -685,39 +680,12 @@ def lan_ip() -> str:
         s.close()
 
 
-def show_pick() -> None:
-    """Lobby: shows the picked map and mode (saved in server.cfg) to everyone in the lobby.
-    Rcon runs one command per request, so these go one by one."""
-    global pick_shown
-    v = read_cfg()
-    if v.get("ui_mapname") and v.get("ui_gametype"):
-        # switching playlist (= mode) makes the lobby pick a random map from it: switch only
-        # when the mode changed, let that settle, and show the pick again on the next poll
-        index = lobby_playlist(v["ui_gametype"])
-        if f'"playlist" is: "{index}^7"' not in rcon("playlist"):
-            rcon(f"playlist {index}")
-            time.sleep(1)
-            pick_shown = False
-        rcon(f"ui_mapname {v['ui_mapname']}")
-        rcon(f"ui_gametype {v['ui_gametype']}")
-        rcon("xupdatepartystate")
-
-
-# a match ending makes the lobby show a random playlist map: show the pick again once per lobby visit
-pick_shown = False
-hangout_active = False  # the running match is the waiting room
-starting_match = threading.Event()  # Start game is passing through the lobby: no waiting room
+lobby_started = False  # the match after this lobby visit has been started
+starting_match = threading.Event()  # Start game is passing through the lobby: don't start one here too
 last_alive = time.monotonic()  # last time the game server answered (watchdog)
-# a match can report "lobby" for a moment (e.g. while it loads): the lobby counts once it lasts this long
-LOBBY_CONFIRM_SECONDS = 5
+# a map load can report "lobby" for a moment: the lobby counts once it lasts this long
+LOBBY_CONFIRM_SECONDS = 15
 lobby_since = 0.0  # when the server started reporting the lobby; 0 = it doesn't
-
-
-def hangout_msg() -> str:
-    v = read_cfg()
-    names = {m["id"]: m["name"] for m in installed_maps()}
-    mode = gametypes().get(v.get("ui_gametype", ""), v.get("ui_gametype", "?"))
-    return clean(f"Next: {names.get(v.get('ui_mapname', ''), v.get('ui_mapname', '?'))} - {mode}")
 
 
 def set_playlist(mode: str) -> bool:
@@ -732,21 +700,13 @@ def set_playlist(mode: str) -> bool:
     return f'"playlist" is: "{index}^7"' in rcon("playlist")
 
 
-def start_hangout(from_match: bool = False) -> bool:
-    """Lobby -> waiting room match: no time or score limit, no bots, banner from lobby.gsc.
-    from_match: switch the running match straight to the waiting room map, no lobby in between.
-    False when the lobby didn't take the waiting room's playlist (nothing started)."""
-    global hangout_active
-    if not from_match and not set_playlist(HANGOUT_MODE):
+def start_from_lobby() -> bool:
+    """Lobby -> match on the map and mode saved in server.cfg (at server start, or when a
+    match fell back to the lobby). False when the lobby didn't take the mode's playlist."""
+    if not set_playlist(read_cfg().get("g_gametype", "war")):
         return False
-    # from the lobby: a map vote there (vote.gsc) starts the mode picked in this UI
-    pick = [] if from_match else [f"set sv_vote_prevmode {read_cfg().get('ui_gametype', 'war')}"]
-    for cmd in (*pick, f"ui_mapname {HANGOUT_MAP}", f"ui_gametype {HANGOUT_MODE}", f"g_gametype {HANGOUT_MODE}",
-                f"set scr_{HANGOUT_MODE}_timelimit 0", f"set scr_{HANGOUT_MODE}_scorelimit 0",
-                "set bots_manage_fill 0", "set sv_hangout 1", f'set sv_hangout_msg "{hangout_msg()}"',
-                f"map {HANGOUT_MAP}" if from_match else "xpartygo"):
-        rcon(cmd)
-    hangout_active = True
+    rcon("exec server.cfg")
+    rcon("xpartygo")
     return True
 
 
@@ -806,31 +766,21 @@ async def events(request: Request):
 
 @app.get("/api/state")
 def state():
-    global pick_shown, hangout_active, last_alive, lobby_since
+    global lobby_started, last_alive, lobby_since
     live = live_status()
     if live:
         last_alive = time.monotonic()
     lobby_since = (lobby_since or time.monotonic()) if live and live["lobby"] else 0.0
     if live and live["lobby"]:
-        hangout_active = False
-        # sv_hangout 1 here: lobby.gsc is switching an ended match to the waiting room
-        if (not pick_shown and not starting_match.is_set()
-                and time.monotonic() - lobby_since >= LOBBY_CONFIRM_SECONDS
-                and '"sv_hangout" is: "1' not in rcon("sv_hangout")):
-            pick_shown = True  # before show_pick, which can ask for one more showing
-            if read_cfg().get("sv_hangout_enabled", "1") == "1":
-                print(f"in the lobby for {time.monotonic() - lobby_since:.0f} s: starting the waiting room", flush=True)
-                pick_shown = start_hangout()  # not started: try again on the next poll
-            else:
-                show_pick()
+        if (not lobby_started and not starting_match.is_set()
+                and time.monotonic() - lobby_since >= LOBBY_CONFIRM_SECONDS):
+            print(f"in the lobby for {time.monotonic() - lobby_since:.0f} s: starting the match", flush=True)
+            lobby_started = start_from_lobby()  # not started: try again on the next poll
     elif not live or live["in_game"]:  # an unknown answer changes nothing
-        pick_shown = False
-    if live and live["in_game"]:
-        # ask the server: the flag above is lost when a map load briefly reports "lobby"
-        hangout_active = '"sv_hangout" is: "1' in rcon("sv_hangout")
+        lobby_started = False
     return {
         "running": bool(server_pids()),
-        "live": live and {**live, "hangout": live["in_game"] and hangout_active},
+        "live": live,
         # no ":port" with a name on the default port: "connect mw2.example.com"
         "address": JOIN_HOST if JOIN_HOST and PORT == 28960 else f"{JOIN_HOST or lan_ip()}:{PORT}",
         "config": config_view(),
@@ -959,13 +909,13 @@ def save_pick(p: Pick) -> dict[str, str]:
 
 @app.post("/api/select")
 def select(p: Pick):
-    """Saves the picked map and mode and shows them in the lobby, so players see what's next."""
+    """Saves the picked map and mode as the next match: vote.gsc announces it and loads it
+    when the running match ends (the lobby at server start uses the saved ones)."""
     save_cfg(save_pick(p))
     live = live_status()
-    if live and live["lobby"]:
-        show_pick()
-    elif live:  # also during a match: lobby.gsc moves it to the waiting room when it ends
-        rcon(f'set sv_hangout_msg "{hangout_msg()}"')
+    if live and live["in_game"]:
+        rcon(f"set sv_vote_map {p.map}")
+        rcon(f"set sv_vote_mode {p.gametype}")
     changed()
     return {"ok": True}
 
@@ -985,22 +935,22 @@ class Game(Pick, Limits):
 
 @app.post("/api/game")
 def start_game(g: Game):
-    """Lobby, waiting room or a running match -> match on the chosen map and mode.
+    """Lobby or a running match -> match on the chosen map and mode.
     Everyone goes along, still connected."""
-    global pick_shown
+    global lobby_started
     v = save_pick(g)
     live = live_status()
     if not live:
         raise HTTPException(409, "server not running")
     if not live["in_game"] and not live["lobby"]:
         raise HTTPException(503, "the server didn't answer, try again")
-    starting_match.set()  # keeps the waiting room from starting again in the lobby
+    starting_match.set()  # keeps the poll loop from starting another match from the lobby
     try:
         return start_match(g, v, live)
     finally:
         # the match takes a while to load and the server reports "lobby" meanwhile: no
-        # waiting room until it's seen in a match again (that resets pick_shown)
-        pick_shown = True
+        # start from the lobby until it's seen in a match again (that resets lobby_started)
+        lobby_started = True
         starting_match.clear()
 
 
@@ -1020,18 +970,17 @@ def save_limits(gametype: str, limits: Limits, v: dict[str, str]) -> None:
 
 
 def start_match(g: Game, v: dict[str, str], live: dict) -> dict:
-    global hangout_active
-    rcon("set sv_hangout 0")
     save_limits(g.gametype, g, v)
-    if live["in_game"]:  # waiting room or a match: switch the map straight to the new match, no scoreboard or lobby
+    if live["in_game"]:  # switch the map straight to the new match, no scoreboard or lobby
         rcon("exec server.cfg")
+        rcon("set sv_vote_map none")  # in-game picks for the next match are used up
+        rcon("set sv_vote_mode none")
         output = rcon(f"map {g.map}")
         time.sleep(5)  # the old match still answers for a moment
         for _ in range(40):
             if (now := live_status()) and now["in_game"]:
                 break
             time.sleep(1)
-        hangout_active = False
         changed()
         return {"output": output}
     if not set_playlist(g.gametype):
@@ -1043,33 +992,14 @@ def start_match(g: Game, v: dict[str, str], live: dict) -> dict:
 
 
 @app.post("/api/lobby")
-def to_lobby():
-    """Match -> lobby: lobby.gsc ends the match, players stay connected and wait in the lobby.
-    With the waiting room on, the match switches straight to it instead (no scoreboard or lobby)."""
-    global pick_shown, hangout_active
+def end_match():
+    """Ends the match through lobby.gsc: the scoreboard shows, then the next map loads (vote.gsc)."""
     live = live_status()
     if not live or not live["in_game"]:
         raise HTTPException(409, "no match running")
-    if read_cfg().get("sv_hangout_enabled", "1") != "1":
-        rcon("set sv_hangout 0")  # in the lobby, sv_hangout 1 means "waiting room loading"
-        output = rcon("sv_tolobby 1")
-        changed()
-        return {"output": output}
-    starting_match.set()  # the map load can show as "lobby": don't start the waiting room twice
-    try:
-        start_hangout(from_match=True)
-        time.sleep(5)  # the old match still answers for a moment
-        for _ in range(40):
-            if (now := live_status()) and now["in_game"]:
-                hangout_active = True  # the poll loop clears it while the map loads
-                break
-            time.sleep(1)
-    finally:
-        # if the switch fell back to the lobby, the next poll starts the waiting room from there
-        pick_shown = False
-        starting_match.clear()
+    output = rcon("sv_tolobby 1")
     changed()
-    return {"output": ""}
+    return {"output": output}
 
 
 MATCH_COMMANDS = {

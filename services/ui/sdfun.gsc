@@ -9,7 +9,7 @@
 //   3 seconds brings them back, once per player per round.
 init()
 {
-	if ( getDvarInt( "sv_hangout" ) || getDvar( "g_gametype" ) != "sd" )
+	if ( getDvar( "g_gametype" ) != "sd" )
 	{
 		restorePhysics();
 		return;

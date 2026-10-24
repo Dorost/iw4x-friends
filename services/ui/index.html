@@ -103,9 +103,8 @@
           <label class="lbl">Who hears whom<select id="alltalk" class="inp"><option value="0">own team only</option><option value="1">everyone (all talk)</option></select></label>
           <label class="flex items-center gap-2 text-xs pb-1.5"><input id="deadchat" type="checkbox" class="accent-sky-600">Dead can talk to living</label>
         </div>
-        <label class="flex items-center gap-2 text-xs mt-2" title="IW4x has no voice chat in the lobby. Players wait in a match on Rust instead, without guns or damage, until you press Start game"><input id="hangout" type="checkbox" class="accent-sky-600">Waiting room between matches (voice works there, no guns)</label>
         <div class="grid grid-cols-3 gap-3 items-end mt-2">
-          <label class="flex items-center gap-2 text-xs pb-1.5" title="When a match ends by itself, everyone votes for the next map in the waiting room (needs the waiting room on). Chat: !1 .. !4 or press F"><input id="vote" type="checkbox" class="accent-sky-600">Map vote after each match</label>
+          <label class="flex items-center gap-2 text-xs pb-1.5" title="With no next map picked, a map vote starts 90 s before a timed match ends; the winner loads when the match ends. Chat: !1 .. !4 or press F"><input id="vote" type="checkbox" class="accent-sky-600">Map vote near the end of each match</label>
         </div>
       </div>
       <div>
@@ -142,11 +141,11 @@
         <p class="text-[11px] text-slate-400">Saved per game mode, used from the next Start game. Empty = the mode's default.</p>
         <div class="flex flex-wrap gap-2">
           <button id="btnGame" onclick="startGame(this)" class="btn bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:pointer-events-none"><svg class="w-3.5 h-3.5"><use href="#i-play"/></svg>Start game</button>
-          <button id="btnLobby" onclick="toLobby(this)" class="btn bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-40 disabled:pointer-events-none"><svg class="w-3.5 h-3.5"><use href="#i-lobby"/></svg>Back to lobby</button>
+          <button id="btnLobby" onclick="toLobby(this)" title="End the match now: the scoreboard shows, then the next map loads" class="btn bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-40 disabled:pointer-events-none"><svg class="w-3.5 h-3.5"><use href="#i-lobby"/></svg>End match</button>
           <button id="btnFast" onclick="matchAct('fast_restart', this)" title="Restart the match on the same map right away: scores reset, everyone stays" class="btn bg-sky-50 text-sky-700 hover:bg-sky-100 disabled:opacity-40 disabled:pointer-events-none"><svg class="w-3.5 h-3.5"><use href="#i-restart"/></svg>Fast restart</button>
           <button id="btnMapRestart" onclick="matchAct('map_restart', this)" title="Reload the map and restart the match: scores reset, everyone stays" class="btn bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-40 disabled:pointer-events-none"><svg class="w-3.5 h-3.5"><use href="#i-map"/></svg>Map restart</button>
         </div>
-        <p class="text-[11px] text-slate-400">Players stay connected both ways. Start game during a match switches straight to the new one. When a match ends everyone goes back to the lobby and waits for the next Start game.</p>
+        <p class="text-[11px] text-slate-400">Players stay connected. Start game switches straight to the new match. Picking a mode or map sets the next match: it is announced in game and loads when the running match ends (no lobby in between).</p>
       </section>
 
       <!-- players -->
@@ -229,7 +228,7 @@ function fillForm(c) {
   $('fun').innerHTML = funFields(S.fun_dvars, c.fun);
   $('funRules').innerHTML = funFields(S.fun_rules, c.fun);
   renderPresets();
-  $('voice').checked = c.voice; $('alltalk').value = c.alltalk ? '1' : '0'; $('deadchat').checked = c.deadchat; $('hangout').checked = c.hangout;
+  $('voice').checked = c.voice; $('alltalk').value = c.alltalk ? '1' : '0'; $('deadchat').checked = c.deadchat;
   $('vote').checked = c.vote;
   const opts = Object.entries(S.gametypes).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
   $('gametype').innerHTML = opts; $('gametype').value = c.gametype;
@@ -243,11 +242,10 @@ function modeChanged() {
   for (const k of LIMITS) $(k).value = same ? S.config[k] : '';
 }
 
-// players in the lobby or waiting room see the picked map and mode before Start game
+// the picked map and mode become the next match, announced in game
 async function showPick() {
-  if (!S.live || (S.live.in_game && !S.live.hangout)) return;  // lobby, or the waiting room's "Next:" banner
-  const where = S.live.hangout ? 'waiting room' : 'lobby';
-  await busy(null, async () => { await api('/api/select', {map: $('liveMap').value, gametype: $('gametype').value}); toast(`${where} shows ${mapName($('liveMap').value)}`); });
+  if (!S.live) return;
+  await busy(null, async () => { await api('/api/select', {map: $('liveMap').value, gametype: $('gametype').value}); toast(`next up: ${mapName($('liveMap').value)}`); });
 }
 
 function render() {
@@ -262,16 +260,15 @@ function render() {
   $('btnRestart').disabled = !!pending || !run;
   $('btnStop').disabled = !!pending || !run;
   $('now').innerHTML = !live ? (run ? 'server is starting...' : 'server not running')
-    : live.hangout ? `<span class="text-slate-700 font-medium">Waiting room</span> on ${esc(mapName(live.map))}, no guns, voice on · next: ${esc(mapName(S.config.map))} · ${esc(S.gametypes[S.config.gametype] || S.config.gametype)}`
     : live.in_game ? `<span class="text-slate-700 font-medium">${esc(mapName(live.map))}</span> · ${esc(S.gametypes[live.gametype] || live.gametype)} · ${esc(live.hostname)}`
-    : `<span class="text-slate-700 font-medium">In the lobby</span>, waiting for Start game · ${esc(live.hostname)}`;
+    : `<span class="text-slate-700 font-medium">In the lobby</span>, the match starts in a few seconds · ${esc(live.hostname)}`;
   // saved Fun settings that differ from stock MW2
   const fun = Object.entries(allFun()).filter(([k, [, def]]) => S.config.fun[k] !== undefined && S.config.fun[k] !== def);
   $('activeFun').classList.toggle('hidden', !fun.length);
   $('activeFun').innerHTML = '<svg class="w-3.5 h-3.5 text-amber-500"><use href="#i-bolt"/></svg><span class="text-slate-600 font-medium">Active:</span>'
     + fun.map(([k, [label, , , choices]]) => `<span class="px-1.5 rounded bg-amber-50 text-amber-700">${esc(label)} ${esc(choices ? choices[S.config.fun[k]] : S.config.fun[k])}</span>`).join('');
   $('btnGame').disabled = !!pending || !live;
-  $('btnLobby').disabled = $('btnFast').disabled = $('btnMapRestart').disabled = !!pending || !live || !live.in_game || live.hangout;
+  $('btnLobby').disabled = $('btnFast').disabled = $('btnMapRestart').disabled = !!pending || !live || !live.in_game;
   const ps = live ? live.players : [];
   const lobby = live && !live.in_game;
   $('pcount').textContent = !live ? '' : lobby ? `(${live.lobby_count} in lobby)` : `(${ps.length})`;
@@ -323,7 +320,7 @@ function save(btn) {
   const body = {
     hostname: $('hostname').value, password: $('password').value, rcon_password: $('rcon_password').value,
     maxclients: +$('maxclients').value, lan_only: $('lan_only').checked,
-    voice: $('voice').checked, alltalk: $('alltalk').value === '1', deadchat: $('deadchat').checked, hangout: $('hangout').checked,
+    voice: $('voice').checked, alltalk: $('alltalk').value === '1', deadchat: $('deadchat').checked,
     vote: $('vote').checked,
     bots_fill: +$('bots_fill').value, bots_fill_mode: $('bots_fill_mode').value, bots_skill: $('bots_skill').value,
     fun: funFieldValues(),
@@ -428,17 +425,15 @@ function startGame(btn) {
   return busy(btn, async () => {
     await api('/api/game', body);
     Object.assign(S.config, body);
-    expect(`loading ${mapName(body.map)}`, s => s.live && s.live.in_game && !s.live.hangout && s.live.map === body.map && s.live.gametype === body.gametype);
+    expect(`loading ${mapName(body.map)}`, s => s.live && s.live.in_game && s.live.map === body.map && s.live.gametype === body.gametype);
     toast(`starting ${mapName(body.map)}...`);
   });
 }
 
 function toLobby(btn) {
   return busy(btn, async () => {
-    const room = S.config.hangout;
     await api('/api/lobby', {});
-    expect(room ? 'loading the waiting room' : 'ending the match', s => s.live && (room ? s.live.hangout : !s.live.in_game));
-    toast(room ? 'ending the match, everyone moves to the waiting room...' : 'ending the match, everyone goes back to the lobby...');
+    toast('ending the match, the next map loads after the scoreboard...');
   });
 }
 
