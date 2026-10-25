@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# Deploy a commit from main on this server. GitHub Actions runs it over SSH (the ci
-# workflow's deploy job) with a key that can only run this script; see "Updates from
-# GitHub" in the README for setting a server up for it.
-#   1. fetches main from GitHub: the commit has to be on it
+# Deploy a commit on this server: from main, or from another branch (a PR's, from Run
+# workflow). GitHub Actions runs it over SSH (the ci workflow's deploy jobs) with a key
+# that can only run this script; see "Updates from GitHub" in the README for setting a
+# server up for it.
+#   1. fetches the branches from GitHub: the commit has to be on one of them (a commit
+#      only in a fork isn't)
 #   2. stops when tracked files were changed by hand here
 #   3. checks out the commit. When services/ui differs from what the running image was
 #      built from, pulls the commit's image (CI pushed it) and restarts the server with
@@ -57,15 +59,21 @@ main() {
   flock -n 9 || die "another deploy is running"
 
   step "Checking ${sha:0:7}"
-  git fetch -q origin main
-  git merge-base --is-ancestor "$sha" origin/main 2>/dev/null || die "$sha is not on main"
-  local edits
+  git fetch -q --prune origin '+refs/heads/*:refs/remotes/origin/*'
+  local branches edits
+  branches=$(git branch -r --contains "$sha" --format='%(refname:lstrip=3)' 2>/dev/null || true)
+  [[ -n "$branches" ]] || die "$sha is not on a branch of $(git remote get-url origin)"
   edits=$(git status --porcelain --untracked-files=no)
   [[ -z "$edits" ]] || die "files here were changed by hand, commit them to main or undo them (git checkout -- .):
 $edits"
   local old old_tag tag
   old=$(git rev-parse HEAD) old_tag=$(getenv IMAGE_TAG)
   ok "$(git log -1 --format='%h %s' "$sha")"
+  if grep -qx main <<< "$branches"; then
+    ok "on main"
+  else
+    warn "not on main but on $(paste -sd' ' <<< "$branches"): the next deploy from main replaces it"
+  fi
   ok "running: commit ${old:0:7}, image $([[ -n "$old_tag" ]] && echo "${old_tag:0:7}" || echo none)"
 
   # IMAGE_TAG is the commit the running image was built from: same services/ui, same image
