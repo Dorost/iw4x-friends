@@ -74,8 +74,6 @@ init()
 			+ "m79_mp at4_mp rpg_mp "                                                        // launchers
 			+ "model1887_akimbo_mp riotshield_mp ac130_105mm_mp usp_tactical_mp "            // finishers, knife
 			+ "throwingknife_mp", " " );                                                     // throwing knife only, last
-		// TEST: 5 levels (3 pistols, knife, throwing knife) to try the last levels with bots; drop before release
-		level.gunGame = strTok( "usp_mp beretta_mp coltanaconda_mp usp_tactical_mp throwingknife_mp", " " );
 		// 45 levels: the stock score limit (30 kills in Free-for-all) would end the match first
 		if ( getDvar( "g_gametype" ) == "dm" || getDvar( "g_gametype" ) == "war" )
 			setDvar( "scr_" + getDvar( "g_gametype" ) + "_scorelimit", 0 );
