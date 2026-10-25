@@ -6,8 +6,8 @@
 //   one bullet, one more per kill), 10 AC-130 cannons (ammo refills), 11 semtex (knife
 //   plus semtex that refills), 12 bomberman (knife plus C4 or claymores, refill), 13 throwing
 //   knives (refill), 14 noob tubes (Thumpers, ammo refills), 15 gun game (every kill moves
-//   you to the next weapon of level.gunGame, a melee death one back, a kill with the last
-//   one wins), 16 gun game extended (same rules, the ladder is the whole MW2 arsenal, edit
+//   you to the next weapon of level.gunGame, a melee kill only on the knife and riot shield
+//   levels, a melee death one back, a kill with the last one wins), 16 gun game extended (same rules, the ladder is the whole MW2 arsenal, edit
 //   it in init(); the last level is a throwing knife only, no weapon in hand, and only a
 //   throwing knife kill wins)
 // sv_funammo 1: the weapon in hand never runs out of ammo, no reloading.
@@ -225,13 +225,15 @@ refillAfterThrow( item, delay )
 	}
 }
 
-// gun game: every kill hands out the next weapon of level.gunGame; a kill with the last wins
+// gun game: every kill hands out the next weapon of level.gunGame; a kill with the last wins.
+// A melee kill counts only on the knife level and the riot shield one (a bash is a melee kill)
 gunGameLoop()
 {
 	self endon( "disconnect" );
 	self endon( "death" );
 
 	self.gunKnifeKill = undefined;  // a knife still flying when the player died
+	self.gunMeleeKill = undefined;
 	kills = self.pers[ "kills" ];
 	for ( ;; )
 	{
@@ -241,9 +243,17 @@ gunGameLoop()
 		kills = self.pers[ "kills" ];
 		knifeKill = isDefined( self.gunKnifeKill );
 		self.gunKnifeKill = undefined;
-		if ( level.gunGame[ self.gunLevel ] == "throwingknife_mp" && !knifeKill )
+		meleeKill = isDefined( self.gunMeleeKill );
+		self.gunMeleeKill = undefined;
+		weapon = level.gunGame[ self.gunLevel ];
+		if ( weapon == "throwingknife_mp" && !knifeKill )
 		{
 			self iPrintLnBold( "Only a throwing knife kill counts" );
+			continue;
+		}
+		if ( meleeKill && weapon != "usp_tactical_mp" && weapon != "riotshield_mp" )
+		{
+			self iPrintLnBold( "A melee kill doesn't level you up" );
 			continue;
 		}
 		self.gunLevel++;
@@ -315,9 +325,9 @@ crosshairArm( x, y, width, height )
 	return arm;
 }
 
-// gun game's kill rules, before the stock callback counts the kill: marks a throwing knife kill
-// for gunGameLoop, and a melee death (knife or riot shield bash) puts the victim a level back,
-// which they respawn with
+// gun game's kill rules, before the stock callback counts the kill: marks a throwing knife or
+// melee kill for gunGameLoop, and a melee death (knife or riot shield bash) puts the victim a
+// level back, which they respawn with
 gunGameKilled( eInflictor, attacker, iDamage, sMeansOfDeath, sWeapon, vDir, sHitLoc, timeOffset, deathAnimDuration )
 {
 	if ( isDefined( attacker ) && isPlayer( attacker ) && attacker != self
@@ -325,6 +335,8 @@ gunGameKilled( eInflictor, attacker, iDamage, sMeansOfDeath, sWeapon, vDir, sHit
 	{
 		if ( sWeapon == "throwingknife_mp" )
 			attacker.gunKnifeKill = true;
+		if ( sMeansOfDeath == "MOD_MELEE" )
+			attacker.gunMeleeKill = true;
 		if ( sMeansOfDeath == "MOD_MELEE" && isDefined( self.gunLevel ) && self.gunLevel > 0 )
 		{
 			self.gunLevel--;
