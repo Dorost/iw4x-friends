@@ -268,6 +268,7 @@ giveGunLevel( spawned )
 	if ( weapon == "throwingknife_mp" )
 	{
 		self giveOffhand( weapon, "throwingknife", 3 );
+		self thread knifeCrosshair();
 		return;
 	}
 	self giveWeapon( weapon, 0, isSubStr( weapon, "_akimbo" ) );
@@ -278,6 +279,39 @@ giveGunLevel( spawned )
 		self setSpawnWeapon( weapon );
 	else
 		self switchToWeapon( weapon );
+}
+
+// no weapon in hand draws no crosshair: a hip fire one for the throwing knife level, until the
+// player dies or the match ends
+knifeCrosshair()
+{
+	arms = [];
+	arms[ 0 ] = self crosshairArm( -7, 0, 6, 1 );
+	arms[ 1 ] = self crosshairArm( 7, 0, 6, 1 );
+	arms[ 2 ] = self crosshairArm( 0, -7, 1, 6 );
+	arms[ 3 ] = self crosshairArm( 0, 7, 1, 6 );
+	while ( isDefined( self ) && isAlive( self ) && !level.gameEnded )
+		wait 0.05;
+	foreach ( arm in arms )
+		if ( isDefined( arm ) )
+			arm destroy();
+}
+
+// one arm of the crosshair: x, y from the screen center, in 640x480 HUD units
+crosshairArm( x, y, width, height )
+{
+	arm = newClientHudElem( self );
+	arm.horzAlign = "center";
+	arm.vertAlign = "middle";
+	arm.alignX = "center";
+	arm.alignY = "middle";
+	arm.x = x;
+	arm.y = y;
+	arm.alpha = 0.8;
+	arm.archived = false;
+	arm.hideWhenInMenu = true;
+	arm setShader( "white", width, height );
+	return arm;
 }
 
 // marks a throwing knife kill for gunGameLoop, before the stock callback counts the kill
