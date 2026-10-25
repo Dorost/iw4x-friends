@@ -6,8 +6,10 @@
 //   one bullet, one more per kill), 10 AC-130 cannons (ammo refills), 11 semtex (knife
 //   plus semtex that refills), 12 bomberman (knife plus C4 or claymores, refill), 13 throwing
 //   knives (refill), 14 noob tubes (Thumpers, ammo refills), 15 gun game (every kill moves
-//   you to the next weapon of level.gunGame, a kill with the last one wins), 16 gun game
-//   extended (same rules, the ladder is the whole MW2 arsenal, edit it in init())
+//   you to the next weapon of level.gunGame, a melee death one back, a kill with the last
+//   one wins), 16 gun game extended (same rules, the ladder is the whole MW2 arsenal, edit
+//   it in init(); the last level is a throwing knife only, no weapon in hand, and only a
+//   throwing knife kill wins)
 // sv_funammo 1: the weapon in hand never runs out of ammo, no reloading.
 // sv_funlottery N: every spawn has a 1 in N chance to come with an extra AC-130 cannon.
 // sv_funrotate N: one player at a time holds the AC-130 cannon for N seconds (or until they
@@ -70,10 +72,17 @@ init()
 			+ "sa80_mp rpd_mp mg4_mp aug_mp m240_mp "                                        // LMGs
 			+ "m21_mp wa2000_mp barrett_mp cheytac_mp "                                      // snipers
 			+ "m79_mp at4_mp rpg_mp "                                                        // launchers
-			+ "model1887_akimbo_mp riotshield_mp ac130_105mm_mp usp_tactical_mp", " " );     // finishers, knife last
-		// 44 levels: the stock score limit (30 kills in Free-for-all) would end the match first
+			+ "model1887_akimbo_mp riotshield_mp ac130_105mm_mp usp_tactical_mp "            // finishers, knife
+			+ "throwingknife_mp", " " );                                                     // throwing knife only, last
+		// 45 levels: the stock score limit (30 kills in Free-for-all) would end the match first
 		if ( getDvar( "g_gametype" ) == "dm" || getDvar( "g_gametype" ) == "war" )
 			setDvar( "scr_" + getDvar( "g_gametype" ) + "_scorelimit", 0 );
+	}
+	if ( level.funWeaponMode == 15 || level.funWeaponMode == 16 )
+	{
+		// gun game's kill rules (init runs after the gametype's main has set up the stock callbacks)
+		level.gunPrevKilled = level.callbackPlayerKilled;
+		level.callbackPlayerKilled = ::gunGameKilled;
 	}
 	level thread onConnect();
 	if ( level.funPotato )
@@ -119,13 +128,15 @@ onSpawn()
 
 giveFunWeapon()
 {
-	weapon = level.funWeapons[ randomInt( level.funWeapons.size ) ];
 	if ( level.funWeaponMode == 15 || level.funWeaponMode == 16 )
 	{
 		if ( !isDefined( self.gunLevel ) )
 			self.gunLevel = 0;
-		weapon = level.gunGame[ self.gunLevel ];
+		self giveGunLevel( true );
+		self thread gunGameLoop();
+		return;
 	}
+	weapon = level.funWeapons[ randomInt( level.funWeapons.size ) ];
 	self takeAllWeapons();
 	self giveWeapon( weapon, 0, level.funWeaponMode == 8 || isSubStr( weapon, "_akimbo" ) );
 	self giveMaxAmmo( weapon );
@@ -157,12 +168,6 @@ giveFunWeapon()
 		self emptyKnife( weapon );
 		self giveOffhand( "throwingknife_mp", "throwingknife" );
 		break;
-	case 15:
-	case 16:
-		if ( weapon == "usp_tactical_mp" )
-			self emptyKnife( weapon );
-		self thread gunGameLoop();
-		break;
 	case 9:
 		self setWeaponAmmoClip( weapon, 1 );
 		self setWeaponAmmoStock( weapon, 0 );
@@ -178,13 +183,17 @@ emptyKnife( weapon )
 	self setWeaponAmmoStock( weapon, 0 );
 }
 
-// a lethal (semtex, C4, claymore, throwing knife) that refills itself while the player lives
-giveOffhand( item, offhandClass )
+// a lethal (semtex, C4, claymore, throwing knife) that refills itself while the player lives:
+// every second, or with a delay, that many seconds after the last one is thrown
+giveOffhand( item, offhandClass, delay )
 {
 	self setOffhandPrimaryClass( offhandClass );
 	self giveWeapon( item );
 	self giveMaxAmmo( item );
-	self thread refillOffhand( item );
+	if ( isDefined( delay ) )
+		self thread refillAfterThrow( item, delay );
+	else
+		self thread refillOffhand( item );
 }
 
 refillOffhand( item )
@@ -200,12 +209,29 @@ refillOffhand( item )
 	}
 }
 
+refillAfterThrow( item, delay )
+{
+	self endon( "disconnect" );
+	self endon( "death" );
+
+	for ( ;; )
+	{
+		wait 0.1;
+		if ( self getAmmoCount( item ) )
+			continue;
+		wait delay;
+		self giveMaxAmmo( item );
+		self setWeaponAmmoClip( item, weaponClipSize( item ) );
+	}
+}
+
 // gun game: every kill hands out the next weapon of level.gunGame; a kill with the last wins
 gunGameLoop()
 {
 	self endon( "disconnect" );
 	self endon( "death" );
 
+	self.gunKnifeKill = undefined;  // a knife still flying when the player died
 	kills = self.pers[ "kills" ];
 	for ( ;; )
 	{
@@ -213,21 +239,99 @@ gunGameLoop()
 		if ( self.pers[ "kills" ] <= kills )
 			continue;
 		kills = self.pers[ "kills" ];
+		knifeKill = isDefined( self.gunKnifeKill );
+		self.gunKnifeKill = undefined;
+		if ( level.gunGame[ self.gunLevel ] == "throwingknife_mp" && !knifeKill )
+		{
+			self iPrintLnBold( "Only a throwing knife kill counts" );
+			continue;
+		}
 		self.gunLevel++;
 		if ( self.gunLevel >= level.gunGame.size )
 		{
 			self gunGameWin();
 			return;
 		}
-		weapon = level.gunGame[ self.gunLevel ];
-		self takeAllWeapons();
-		self giveWeapon( weapon, 0, isSubStr( weapon, "_akimbo" ) );
-		self giveMaxAmmo( weapon );
-		if ( weapon == "usp_tactical_mp" )
-			self emptyKnife( weapon );
-		self switchToWeapon( weapon );
-		self iPrintLnBold( "Gun game: level " + ( self.gunLevel + 1 ) + " of " + level.gunGame.size );
+		self giveGunLevel( false );
+		msg = "Gun game: level " + ( self.gunLevel + 1 ) + " of " + level.gunGame.size;
+		if ( level.gunGame[ self.gunLevel ] == "throwingknife_mp" )
+			msg = msg + ", a throwing knife kill wins";
+		self iPrintLnBold( msg );
 	}
+}
+
+// the weapon of self.gunLevel, in hand right away on spawn; the throwing knife level has no
+// weapon in hand, only a throwing knife that comes back 3 seconds after each throw
+giveGunLevel( spawned )
+{
+	weapon = level.gunGame[ self.gunLevel ];
+	self takeAllWeapons();
+	if ( weapon == "throwingknife_mp" )
+	{
+		self giveOffhand( weapon, "throwingknife", 3 );
+		self thread knifeCrosshair();
+		return;
+	}
+	self giveWeapon( weapon, 0, isSubStr( weapon, "_akimbo" ) );
+	self giveMaxAmmo( weapon );
+	if ( weapon == "usp_tactical_mp" )
+		self emptyKnife( weapon );
+	if ( spawned )
+		self setSpawnWeapon( weapon );
+	else
+		self switchToWeapon( weapon );
+}
+
+// no weapon in hand draws no crosshair: a hip fire one for the throwing knife level, until the
+// player dies or the match ends
+knifeCrosshair()
+{
+	arms = [];
+	arms[ 0 ] = self crosshairArm( -7, 0, 6, 1 );
+	arms[ 1 ] = self crosshairArm( 7, 0, 6, 1 );
+	arms[ 2 ] = self crosshairArm( 0, -7, 1, 6 );
+	arms[ 3 ] = self crosshairArm( 0, 7, 1, 6 );
+	while ( isDefined( self ) && isAlive( self ) && !level.gameEnded )
+		wait 0.05;
+	foreach ( arm in arms )
+		if ( isDefined( arm ) )
+			arm destroy();
+}
+
+// one arm of the crosshair: x, y from the screen center, in 640x480 HUD units
+crosshairArm( x, y, width, height )
+{
+	arm = newClientHudElem( self );
+	arm.horzAlign = "center";
+	arm.vertAlign = "middle";
+	arm.alignX = "center";
+	arm.alignY = "middle";
+	arm.x = x;
+	arm.y = y;
+	arm.alpha = 0.8;
+	arm.archived = false;
+	arm.hideWhenInMenu = true;
+	arm setShader( "white", width, height );
+	return arm;
+}
+
+// gun game's kill rules, before the stock callback counts the kill: marks a throwing knife kill
+// for gunGameLoop, and a melee death (knife or riot shield bash) puts the victim a level back,
+// which they respawn with
+gunGameKilled( eInflictor, attacker, iDamage, sMeansOfDeath, sWeapon, vDir, sHitLoc, timeOffset, deathAnimDuration )
+{
+	if ( isDefined( attacker ) && isPlayer( attacker ) && attacker != self
+		&& ( !level.teamBased || attacker.team != self.team ) )
+	{
+		if ( sWeapon == "throwingknife_mp" )
+			attacker.gunKnifeKill = true;
+		if ( sMeansOfDeath == "MOD_MELEE" && isDefined( self.gunLevel ) && self.gunLevel > 0 )
+		{
+			self.gunLevel--;
+			self iPrintLnBold( "Meleed by " + attacker.name + ", back to level " + ( self.gunLevel + 1 ) );
+		}
+	}
+	self [[ level.gunPrevKilled ]]( eInflictor, attacker, iDamage, sMeansOfDeath, sWeapon, vDir, sHitLoc, timeOffset, deathAnimDuration );
 }
 
 gunGameWin()
