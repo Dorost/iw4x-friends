@@ -3,6 +3,13 @@ name: ci
 on:
   push:
   pull_request:
+  workflow_dispatch:
+    inputs:
+      servers:
+        description: Servers to deploy to (NL goes first)
+        type: choice
+        options: [both, nl, us]
+        default: both
 
 # On main runs wait for each other: a newer one replaces one still waiting, a running
 # deploy is never cancelled. On other branches a new push cancels the old run.
@@ -105,3 +112,34 @@ jobs:
           cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max
 
+  # NL first, then US; a server that fails stops the rest. scripts/deploy/deploy.sh on
+  # each one pulls the image and restarts the server only when services/ui changed.
+  deploy:
+    # From the Run workflow button only, for now. To deploy every push to main, drop
+    # the event_name condition.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    needs: image
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts/deploy
+
+      - name: Deploy
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SERVERS: ${{ inputs.servers || 'both' }}
+        run: |
+          eval "$(ssh-agent -s)" >/dev/null
+          trap 'ssh-agent -k >/dev/null' EXIT
+          ssh-add -q - <<< "$DEPLOY_SSH_KEY"
+          declare -A host=([nl]=mw2-nl.dorost.nl [us]=mw2.dorost.nl)
+          for s in nl us; do
+            [[ "$SERVERS" == both || "$SERVERS" == "$s" ]] || continue
+            echo "::group::$s: ${host[$s]}"
+            ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=scripts/deploy/known_hosts \
+                -o ConnectTimeout=20 -o ServerAliveInterval=15 "root@${host[$s]}" deploy "$GITHUB_SHA"
+            echo "::endgroup::"
+            echo "- $s (${host[$s]}): \`${GITHUB_SHA:0:7}\`" >> "$GITHUB_STEP_SUMMARY"
+          done
