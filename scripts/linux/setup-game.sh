@@ -14,7 +14,7 @@
 # version from the package, the one the servers run.
 #
 # Run it straight from GitHub, in a terminal:
-#   bash -c "$(curl -fsSL https://raw.githubusercontent.com/dorostanian/iw4x-friends/main/scripts/linux/setup-game.sh)"
+#   bash -c "$(curl -fsSL https://raw.githubusercontent.com/Dorost/iw4x-friends/main/scripts/linux/setup-game.sh)"
 # or as a downloaded file:   bash setup-game.sh
 # Safe to re-run: every step skips what is already done, and an interrupted
 # download resumes where it stopped.
@@ -608,8 +608,8 @@ done
 if [[ -n "$maps_script" ]]; then
   bash "$maps_script" --dir "$GAME" ${MAPS_LINK:+--maps-url "$MAPS_LINK"} || warn "custom maps not installed, run: bash $maps_script --dir \"$GAME\""
 else
-  bash -c "$(curl -fsSL https://raw.githubusercontent.com/dorostanian/iw4x-friends/main/scripts/mac/install-maps.sh)" install-maps --dir "$GAME" ${MAPS_LINK:+--maps-url "$MAPS_LINK"} \
-    || warn "custom maps not installed. Later, run: bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/dorostanian/iw4x-friends/main/scripts/mac/install-maps.sh)\" install-maps --dir \"$GAME\""
+  bash -c "$(curl -fsSL https://raw.githubusercontent.com/Dorost/iw4x-friends/main/scripts/mac/install-maps.sh)" install-maps --dir "$GAME" ${MAPS_LINK:+--maps-url "$MAPS_LINK"} \
+    || warn "custom maps not installed. Later, run: bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Dorost/iw4x-friends/main/scripts/mac/install-maps.sh)\" install-maps --dir \"$GAME\""
 fi
 
 # ---------------------------------------------------------------- launcher

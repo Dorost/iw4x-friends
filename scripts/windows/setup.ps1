@@ -9,7 +9,7 @@ One-shot setup of MW2 + IW4x on a Windows PC:
   6. creates a Desktop shortcut that skips IW4x's remote update check
 
 Run it straight from GitHub, in PowerShell:
-  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/dorostanian/iw4x-friends/main/scripts/windows/setup.ps1)))
+  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/Dorost/iw4x-friends/main/scripts/windows/setup.ps1)))
 or as a downloaded file:
   powershell -ExecutionPolicy Bypass -File setup.ps1
 
@@ -588,9 +588,9 @@ Ok "ready-made classes installed (load them: F9 during a match, or ~ then exec c
 $mapsScript = if ($PSCommandPath) { Join-Path (Split-Path $PSCommandPath) "install-maps.ps1" } else { "" }
 try {
     if ($mapsScript -and (Test-Path $mapsScript)) { & $mapsScript -InstallDir $game -MapsUrl $MapsUrl }
-    else { & ([scriptblock]::Create((irm https://raw.githubusercontent.com/dorostanian/iw4x-friends/main/scripts/windows/install-maps.ps1))) -InstallDir $game -MapsUrl $MapsUrl }
+    else { & ([scriptblock]::Create((irm https://raw.githubusercontent.com/Dorost/iw4x-friends/main/scripts/windows/install-maps.ps1))) -InstallDir $game -MapsUrl $MapsUrl }
 } catch {
-    Warn "custom maps not installed. Later, run: & ([scriptblock]::Create((irm https://raw.githubusercontent.com/dorostanian/iw4x-friends/main/scripts/windows/install-maps.ps1)))"
+    Warn "custom maps not installed. Later, run: & ([scriptblock]::Create((irm https://raw.githubusercontent.com/Dorost/iw4x-friends/main/scripts/windows/install-maps.ps1)))"
 }
 
 # ---------------------------------------------------------------- shortcut

@@ -4,7 +4,7 @@ iw_23.iwd holds textures some DLC maps (e.g. Shipment) need but IW4x doesn't shi
 Safe to re-run: skips if already installed, and an interrupted download resumes.
 
 Run it straight from GitHub, in PowerShell:
-  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/dorostanian/iw4x-friends/main/scripts/windows/install-maps.ps1)))
+  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/Dorost/iw4x-friends/main/scripts/windows/install-maps.ps1)))
 
 Options:
   -InstallDir <path>  game folder (default: C:\Games\Call of Duty Modern Warfare 2)

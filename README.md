@@ -97,7 +97,7 @@ bash scripts/mac/install-maps.sh --bottle mw-server
 For a server on the internet, on an x86_64 VPS with a domain pointing to it:
 
 ```sh
-git clone https://github.com/dorostanian/iw4x-friends.git
+git clone https://github.com/Dorost/iw4x-friends.git
 cd iw4x-friends
 bash scripts/linux/setup.sh
 docker compose up -d --build

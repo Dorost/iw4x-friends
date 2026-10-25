@@ -5,7 +5,7 @@
 # and an interrupted download resumes.
 #
 # Run it straight from GitHub:
-#   bash -c "$(curl -fsSL https://raw.githubusercontent.com/dorostanian/iw4x-friends/main/scripts/mac/install-maps.sh)"
+#   bash -c "$(curl -fsSL https://raw.githubusercontent.com/Dorost/iw4x-friends/main/scripts/mac/install-maps.sh)"
 # Options:
 #   --bottle <name>  macOS: CrossOver bottle to install into (default: mw)
 #   --dir <path>     game folder to install into (overrides --bottle; required on Linux)

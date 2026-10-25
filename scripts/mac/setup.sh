@@ -9,7 +9,7 @@
 #   6. creates a Desktop launcher that skips IW4x's remote update check
 #
 # Run it straight from GitHub, in Terminal:
-#   zsh -c "$(curl -fsSL https://raw.githubusercontent.com/dorostanian/iw4x-friends/main/scripts/mac/setup.sh)"
+#   zsh -c "$(curl -fsSL https://raw.githubusercontent.com/Dorost/iw4x-friends/main/scripts/mac/setup.sh)"
 # or as a downloaded file:   zsh setup.sh
 # Safe to re-run: every step skips what is already done, and an interrupted
 # download resumes where it stopped.
@@ -616,8 +616,8 @@ maps_script="${0:A:h}/install-maps.sh"
 if [[ -f "$maps_script" ]]; then
   bash "$maps_script" --bottle "$BOTTLE" ${MAPS_LINK:+--maps-url "$MAPS_LINK"} || warn "custom maps not installed, run scripts/mac/install-maps.sh later"
 else
-  bash -c "$(curl -fsSL https://raw.githubusercontent.com/dorostanian/iw4x-friends/main/scripts/mac/install-maps.sh)" install-maps --bottle "$BOTTLE" ${MAPS_LINK:+--maps-url "$MAPS_LINK"} \
-    || warn "custom maps not installed. Later, run: bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/dorostanian/iw4x-friends/main/scripts/mac/install-maps.sh)\""
+  bash -c "$(curl -fsSL https://raw.githubusercontent.com/Dorost/iw4x-friends/main/scripts/mac/install-maps.sh)" install-maps --bottle "$BOTTLE" ${MAPS_LINK:+--maps-url "$MAPS_LINK"} \
+    || warn "custom maps not installed. Later, run: bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Dorost/iw4x-friends/main/scripts/mac/install-maps.sh)\""
 fi
 
 # ---------------------------------------------------------------- launcher
