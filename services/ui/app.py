@@ -200,7 +200,8 @@ FUN_PRESETS = {
                           {"sv_funweapons": "14", "scr_game_hardpoints": "0"}),
         "Gun game": ("every kill gives the next weapon, a knife kill at the end wins (best in Free-for-all)",
                      {"sv_funweapons": "15", "scr_game_hardpoints": "0", "scr_game_perks": "0"}),
-        "Gun game extended": ("gun game with a 44 weapon ladder: pistols to snipers, launchers, riot shield, knife last",
+        "Gun game extended": ("gun game with a 45 level ladder: pistols to snipers, launchers, riot shield, knife, "
+                              "then a throwing knife only (only a throwing knife kill wins)",
                               {"sv_funweapons": "16", "scr_game_hardpoints": "0", "scr_game_perks": "0"}),
         "Gunship war": ("everyone holds an AC-130 cannon, floaty jumps, blasts launch you",
                         {"sv_funweapons": "10", "g_knockback": "5000", "g_gravity": "400", "jump_height": "80",
