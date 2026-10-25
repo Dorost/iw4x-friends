@@ -115,9 +115,8 @@ jobs:
   # NL first, then US; a server that fails stops the rest. scripts/deploy/deploy.sh on
   # each one pulls the image and restarts the server only when services/ui changed.
   deploy:
-    # From the Run workflow button only, for now. To deploy every push to main, drop
-    # the event_name condition.
-    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    # Every push to main, and the Run workflow button (e.g. to deploy to one server)
+    if: github.ref == 'refs/heads/main'
     needs: image
     runs-on: ubuntu-latest
     environment: production

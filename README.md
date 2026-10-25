@@ -119,7 +119,7 @@ A second server next to it (e.g. Amsterdam): put `VPS_LABEL`, `VPS_REGION` and `
 
 ### Updates from GitHub
 
-The servers behind `mw2.dorost.nl` and `mw2-nl.dorost.nl` get their updates from GitHub. Every push builds the server image and starts its web UI as a test; on `main` the image goes to `ghcr.io/dorost/iw4x-friends:<commit>`. **Actions → ci → Run workflow** deploys `main` to the NL server, then the US one: [`scripts/deploy/deploy.sh`](scripts/deploy/deploy.sh) checks out the commit and, when `services/ui` changed, restarts the game server with the new image (players get disconnected and can rejoin right away). If the web UI or the game doesn't answer after that, it goes back to the previous version and leaves the next server alone. A file changed by hand on a server (`scp`, `vps:sync-ui`) stops the deploy: put the change in `main` instead.
+The servers behind `mw2.dorost.nl` and `mw2-nl.dorost.nl` get their updates from GitHub. Every push builds the server image and starts its web UI as a test; on `main` the image goes to `ghcr.io/dorost/iw4x-friends:<commit>` and is deployed to the NL server, then the US one (**Actions → ci → Run workflow** deploys `main` again, to one or both): [`scripts/deploy/deploy.sh`](scripts/deploy/deploy.sh) checks out the commit and, when `services/ui` changed, restarts the game server with the new image (players get disconnected and can rejoin right away). If the web UI or the game doesn't answer after that, it goes back to the previous version and leaves the next server alone. A file changed by hand on a server (`scp`, `vps:sync-ui`) stops the deploy: put the change in `main` instead.
 
 To set a server up for it, once, as root on the server:
 
