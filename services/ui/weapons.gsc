@@ -6,9 +6,10 @@
 //   one bullet, one more per kill), 10 AC-130 cannons (ammo refills), 11 semtex (knife
 //   plus semtex that refills), 12 bomberman (knife plus C4 or claymores, refill), 13 throwing
 //   knives (refill), 14 noob tubes (Thumpers, ammo refills), 15 gun game (every kill moves
-//   you to the next weapon of level.gunGame, a kill with the last one wins), 16 gun game
-//   extended (same rules, the ladder is the whole MW2 arsenal, edit it in init(); the last
-//   level is a throwing knife only, no weapon in hand, and only a throwing knife kill wins)
+//   you to the next weapon of level.gunGame, a melee death one back, a kill with the last
+//   one wins), 16 gun game extended (same rules, the ladder is the whole MW2 arsenal, edit
+//   it in init(); the last level is a throwing knife only, no weapon in hand, and only a
+//   throwing knife kill wins)
 // sv_funammo 1: the weapon in hand never runs out of ammo, no reloading.
 // sv_funlottery N: every spawn has a 1 in N chance to come with an extra AC-130 cannon.
 // sv_funrotate N: one player at a time holds the AC-130 cannon for N seconds (or until they
@@ -78,8 +79,10 @@ init()
 		// 45 levels: the stock score limit (30 kills in Free-for-all) would end the match first
 		if ( getDvar( "g_gametype" ) == "dm" || getDvar( "g_gametype" ) == "war" )
 			setDvar( "scr_" + getDvar( "g_gametype" ) + "_scorelimit", 0 );
-		// tells gunGameLoop which kills were throwing knife kills (init runs after the gametype's
-		// main has set up the stock callbacks)
+	}
+	if ( level.funWeaponMode == 15 || level.funWeaponMode == 16 )
+	{
+		// gun game's kill rules (init runs after the gametype's main has set up the stock callbacks)
 		level.gunPrevKilled = level.callbackPlayerKilled;
 		level.callbackPlayerKilled = ::gunGameKilled;
 	}
@@ -314,12 +317,22 @@ crosshairArm( x, y, width, height )
 	return arm;
 }
 
-// marks a throwing knife kill for gunGameLoop, before the stock callback counts the kill
+// gun game's kill rules, before the stock callback counts the kill: marks a throwing knife kill
+// for gunGameLoop, and a melee death (knife or riot shield bash) puts the victim a level back,
+// which they respawn with
 gunGameKilled( eInflictor, attacker, iDamage, sMeansOfDeath, sWeapon, vDir, sHitLoc, timeOffset, deathAnimDuration )
 {
-	if ( sWeapon == "throwingknife_mp" && isDefined( attacker ) && isPlayer( attacker ) && attacker != self
+	if ( isDefined( attacker ) && isPlayer( attacker ) && attacker != self
 		&& ( !level.teamBased || attacker.team != self.team ) )
-		attacker.gunKnifeKill = true;
+	{
+		if ( sWeapon == "throwingknife_mp" )
+			attacker.gunKnifeKill = true;
+		if ( sMeansOfDeath == "MOD_MELEE" && isDefined( self.gunLevel ) && self.gunLevel > 0 )
+		{
+			self.gunLevel--;
+			self iPrintLnBold( "Meleed by " + attacker.name + ", back to level " + ( self.gunLevel + 1 ) );
+		}
+	}
 	self [[ level.gunPrevKilled ]]( eInflictor, attacker, iDamage, sMeansOfDeath, sWeapon, vDir, sHitLoc, timeOffset, deathAnimDuration );
 }
 
