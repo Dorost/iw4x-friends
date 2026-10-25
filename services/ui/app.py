@@ -198,7 +198,7 @@ FUN_PRESETS = {
                            **NO_FALL_DAMAGE}),
         "Noob tube war": ("Thumpers only, endless grenades",
                           {"sv_funweapons": "14", "scr_game_hardpoints": "0"}),
-        "Gun game": ("every kill gives the next weapon, a melee death takes one back, a knife kill at the end wins (best in Free-for-all)",
+        "Gun game": ("every kill gives the next weapon (melee kills only on the knife level), a melee death takes one back, a knife kill at the end wins (best in Free-for-all)",
                      {"sv_funweapons": "15", "scr_game_hardpoints": "0", "scr_game_perks": "0"}),
         "Gun game extended": ("gun game with a 45 level ladder: pistols to snipers, launchers, riot shield, knife, throwing knife last (only a knife throw kill wins)",
                               {"sv_funweapons": "16", "scr_game_hardpoints": "0", "scr_game_perks": "0"}),
