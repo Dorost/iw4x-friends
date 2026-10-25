@@ -4,6 +4,9 @@
 services:
   server:
     build: services/ui
+    # CI pushes one image per commit on main; scripts/deploy/deploy.sh sets IMAGE_TAG
+    # in .env. Without it, --build builds here and tags the result :main.
+    image: ghcr.io/dorost/iw4x-friends:${IMAGE_TAG:-main}
     network_mode: host
     restart: unless-stopped
     init: true # reaps exited Wine processes (uv as PID 1 doesn't)
