@@ -6,16 +6,17 @@ on:
   workflow_dispatch:
     inputs:
       servers:
-        description: Servers to deploy to (NL goes first)
+        description: Servers to deploy this branch to (NL goes first)
         type: choice
         options: [both, nl, us]
         default: both
 
-# On main runs wait for each other: a newer one replaces one still waiting, a running
-# deploy is never cancelled. On other branches a new push cancels the old run.
+# Pushes to main wait for each other: a newer one replaces one still waiting, a running
+# deploy is never cancelled. On other branches a new push cancels the old run. Run
+# workflow has groups of its own, so a push to the branch doesn't cancel its deploy.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' && github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
@@ -60,7 +61,8 @@ jobs:
           }
           if ($failed) { exit 1 }
 
-  # The server image: built and started on every push, pushed to GHCR from main
+  # The server image: built and started on every push, pushed to GHCR from main and from
+  # Run workflow (to deploy it)
   image:
     needs: check
     runs-on: ubuntu-latest
@@ -92,35 +94,46 @@ jobs:
         run: docker logs ui
 
       - name: Log in to GHCR
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
         uses: docker/login-action@v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Only main moves :main and writes the cache, so a branch with other Wine layers
+      # doesn't make the servers download them again on the next deploy from main
       - name: Push
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
         uses: docker/build-push-action@v7.4.0
         with:
           context: services/ui
           push: true
           tags: |
             ${{ env.IMAGE }}:${{ github.sha }}
-            ${{ env.IMAGE }}:main
+            ${{ github.ref == 'refs/heads/main' && format('{0}:main', env.IMAGE) || '' }}
           labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
-          cache-to: type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max
+          cache-to: ${{ github.ref == 'refs/heads/main' && format('type=registry,ref={0}:buildcache,mode=max', env.IMAGE) || '' }}
 
-  # NL first, then US; a server that fails stops the rest. scripts/deploy/deploy.sh on
-  # each one pulls the image and restarts the server only when services/ui changed.
-  deploy:
-    # Every push to main, and the Run workflow button (e.g. to deploy to one server)
-    if: github.ref == 'refs/heads/main'
+  # One job per server, each with its own environment (and deploy key), NL first: US
+  # waits for it and is skipped when it fails. Every push to main deploys main to both.
+  # Run workflow deploys the branch it runs on, e.g. a PR's, to the servers picked; the
+  # next push to main puts main back. scripts/deploy/deploy.sh on the server pulls the
+  # image and restarts the game server only when services/ui changed.
+  deploy-nl:
+    if: >-
+      github.event_name == 'push' && github.ref == 'refs/heads/main' ||
+      github.event_name == 'workflow_dispatch' && inputs.servers != 'us'
     needs: image
     runs-on: ubuntu-latest
-    environment: production
-    steps:
+    environment:
+      name: nl
+      url: https://mw2-nl.dorost.nl
+    concurrency: deploy-nl # one deploy at a time; a newer one replaces one still waiting
+    env:
+      HOST: mw2-nl.dorost.nl
+    steps: &deploy
       - uses: actions/checkout@v7
         with:
           sparse-checkout: scripts/deploy
@@ -128,17 +141,26 @@ jobs:
       - name: Deploy
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          SERVERS: ${{ inputs.servers || 'both' }}
         run: |
           eval "$(ssh-agent -s)" >/dev/null
           trap 'ssh-agent -k >/dev/null' EXIT
           ssh-add -q - <<< "$DEPLOY_SSH_KEY"
-          declare -A host=([nl]=mw2-nl.dorost.nl [us]=mw2.dorost.nl)
-          for s in nl us; do
-            [[ "$SERVERS" == both || "$SERVERS" == "$s" ]] || continue
-            echo "::group::$s: ${host[$s]}"
-            ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=scripts/deploy/known_hosts \
-                -o ConnectTimeout=20 -o ServerAliveInterval=15 "root@${host[$s]}" deploy "$GITHUB_SHA"
-            echo "::endgroup::"
-            echo "- $s (${host[$s]}): \`${GITHUB_SHA:0:7}\`" >> "$GITHUB_STEP_SUMMARY"
-          done
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=scripts/deploy/known_hosts \
+              -o ConnectTimeout=20 -o ServerAliveInterval=15 "root@$HOST" deploy "$GITHUB_SHA"
+          echo "$HOST: \`${GITHUB_SHA:0:7}\` from $GITHUB_REF_NAME" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy-us:
+    if: >-
+      !cancelled() && needs.image.result == 'success' &&
+      (needs.deploy-nl.result == 'success' || needs.deploy-nl.result == 'skipped') && (
+        github.event_name == 'push' && github.ref == 'refs/heads/main' ||
+        github.event_name == 'workflow_dispatch' && inputs.servers != 'nl')
+    needs: [image, deploy-nl]
+    runs-on: ubuntu-latest
+    environment:
+      name: us
+      url: https://mw2.dorost.nl
+    concurrency: deploy-us
+    env:
+      HOST: mw2.dorost.nl
+    steps: *deploy

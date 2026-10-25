@@ -119,7 +119,9 @@ A second server next to it (e.g. Amsterdam): put `VPS_LABEL`, `VPS_REGION` and `
 
 ### Updates from GitHub
 
-The servers behind `mw2.dorost.nl` and `mw2-nl.dorost.nl` get their updates from GitHub. Every push builds the server image and starts its web UI as a test; on `main` the image goes to `ghcr.io/dorost/iw4x-friends:<commit>` and is deployed to the NL server, then the US one (**Actions → ci → Run workflow** deploys `main` again, to one or both): [`scripts/deploy/deploy.sh`](scripts/deploy/deploy.sh) checks out the commit and, when `services/ui` changed, restarts the game server with the new image (players get disconnected and can rejoin right away). If the web UI or the game doesn't answer after that, it goes back to the previous version and leaves the next server alone. A file changed by hand on a server (`scp`, `vps:sync-ui`) stops the deploy: put the change in `main` instead.
+The servers behind `mw2.dorost.nl` and `mw2-nl.dorost.nl` get their updates from GitHub. Every push builds the server image and starts its web UI as a test; on `main` the image goes to `ghcr.io/dorost/iw4x-friends:<commit>` and is deployed to the NL server, then the US one: [`scripts/deploy/deploy.sh`](scripts/deploy/deploy.sh) checks out the commit and, when `services/ui` changed, restarts the game server with the new image (players get disconnected and can rejoin right away). If the web UI or the game doesn't answer after that, it goes back to the previous version and leaves the US server alone. A file changed by hand on a server (`scp`, `vps:sync-ui`) stops the deploy: put the change in `main` instead.
+
+To try a PR on a server before merging it: **Actions → ci → Run workflow**, pick the PR's branch and the server (`nl`, `us` or `both`). It builds that commit's image and deploys it like above; the server keeps it until the next push to `main` (or Run workflow on `main`) puts `main` back. The branch has to be in this repo (push a fork's PR to a branch here first) and have this workflow (merge `main` into it if it's older).
 
 To set a server up for it, once, as root on the server:
 
@@ -132,13 +134,13 @@ docker tag "$(docker inspect -f '{{.Image}}' iw4x-server-1)" ghcr.io/dorost/iw4x
 echo IMAGE_TAG=pre-ci >> .env
 ```
 
-Then add the deploy key (the public half of the `DEPLOY_SSH_KEY` secret of the repo's `production` environment) to `~/.ssh/authorized_keys`, limited to the deploy script:
+Then add the server's deploy key (the public half of the `DEPLOY_SSH_KEY` secret of its environment in the repo settings, `nl` or `us`) to `~/.ssh/authorized_keys`, limited to the deploy script:
 
 ```
 restrict,command="bash /root/iw4x/scripts/deploy/deploy.sh" ssh-ed25519 AAAA... iw4x deploy
 ```
 
-A new server also goes into the `host` list in [`.github/workflows/ci.yml`](.github/workflows/ci.yml), with its host key (`/etc/ssh/ssh_host_ed25519_key.pub`) in [`scripts/deploy/known_hosts`](scripts/deploy/known_hosts).
+A new server also gets an environment with its own `DEPLOY_SSH_KEY`, a deploy job in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (a copy of `deploy-us`) and its host key (`/etc/ssh/ssh_host_ed25519_key.pub`) in [`scripts/deploy/known_hosts`](scripts/deploy/known_hosts).
 
 ## Repo layout
 
