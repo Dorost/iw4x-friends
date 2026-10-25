@@ -24,7 +24,12 @@ from pathlib import Path
 import psutil
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
+from fastapi.responses import (
+    HTMLResponse,
+    RedirectResponse,
+    Response,
+    StreamingResponse,
+)
 from pydantic import BaseModel
 
 IS_WINDOWS = sys.platform == "win32"
@@ -729,7 +734,7 @@ def poll_loop() -> None:
         poked.clear()
         try:
             data = {"state": state(), "log": log()["lines"]}
-        except Exception as e:  # keep pushing: one failed query must not stop live updates
+        except Exception as e:  # noqa: BLE001  keep pushing: one failed query must not stop live updates
             data = {"error": str(e)}
         if server_pids() and time.monotonic() - last_alive > WATCHDOG_SECONDS:
             print(f"game server not answering for {WATCHDOG_SECONDS} s, restarting it", flush=True)
