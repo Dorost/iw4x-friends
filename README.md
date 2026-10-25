@@ -117,10 +117,34 @@ Creates the VPS (New York, high frequency 2 CPU / 4 GB), copies this repo, runs 
 
 A second server next to it (e.g. Amsterdam): put `VPS_LABEL`, `VPS_REGION` and `VPS_DOMAIN` in front of each command, e.g. `VPS_LABEL=iw4x-nl VPS_REGION=ams VPS_DOMAIN=mw2-nl.example.com uv run scripts/tools/vultr.py up` (also `status`, `down`, `sync-iw4x`).
 
+### Updates from GitHub
+
+The servers behind `mw2.dorost.nl` and `mw2-nl.dorost.nl` get their updates from GitHub. Every push builds the server image and starts its web UI as a test; on `main` the image goes to `ghcr.io/dorost/iw4x-friends:<commit>`. **Actions → ci → Run workflow** deploys `main` to the NL server, then the US one: [`scripts/deploy/deploy.sh`](scripts/deploy/deploy.sh) checks out the commit and, when `services/ui` changed, restarts the game server with the new image (players get disconnected and can rejoin right away). If the web UI or the game doesn't answer after that, it goes back to the previous version and leaves the next server alone. A file changed by hand on a server (`scp`, `vps:sync-ui`) stops the deploy: put the change in `main` instead.
+
+To set a server up for it, once, as root on the server:
+
+```sh
+cd ~/iw4x
+git init -q && git remote add origin https://github.com/Dorost/iw4x-friends.git
+git fetch -q origin main && git checkout -qf --detach origin/main
+# the image running now, to go back to if the first deploy fails
+docker tag "$(docker inspect -f '{{.Image}}' iw4x-server-1)" ghcr.io/dorost/iw4x-friends:pre-ci
+echo IMAGE_TAG=pre-ci >> .env
+```
+
+Then add the deploy key (the public half of the `DEPLOY_SSH_KEY` secret of the repo's `production` environment) to `~/.ssh/authorized_keys`, limited to the deploy script:
+
+```
+restrict,command="bash /root/iw4x/scripts/deploy/deploy.sh" ssh-ed25519 AAAA... iw4x deploy
+```
+
+A new server also goes into the `host` list in [`.github/workflows/ci.yml`](.github/workflows/ci.yml), with its host key (`/etc/ssh/ssh_host_ed25519_key.pub`) in [`scripts/deploy/known_hosts`](scripts/deploy/known_hosts).
+
 ## Repo layout
 
 - `scripts/windows/`, `scripts/mac/`, `scripts/linux/`: setup and helper scripts per system
 - `scripts/tools/`: maintenance (`task sync-config`, `task links`)
+- `scripts/deploy/`: deploys from GitHub Actions to the servers (see [Updates from GitHub](#updates-from-github))
 - `config/`: shared game settings and classes, copied into the setup scripts by `task sync-config`
 - `services/ui/`: the server's web control page
 

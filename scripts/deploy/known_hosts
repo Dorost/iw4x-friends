@@ -1,0 +1,3 @@
+# SSH host keys of the servers the ci workflow deploys to (read from /etc/ssh on each)
+mw2-nl.dorost.nl ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPCjgmRHnGWcEzvSY7PVDdBbvNebJo6yMb9Kv3QMZM50
+mw2.dorost.nl ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICD6OzenWn1Lu6pdY46SrTa1nbHHBjIIaz8c6NQNvhrK

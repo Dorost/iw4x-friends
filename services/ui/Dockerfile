@@ -23,7 +23,10 @@ RUN wineboot -i \
  && wineserver -w
 
 WORKDIR /app
-COPY app.py index.html login.html lobby.gsc weapons.gsc players.gsc sdfun.gsc vote.gsc ./
+# Python and the dependencies (135 MB) first: a change to only the pages or game
+# scripts then rebuilds and pulls a few kB instead.
+COPY app.py ./
 RUN uv sync --script app.py
+COPY index.html login.html lobby.gsc weapons.gsc players.gsc sdfun.gsc vote.gsc ./
 
 CMD ["sh", "-c", "Xvfb :99 -nolisten tcp & exec uv run app.py"]

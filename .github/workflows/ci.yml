@@ -1,0 +1,145 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      servers:
+        description: Servers to deploy to (NL goes first)
+        type: choice
+        options: [both, nl, us]
+        default: both
+
+# On main runs wait for each other: a newer one replaces one still waiting, a running
+# deploy is never cancelled. On other branches a new push cancels the old run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/dorost/iw4x-friends
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.2
+        with:
+          enable-cache: false # no lockfile, nothing to cache
+
+      - name: Setup scripts carry the current config/client.cfg
+        run: uv run scripts/tools/sync-config.py --check
+
+      - name: Lint web UI
+        run: uvx ruff@0.17.2 check services/ui
+
+      - name: Shell scripts parse
+        run: |
+          sudo apt-get install -y -qq zsh
+          for f in scripts/*/*.sh scripts/*.sh; do
+            if head -1 "$f" | grep -q bash; then bash -n "$f"; else zsh -n "$f"; fi && echo "ok $f"
+          done
+
+      - name: Docker compose config valid
+        run: DOMAIN=example.com UI_PASSWORD=x docker compose config -q
+
+      - name: PowerShell scripts parse
+        shell: pwsh
+        run: |
+          $failed = $false
+          Get-ChildItem scripts -Recurse -Filter *.ps1 | ForEach-Object {
+            $errors = $null; $tokens = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors) { $errors | ForEach-Object { Write-Host "::error file=$($_.Extent.File),line=$($_.Extent.StartLineNumber)::$($_.Message)" }; $failed = $true }
+            else { Write-Host "ok $($_.Name)" }
+          }
+          if ($failed) { exit 1 }
+
+  # The server image: built and started on every push, pushed to GHCR from main
+  image:
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4.4.1
+
+      # The registry cache keeps the Wine layers byte for byte the same from build to
+      # build, so a server only downloads the layers that changed
+      - name: Build
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: services/ui
+          load: true
+          tags: iw4x-friends:test
+          cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
+
+      - name: Web UI starts in the image
+        run: |
+          docker run -d --name ui -p 8080:8080 -e UI_PASSWORD=ci -e AUTOSTART=0 iw4x-friends:test
+          for _ in $(seq 30); do curl -fso /dev/null localhost:8080/login && break; sleep 2; done
+          curl -fsS -u :ci localhost:8080/api/state | jq -e '.auth and (.running | not)' >/dev/null
+          [ "$(curl -so /dev/null -w '%{http_code}' localhost:8080/api/state)" = 401 ]   # login required
+      - name: Web UI log
+        if: failure()
+        run: docker logs ui
+
+      - name: Log in to GHCR
+        if: github.ref == 'refs/heads/main'
+        uses: docker/login-action@v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push
+        if: github.ref == 'refs/heads/main'
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: services/ui
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:main
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max
+
+  # NL first, then US; a server that fails stops the rest. scripts/deploy/deploy.sh on
+  # each one pulls the image and restarts the server only when services/ui changed.
+  deploy:
+    # From the Run workflow button only, for now. To deploy every push to main, drop
+    # the event_name condition.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    needs: image
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts/deploy
+
+      - name: Deploy
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SERVERS: ${{ inputs.servers || 'both' }}
+        run: |
+          eval "$(ssh-agent -s)" >/dev/null
+          trap 'ssh-agent -k >/dev/null' EXIT
+          ssh-add -q - <<< "$DEPLOY_SSH_KEY"
+          declare -A host=([nl]=mw2-nl.dorost.nl [us]=mw2.dorost.nl)
+          for s in nl us; do
+            [[ "$SERVERS" == both || "$SERVERS" == "$s" ]] || continue
+            echo "::group::$s: ${host[$s]}"
+            ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=scripts/deploy/known_hosts \
+                -o ConnectTimeout=20 -o ServerAliveInterval=15 "root@${host[$s]}" deploy "$GITHUB_SHA"
+            echo "::endgroup::"
+            echo "- $s (${host[$s]}): \`${GITHUB_SHA:0:7}\`" >> "$GITHUB_STEP_SUMMARY"
+          done
