@@ -409,6 +409,21 @@ seta winvoice_mic_reclevel "65535"
 // in menus; at the main menu use the console instead: exec classes.cfg. They can't load
 // automatically at startup: the game reads your stats a few seconds later.
 bind F9 "exec classes.cfg"
+
+// in-game server menu (!menu, !gt, !map): Up/Down move, Enter picks. The server only sees
+// bound commands, so the arrows act as forward/back and Enter as use (same as F)
+bind UPARROW "+forward"
+bind DOWNARROW "+back"
+bind ENTER "+activate"
+bind KP_ENTER "+activate"
+
+// in-game vote (game type, then map): F1 .. F6 vote for option 1 .. 6, same as !1 .. !6 in chat
+bind F1 "say !1"
+bind F2 "say !2"
+bind F3 "say !3"
+bind F4 "say !4"
+bind F5 "say !5"
+bind F6 "say !6"
 CFG
 )
 # END client.cfg

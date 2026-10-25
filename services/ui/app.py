@@ -271,6 +271,9 @@ GIVE_WEAPONS = {
 LOBBY_PLAYLIST = "playlists_lobby.info"
 # restart the game server when it runs but hasn't answered for this long (it can hang at start)
 WATCHDOG_SECONDS = 90
+# S&D round wins needed to win when the Game panel's Win limit is empty (the game's own default is 4)
+SD_WINLIMIT = "12"
+# the 16 original MW2 maps: the only ones the Game panel offers for S&D
 STOCK_MAPS = ["mp_afghan", "mp_boneyard", "mp_brecourt", "mp_checkpoint", "mp_derail", "mp_estate",
               "mp_favela", "mp_highrise", "mp_invasion", "mp_nightshift", "mp_quarry", "mp_rundown",
               "mp_rust", "mp_subbase", "mp_terminal", "mp_underpass"]
@@ -333,7 +336,7 @@ def installed_maps() -> list[dict]:
         d.name for d in (GAME_DIR / "usermaps").glob("mp_*") if (d / f"{d.name}.ff").exists()
     }
     maps = [
-        {"id": n, "name": MAP_NAMES.get(n, n), "custom": n in custom and n not in names}
+        {"id": n, "name": MAP_NAMES.get(n, n), "custom": n in custom and n not in names, "stock": n in STOCK_MAPS}
         for n in (names | custom) - BROKEN_MAPS
     ]
     return sorted(maps, key=lambda m: m["name"])
@@ -454,6 +457,7 @@ def save_cfg(v: dict[str, str]) -> None:
     for key in CHEAT_DVARS:
         if key in v:
             v[f"sv_fun_{key}"] = v[key]
+    v.setdefault("scr_sd_winlimit", SD_WINLIMIT)  # empty S&D Win limit = ours, not the game's 4
     lines = ["// IW4x LAN dedicated server (edited by server-ui)"]
     lines += [f'set {k} "{val}"' for k, val in v.items()]
     CFG.write_text("\n".join(lines) + "\n")
@@ -561,6 +565,8 @@ def start_server() -> None:
         return
     last_alive = time.monotonic()
     install_lobby_gsc()
+    if CFG.exists() and "scr_sd_winlimit" not in (v := read_cfg()):
+        save_cfg(v)  # a server.cfg from before the S&D Win limit default gets it
     args = ["-dedicated", "+set", "net_port", str(PORT), "+exec", "server.cfg"]
     args += LOBBY_ARGS
     if install_lobby_playlist():
@@ -962,7 +968,7 @@ def start_game(g: Game):
 def save_limits(gametype: str, limits: Limits, v: dict[str, str]) -> None:
     """Saves the mode's limits to server.cfg; the caller runs exec server.cfg to apply them."""
     if clean(limits.roundlimit) and not clean(limits.winlimit):
-        # the mode's default win limit (S&D: 4) would end the match before the rounds are played
+        # the mode's default win limit (S&D: 12) would end the match before the rounds are played
         limits = limits.model_copy(update={"winlimit": "0"})
     for limit in MODE_LIMITS:
         key, val = f"scr_{gametype}_{limit}", getattr(limits, limit)

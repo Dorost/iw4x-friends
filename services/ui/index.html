@@ -232,14 +232,23 @@ function fillForm(c) {
   $('vote').checked = c.vote;
   const opts = Object.entries(S.gametypes).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
   $('gametype').innerHTML = opts; $('gametype').value = c.gametype;
-  $('liveMap').innerHTML = S.maps.map(m => `<option value="${m.id}">${esc(m.name)}${m.custom ? ' (custom)' : ''}</option>`).join('');
-  if (S.maps.some(m => m.id === c.map)) $('liveMap').value = c.map;
+  fillMaps(c.map);
+}
+
+// S&D offers the 16 original MW2 maps only; its empty Win limit means 12
+function fillMaps(pick) {
+  const sd = $('gametype').value === 'sd';
+  const maps = S.maps.filter(m => !sd || m.stock);
+  $('liveMap').innerHTML = maps.map(m => `<option value="${m.id}">${esc(m.name)}${m.custom ? ' (custom)' : ''}</option>`).join('');
+  if (maps.some(m => m.id === pick)) $('liveMap').value = pick;
+  $('winlimit').placeholder = sd ? '12' : 'default';
 }
 
 // the saved limits belong to the saved mode: another mode starts from its defaults
 function modeChanged() {
   const same = $('gametype').value === S.config.gametype;
   for (const k of LIMITS) $(k).value = same ? S.config[k] : '';
+  fillMaps($('liveMap').value);
 }
 
 // the picked map and mode become the next match, announced in game

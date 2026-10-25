@@ -1,25 +1,31 @@
 // In-game map vote and next game type, with chat commands and an on-screen list.
-// Works with stock IW4x clients: chat comes in through IW4x's OnPlayerSay, keys through the
-// use button (F), which every player has bound.
+// Works with stock IW4x clients: chat comes in through IW4x's OnPlayerSay, keys through
+// notifyOnPlayerCommand on the move forward/back, use and melee binds (W/S, F, melee).
+// config/client.cfg also binds the arrow keys to forward/back, Enter to use and F1 .. F6 to
+// "say !1" .. "say !6", so Up/Down/Enter and F1-F6 work for everyone who ran the setup script.
 //
 // Everyone can use all of it; every change is announced with the player's name, last one wins.
-// Voting:   !1 .. !5 vote for a map (or press F to step through the options), !next, !help
+// Voting:   F1 .. F6 or !1 .. !6 vote (or press Enter/F to step through the options), !next, !help
 // Picks:    !gt <mode> sets the next game type (tdm, ffa, dom, sd, hq, ...)
-//           !gt alone opens a list on screen: F steps to the next mode, it closes by itself
+//           !gt alone opens the menu at the game type list
 //           !vote starts a map vote now, the winner is the next map; !cancel stops it
 //           !map <name> sets the next map (short or partial names: rust, afghan, ship): no vote,
 //           that map loads after the match; !map <name> now switches right away;
-//           !map alone opens the map list (F = next, closes by itself); !map clear drops the pick
-//           !menu opens a menu on screen. Controls
-//           frozen while it is open: aim (right mouse) up, fire (left mouse) down, F select,
-//           melee (V) back / close. Closes after 20 s without input, on death and at match end.
+//           !map alone opens the menu at the map list (S&D: the 16 original maps only);
+//           !map clear drops the pick
+//           !menu opens a menu on screen, you are frozen while it is open: Up/Down (or W/S)
+//           move, Enter (or F) pick, melee back / close. Nothing changes without a pick.
+//           Closes after 20 s without input, on death and at match end.
 // Lists:    ! alone (or !?) shows the commands on screen for 6 s; an unknown command shows the
 //           ones that match it, an unknown or unclear !map / !gt name the maps or modes that do
 // No lobby between matches: when a match ends, the scoreboard shows "Next up: <map>, <mode>"
 //   and that match loads right away. Next up is also announced at the start of a match, in its
 //   last minute and whenever it changes. The map is the pick (!map, menu, web UI, vote winner),
-//   else a random other map; the mode is the !gt pick, else the one just played.
-// sv_vote_enabled 1: with no map picked, a map vote starts by itself 90 s before a timed match
+//   else a random other original MW2 map; the mode is the !gt pick or the game type vote winner,
+//   else the one just played.
+// Vote: with no game type picked, a game type vote (S&D, TDM, Dom, FFA, HQ, CTF) runs first, then
+//   the map vote: 6 random maps of the 16 original MW2 maps (no DLC or custom maps).
+// sv_vote_enabled 1: with no map picked, the vote starts by itself 90 s before a timed match
 //   ends (S&D: in the first round that gets there); the winner is the next map.
 // The web UI writes the installed maps and modes to userraw/scriptdata/vote.txt.
 init()
@@ -30,6 +36,7 @@ init()
 	level.voteAutoDone = false;
 	loadLists();
 	OnPlayerSay( ::onSay );
+	level thread menuKeysJoiners();
 	level thread start();
 }
 
@@ -39,7 +46,7 @@ start()
 	setDvar( "sv_vote_prevmap", getDvar( "mapname" ) );
 	setDvar( "sv_vote_prevmode", getDvar( "g_gametype" ) );
 	// the fallback next map, kept across S&D rounds
-	if ( !isMap( getDvar( "sv_vote_next" ) ) || getDvar( "sv_vote_next" ) == getDvar( "mapname" ) )
+	if ( !listHas( level.voteBaseMaps, getDvar( "sv_vote_next" ) ) || getDvar( "sv_vote_next" ) == getDvar( "mapname" ) )
 		setDvar( "sv_vote_next", randomOtherMap() );
 	level.nextUpShown = nextUpText();
 	level thread autoVote();
@@ -146,14 +153,22 @@ isMap( map )
 	return false;
 }
 
+listHas( list, item )
+{
+	foreach ( x in list )
+		if ( x == item )
+			return true;
+	return false;
+}
+
 randomOtherMap()
 {
 	pool = [];
-	foreach ( map in level.voteMaps )
+	foreach ( map in level.voteBaseMaps )
 		if ( map != getDvar( "mapname" ) )
 			pool[ pool.size ] = map;
 	if ( !pool.size )
-		pool = level.voteMaps;
+		pool = level.voteBaseMaps;
 	return pool[ randomInt( pool.size ) ];
 }
 
@@ -185,9 +200,11 @@ loadLists()
 			level.voteModes[ level.voteModes.size ] = parts[ 1 ];
 		}
 	}
+	// the 16 original MW2 maps, no DLC (Stimulus, Resurgence) or custom maps
+	base = strTok( "mp_afghan mp_boneyard mp_brecourt mp_checkpoint mp_derail mp_estate mp_favela mp_highrise mp_invasion mp_nightshift mp_quarry mp_rundown mp_rust mp_subbase mp_terminal mp_underpass", " " );
 	if ( !level.voteMaps.size )
 	{
-		level.voteMaps = strTok( "mp_afghan mp_boneyard mp_brecourt mp_checkpoint mp_derail mp_estate mp_favela mp_highrise mp_invasion mp_nightshift mp_quarry mp_rundown mp_rust mp_subbase mp_terminal mp_underpass", " " );
+		level.voteMaps = base;
 		level.voteMapNames = level.voteMaps;
 	}
 	if ( !level.voteModes.size )
@@ -195,6 +212,29 @@ loadLists()
 		level.voteModes = strTok( "war dm dom sd koth sab ctf dd", " " );
 		level.voteModeNames = level.voteModes;
 	}
+	// the installed ones: the map vote and the random next map use these, so does the map menu for S&D
+	level.voteBaseMaps = [];
+	foreach ( map in base )
+		if ( isMap( map ) )
+			level.voteBaseMaps[ level.voteBaseMaps.size ] = map;
+	if ( !level.voteBaseMaps.size )
+		level.voteBaseMaps = level.voteMaps;
+}
+
+// the maps of the menu's map list: S&D gets the original maps only
+menuMaps()
+{
+	if ( nextMode() == "sd" )
+		return level.voteBaseMaps;
+	return level.voteMaps;
+}
+
+menuMapNames()
+{
+	names = [];
+	foreach ( map in menuMaps() )
+		names[ names.size ] = mapName( map );
+	return names;
 }
 
 mapName( map )
@@ -275,7 +315,7 @@ onSay( text, mode )
 	if ( num >= 1 && num <= 9 && cmd == "" + num )
 	{
 		if ( !level.voteActive )
-			self iPrintLn( "No map vote running" );
+			self iPrintLn( "No vote running" );
 		else if ( num > level.voteOptions.size )
 			self iPrintLn( "Vote 1 to " + level.voteOptions.size );
 		else
@@ -286,10 +326,10 @@ onSay( text, mode )
 	switch ( cmd )
 	{
 	case "help":
-		self iPrintLn( "!1 .. !5 or F: vote for a map   !next: next map and game type" );
+		self iPrintLn( "F1 .. F6, !1 .. !6 or Enter/F: vote   !next: next map and game type" );
 		self iPrintLn( "!gt <mode> or !gt (list)   !vote   !cancel" );
 		self iPrintLn( "!map <name> [now]   !map (list)   !map clear" );
-		self iPrintLn( "!menu: RMB up, LMB down, F select, V back" );
+		self iPrintLn( "!menu: Up/Down move, Enter pick, melee back" );
 		return 0;
 	case "next":
 		self iPrintLn( nextUpText() );
@@ -298,7 +338,7 @@ onSay( text, mode )
 		if ( isDefined( self.menuOpen ) && self.menuOpen )
 			self.menuStop = true;
 		else
-			self thread hudMenu();
+			self thread hudMenu( "main" );
 		return 0;
 	case "map":
 		self mapCommand( args );
@@ -308,10 +348,10 @@ onSay( text, mode )
 	case "mode":
 		if ( args.size < 2 )
 		{
-			if ( isDefined( self.voteMenuOpen ) && self.voteMenuOpen )
-				self.voteMenuStop = true;
+			if ( isDefined( self.menuOpen ) && self.menuOpen )
+				self.menuStop = true;
 			else
-				self thread modeMenu();
+				self thread hudMenu( "mode" );
 			return 0;
 		}
 		pick = modeAlias( args[ 1 ] );
@@ -347,15 +387,15 @@ onSay( text, mode )
 commandList( q, title )
 {
 	all = [];
-	all[ all.size ] = "1 2 3 4 5|!1 .. !5|vote for a map (or F)";
+	all[ all.size ] = "1 2 3 4 5 6|!1 .. !6|vote (or F1-F6, Enter)";
 	all[ all.size ] = "next|!next|next map and game type";
 	all[ all.size ] = "gt gametype mode|!gt <mode>|next game type";
-	all[ all.size ] = "gt gametype mode|!gt|game type list";
+	all[ all.size ] = "gt gametype mode|!gt|game type menu";
 	all[ all.size ] = "map|!map <name>|next map";
 	all[ all.size ] = "map|!map <name> now|switch map now";
-	all[ all.size ] = "map|!map|map list";
+	all[ all.size ] = "map|!map|map menu";
 	all[ all.size ] = "map|!map clear|drop the map pick";
-	all[ all.size ] = "vote mapvote|!vote|start a map vote";
+	all[ all.size ] = "vote mapvote|!vote|start a vote";
 	all[ all.size ] = "cancel|!cancel|stop the map vote";
 	all[ all.size ] = "menu|!menu|server menu";
 	all[ all.size ] = "help|!help|commands in chat";
@@ -583,84 +623,6 @@ plainName( name )
 }
 
 
-// ---------- game type list (!gt) ----------
-
-modeMenu()
-{
-	self endon( "disconnect" );
-
-	self.voteMenuOpen = true;
-	self.voteMenuStop = false;
-	sel = modeIndex( nextMode() );
-	if ( sel < 0 )
-		sel = 0;
-	startSel = sel;  // nothing picked unless F is pressed
-
-	elems = [];
-	title = self menuText( -20 - level.voteModes.size * 14 / 2, 1.4, "objective" );
-	title setText( "NEXT GAME TYPE   (F = next)" );
-	elems[ elems.size ] = title;
-	top = title.y + 22;
-	for ( i = 0; i < level.voteModes.size; i++ )
-	{
-		row = self menuText( top + i * 14, 1.2, "default" );
-		row setText( level.voteModeNames[ i ] );
-		elems[ elems.size ] = row;
-	}
-	bar = newClientHudElem( self );
-	bar.horzAlign = "left";
-	bar.vertAlign = "middle";
-	bar.alignX = "left";
-	bar.alignY = "middle";
-	bar.x = 8;
-	bar.alpha = 0.35;
-	bar.color = ( 0.3, 0.6, 1 );
-	bar.hideWhenInMenu = true;
-	bar.archived = false;
-	bar.sort = -1;
-	bar setShader( "white", 180, 13 );
-	elems[ elems.size ] = bar;
-
-	idle = 0;
-	for ( ;; )
-	{
-		bar.y = top + sel * 14;
-		if ( self.voteMenuStop || idle >= 120 )  // 6 s without a press
-			break;
-		if ( self useButtonPressed() )
-		{
-			sel = ( sel + 1 ) % level.voteModes.size;
-			idle = 0;
-			while ( self useButtonPressed() )
-				wait 0.05;
-			continue;
-		}
-		idle++;
-		wait 0.05;
-	}
-	if ( sel != startSel && level.voteModes[ sel ] != getDvar( "sv_vote_mode" ) )
-		self setNextMode( level.voteModes[ sel ] );
-	foreach ( e in elems )
-		e destroy();
-	self.voteMenuOpen = false;
-}
-
-menuText( y, scale, font )
-{
-	t = newClientHudElem( self );
-	t.horzAlign = "left";
-	t.vertAlign = "middle";
-	t.alignX = "left";
-	t.alignY = "middle";
-	t.x = 12;
-	t.y = y;
-	t.font = font;
-	t.fontScale = scale;
-	t.hideWhenInMenu = true;
-	t.archived = false;
-	return t;
-}
-
 // ---------- map vote ----------
 
 runVote()
@@ -670,41 +632,78 @@ runVote()
 	level.voteActive = true;
 	level endon( "game_ended" );
 
-	// up to 4 random maps, not the one just played or this one
+	// no game type picked (!gt, menu, web UI): the game type vote comes first
+	if ( modeIndex( getDvar( "sv_vote_mode" ) ) < 0 )
+	{
+		modes = [];
+		foreach ( mode in strTok( "sd war dom dm koth ctf", " " ) )
+			if ( modeIndex( mode ) >= 0 )
+				modes[ modes.size ] = mode;
+		names = [];
+		foreach ( mode in modes )
+			names[ names.size ] = modeName( mode );
+		win = votePoll( "VOTE FOR THE GAME TYPE", modes, names, "then the map vote", 15 );
+		if ( level.voteCancelled )
+		{
+			level.voteActive = false;
+			return;
+		}
+		if ( win >= 0 )  // no votes: the mode stays
+			setDvar( "sv_vote_mode", modes[ win ] );
+		iPrintLnBold( "Next game type: " + modeName( nextMode() ) );
+	}
+
+	// up to 6 random original maps, not the one just played or this one
 	pool = [];
-	foreach ( map in level.voteMaps )
+	foreach ( map in level.voteBaseMaps )
 		if ( map != getDvar( "mapname" ) && map != getDvar( "sv_vote_prevmap" ) )
 			pool[ pool.size ] = map;
 	if ( !pool.size )
-		pool = level.voteMaps;
-	level.voteOptions = [];
-	while ( level.voteOptions.size < 4 && pool.size )
+		pool = level.voteBaseMaps;
+	options = [];
+	while ( options.size < 6 && pool.size )
 	{
 		i = randomInt( pool.size );
-		level.voteOptions[ level.voteOptions.size ] = pool[ i ];
+		options[ options.size ] = pool[ i ];
 		pool[ i ] = pool[ pool.size - 1 ];
 		pool[ pool.size - 1 ] = undefined;
 	}
+	names = [];
+	foreach ( map in options )
+		names[ names.size ] = mapName( map );
+	win = votePoll( "VOTE FOR THE NEXT MAP", options, names, modeName( nextMode() ), 20 );
+	level.voteActive = false;
+	if ( level.voteCancelled )
+		return;
+	if ( win < 0 )  // no votes: a coin flip
+		win = randomInt( options.size );
+	setDvar( "sv_vote_map", options[ win ] );
+	announceNextUp( true );
+}
 
+// one vote on screen for everyone: returns the index of the option with the most votes (a tie
+// is a coin flip among the best), -1 with no votes or when cancelled (level.voteCancelled)
+votePoll( title, options, names, sub, seconds )
+{
+	level.voteOptions = options;
 	foreach ( player in level.players )
 		player.voteChoice = -1;
 
-	seconds = 20;
 	hud = [];
 	top = -70;
-	title = voteText( top, 1.5, "objective" );
-	title setText( "VOTE FOR THE NEXT MAP" );
-	title.color = ( 0.55, 0.85, 1 );
-	hud[ hud.size ] = title;
+	head = voteText( top, 1.5, "objective" );
+	head setText( title );
+	head.color = ( 0.55, 0.85, 1 );
+	hud[ hud.size ] = head;
 	level.voteModeHud = voteText( top + 18, 1.2, "default" );
-	level.voteModeHud setText( modeName( nextMode() ) );
+	level.voteModeHud setText( sub );
 	level.voteModeHud.color = ( 0.8, 0.8, 0.8 );
 	hud[ hud.size ] = level.voteModeHud;
 	counts = [];
-	for ( i = 0; i < level.voteOptions.size; i++ )
+	for ( i = 0; i < options.size; i++ )
 	{
 		row = voteText( top + 40 + i * 16, 1.3, "default" );
-		row setText( "!" + ( i + 1 ) + "  " + mapName( level.voteOptions[ i ] ) );
+		row setText( "F" + ( i + 1 ) + "  " + names[ i ] );
 		hud[ hud.size ] = row;
 		c = voteText( top + 40 + i * 16, 1.3, "default" );
 		c.x = 170;
@@ -712,8 +711,8 @@ runVote()
 		hud[ hud.size ] = c;
 		counts[ i ] = c;
 	}
-	hint = voteText( top + 46 + level.voteOptions.size * 16, 1.1, "default" );
-	hint setText( "F or !1-!" + level.voteOptions.size + " in chat to vote" );
+	hint = voteText( top + 46 + options.size * 16, 1.1, "default" );
+	hint setText( "F1-F" + options.size + ", !1-!" + options.size + " in chat or Enter/F to vote" );
 	hint.color = ( 0.75, 0.75, 0.75 );
 	hud[ hud.size ] = hint;
 	timer = voteText( top, 1.5, "objective" );
@@ -742,21 +741,20 @@ runVote()
 		if ( isDefined( player.voteBar ) )
 			player.voteBar destroy();
 	level.voteModeHud = undefined;
-	level.voteActive = false;
 	if ( level.voteCancelled )
-		return;
+		return -1;
 
-	// most votes wins, a tie (or no votes) is a coin flip among the best
 	best = 0;
 	foreach ( n in tally )
 		if ( n > best )
 			best = n;
+	if ( !best )
+		return -1;
 	winners = [];
 	for ( i = 0; i < tally.size; i++ )
 		if ( tally[ i ] == best )
 			winners[ winners.size ] = i;
-	setDvar( "sv_vote_map", level.voteOptions[ winners[ randomInt( winners.size ) ] ] );
-	announceNextUp( true );
+	return winners[ randomInt( winners.size ) ];
 }
 
 voteTally()
@@ -800,22 +798,21 @@ voteJoiners()
 	}
 }
 
-// F steps through the options; the highlighted one is your vote
+// Enter/F steps through the options; the highlighted one is your vote
 voteKeys()
 {
 	self endon( "disconnect" );
 	level endon( "vote_done" );
 	level endon( "game_ended" );
 
+	self.menuKey = "";  // a key pressed before the vote does nothing
 	for ( ;; )
 	{
-		if ( self useButtonPressed() && !( isDefined( self.menuOpen ) && self.menuOpen ) )
+		if ( !( isDefined( self.menuOpen ) && self.menuOpen ) && self menuKeyTake() == "pick" )
 		{
 			if ( !isDefined( self.voteChoice ) )
 				self.voteChoice = -1;
 			self castVote( ( self.voteChoice + 1 ) % level.voteOptions.size );
-			while ( self useButtonPressed() )
-				wait 0.05;
 		}
 		wait 0.05;
 	}
@@ -882,10 +879,10 @@ mapCommand( args )
 {
 	if ( args.size < 2 )
 	{
-		if ( isDefined( self.voteMapMenuOpen ) && self.voteMapMenuOpen )
-			self.voteMapMenuStop = true;
+		if ( isDefined( self.menuOpen ) && self.menuOpen )
+			self.menuStop = true;
 		else
-			self thread mapMenu();
+			self thread hudMenu( "map" );
 		return;
 	}
 	if ( args.size == 2 && ( args[ 1 ] == "clear" || args[ 1 ] == "vote" || args[ 1 ] == "none" ) )
@@ -1020,95 +1017,11 @@ mapSuggestionList( query )
 	return out;
 }
 
-// on-screen map list, 15 per page: F steps to the next map, closes after 6 s without a press
-// and keeps the highlighted map as the next one
-mapMenu()
-{
-	self endon( "disconnect" );
-
-	self.voteMapMenuOpen = true;
-	self.voteMapMenuStop = false;
-	per = 15;
-	sel = 0;
-	for ( i = 0; i < level.voteMaps.size; i++ )
-		if ( level.voteMaps[ i ] == pickedMap() )
-			sel = i;
-	startSel = sel;  // nothing picked unless F is pressed or a map was picked before
-
-	elems = [];
-	title = self menuText( -20 - per * 14 / 2, 1.4, "objective" );
-	title setText( "NEXT MAP   (F = next)" );
-	elems[ elems.size ] = title;
-	pageHud = self menuText( title.y, 1.4, "objective" );
-	pageHud.x = 190;
-	elems[ elems.size ] = pageHud;
-	top = title.y + 22;
-	rows = [];
-	for ( i = 0; i < per; i++ )
-	{
-		rows[ i ] = self menuText( top + i * 14, 1.2, "default" );
-		elems[ elems.size ] = rows[ i ];
-	}
-	bar = newClientHudElem( self );
-	bar.horzAlign = "left";
-	bar.vertAlign = "middle";
-	bar.alignX = "left";
-	bar.alignY = "middle";
-	bar.x = 8;
-	bar.alpha = 0.35;
-	bar.color = ( 0.3, 0.6, 1 );
-	bar.hideWhenInMenu = true;
-	bar.archived = false;
-	bar.sort = -1;
-	bar setShader( "white", 180, 13 );
-	elems[ elems.size ] = bar;
-
-	page = -1;
-	idle = 0;
-	for ( ;; )
-	{
-		if ( int( sel / per ) != page )
-		{
-			page = int( sel / per );
-			for ( i = 0; i < per; i++ )
-			{
-				j = page * per + i;
-				if ( j < level.voteMaps.size )
-					rows[ i ] setText( level.voteMapNames[ j ] );
-				else
-					rows[ i ] setText( "" );
-			}
-			pageHud setValue( page + 1 );
-		}
-		bar.y = top + ( sel % per ) * 14;
-		if ( self.voteMapMenuStop || idle >= 120 )
-			break;
-		if ( self useButtonPressed() )
-		{
-			sel = ( sel + 1 ) % level.voteMaps.size;
-			idle = 0;
-			while ( self useButtonPressed() )
-				wait 0.05;
-			continue;
-		}
-		idle++;
-		wait 0.05;
-	}
-	if ( sel != startSel || pickedMap() != "" )
-	{
-		if ( level.voteMaps[ sel ] != pickedMap() )
-			self setNextMap( level.voteMaps[ sel ] );
-	}
-	else
-		self iPrintLn( "Map list closed, no map picked" );
-	foreach ( e in elems )
-		e destroy();
-	self.voteMapMenuOpen = false;
-}
-
 // ---------- on-screen menu (!menu) ----------
 
-hudMenu()
+// start: "main", or "mode" / "map" to open at that list (!gt, !map); Back there closes,
+// so does a pick
+hudMenu( start )
 {
 	self endon( "disconnect" );
 
@@ -1116,8 +1029,6 @@ hudMenu()
 		return;
 	self.menuOpen = true;
 	self.menuStop = false;
-	self.voteMenuStop = true;     // the F-only lists of !gt and !map
-	self.voteMapMenuStop = true;
 	self freezeControls( true );
 	self disableWeapons();
 
@@ -1174,25 +1085,30 @@ hudMenu()
 	arrow.color = ( 1, 1, 1 );
 	elems[ elems.size ] = arrow;
 	footer = self hudMenuText( x, rowsTop + per * 16 + 6, 1.1, "default" );
-	footer setText( "RMB up   LMB down   F select   V back" );
+	footer setText( "Up/Down move   Enter pick   Melee back" );
 	footer.color = ( 0.7, 0.7, 0.7 );
 	elems[ elems.size ] = footer;
 	self thread hudMenuCleanup( elems );
 
-	screen = "main";
+	screen = start;
 	sel = 0;
 	mapSel = 0;
+	if ( screen == "mode" )
+		sel = modeIndex( nextMode() );
+	if ( screen == "map" )
+	{
+		list = menuMaps();
+		for ( i = 0; i < list.size; i++ )
+			if ( list[ i ] == pickedMap() )
+				sel = i;
+	}
+	if ( sel < 0 )
+		sel = 0;
 	drawn = "";
 	shownStatus = "";
 	idle = 0;
 	wasAlive = isAlive( self );
-	// a button already held when the menu opens (F after holding it) does nothing until released
-	prevUp = self adsButtonPressed();
-	prevDown = self attackButtonPressed();
-	prevUse = self useButtonPressed();
-	prevBack = self meleeButtonPressed();
-	holdUp = 0;
-	holdDown = 0;
+	self.menuKey = "";  // a key pressed before the menu opened does nothing
 
 	for ( ;; )
 	{
@@ -1200,10 +1116,10 @@ hudMenu()
 		if ( sel >= items.size )
 			sel = items.size - 1;
 		page = int( sel / per );
-		key = screen + " " + page + " " + mapSel;
-		if ( key != drawn )
+		view = screen + " " + page + " " + mapSel;
+		if ( view != drawn )
 		{
-			drawn = key;
+			drawn = view;
 			for ( i = 0; i < per; i++ )
 			{
 				j = page * per + i;
@@ -1229,32 +1145,19 @@ hudMenu()
 			|| ( isDefined( level.gameEnded ) && level.gameEnded ) )
 			break;
 
-		up = self adsButtonPressed();
-		down = self attackButtonPressed();
-		pressUse = self useButtonPressed();
-		pressBack = self meleeButtonPressed();
-		if ( up || down || pressUse || pressBack )
-			idle = 0;
-		else
+		key = self menuKeyTake();
+		if ( key == "" )
 			idle++;
-
-		// one step per press, then repeating while held
-		if ( up )
-			holdUp++;
 		else
-			holdUp = 0;
-		if ( down )
-			holdDown++;
-		else
-			holdDown = 0;
-		if ( ( up && !prevUp ) || ( holdUp > 8 && holdUp % 3 == 0 ) )
+			idle = 0;
+		if ( key == "up" )
 			sel = ( sel + items.size - 1 ) % items.size;
-		if ( ( down && !prevDown ) || ( holdDown > 8 && holdDown % 3 == 0 ) )
+		if ( key == "down" )
 			sel = ( sel + 1 ) % items.size;
 
-		if ( pressBack && !prevBack )
+		if ( key == "back" )
 		{
-			if ( screen == "main" )
+			if ( screen == start )
 				break;
 			if ( screen == "mapaction" )
 			{
@@ -1267,10 +1170,10 @@ hudMenu()
 				sel = 0;
 			}
 		}
-		else if ( pressUse && !prevUse )
+		else if ( key == "pick" )
 		{
 			result = self hudMenuSelect( screen, sel, mapSel );
-			if ( result == "close" )
+			if ( result == "close" || ( result == "main" && start != "main" ) )
 				break;
 			if ( result == "map" && screen == "mapaction" )
 			{
@@ -1281,8 +1184,9 @@ hudMenu()
 			{
 				screen = "map";
 				sel = 0;
-				for ( i = 0; i < level.voteMaps.size; i++ )
-					if ( level.voteMaps[ i ] == pickedMap() )
+				list = menuMaps();
+				for ( i = 0; i < list.size; i++ )
+					if ( list[ i ] == pickedMap() )
 						sel = i;
 			}
 			else if ( result == "mapaction" )
@@ -1304,10 +1208,6 @@ hudMenu()
 				sel = 0;
 			}
 		}
-		prevUp = up;
-		prevDown = down;
-		prevUse = pressUse;
-		prevBack = pressBack;
 		wait 0.05;
 	}
 
@@ -1317,6 +1217,48 @@ hudMenu()
 	self freezeControls( false );
 	self enableWeapons();
 	self.menuOpen = false;
+}
+
+// Menu keys come in through notifyOnPlayerCommand: one event per key press, nothing while it
+// is held. (Polling held buttons made the menu run away: with toggle aim, a right click keeps
+// aim "pressed" until the next click, which kept moving the highlight up.)
+// config/client.cfg binds the arrow keys to +forward/+back and Enter to +activate.
+menuKeysJoiners()
+{
+	for ( ;; )
+	{
+		level waittill( "connected", player );
+		if ( player isTestClient() )
+			continue;
+		player.menuKey = "";
+		player thread menuKeyWatch( "up", "+forward" );
+		player thread menuKeyWatch( "down", "+back" );
+		player thread menuKeyWatch( "pick", "+activate" );
+		player thread menuKeyWatch( "pick", "+usereload" );
+		player thread menuKeyWatch( "back", "+melee" );
+	}
+}
+
+menuKeyWatch( key, cmd )
+{
+	self endon( "disconnect" );
+
+	self notifyOnPlayerCommand( "menukey " + cmd, cmd );
+	for ( ;; )
+	{
+		self waittill( "menukey " + cmd );
+		self.menuKey = key;
+	}
+}
+
+// the last key pressed since the previous call: "up", "down", "pick", "back" or ""
+menuKeyTake()
+{
+	key = self.menuKey;
+	self.menuKey = "";
+	if ( !isDefined( key ) )
+		return "";
+	return key;
 }
 
 hudMenuCleanup( elems )
@@ -1349,10 +1291,10 @@ hudMenuItems( screen, mapSel )
 	if ( screen == "mode" )
 		return level.voteModeNames;
 	if ( screen == "map" )
-		return level.voteMapNames;
+		return menuMapNames();
 	if ( screen == "mapaction" )
 		return strTok( "Next match,Switch now,Back", "," );
-	return strTok( "Game type,Map,Start map vote,Cancel map vote,Clear map pick,Close", "," );
+	return strTok( "Game type,Map,Start vote,Cancel vote,Clear map pick,Close", "," );
 }
 
 hudMenuCrumb( screen, page, pages, mapSel )
@@ -1362,11 +1304,14 @@ hudMenuCrumb( screen, page, pages, mapSel )
 	if ( screen == "map" )
 		return "Main > Map   page " + ( page + 1 ) + "/" + pages;
 	if ( screen == "mapaction" )
-		return "Main > Map > " + level.voteMapNames[ mapSel ];
+	{
+		list = menuMaps();
+		return "Main > Map > " + mapName( list[ mapSel ] );
+	}
 	return "Main";
 }
 
-// what F does on a row: the screen to show next, "close", or "" to stay
+// what Enter does on a row: the screen to show next, "close", or "" to stay
 hudMenuSelect( screen, sel, mapSel )
 {
 	if ( screen == "mode" )
@@ -1378,14 +1323,15 @@ hudMenuSelect( screen, sel, mapSel )
 		return "mapaction";
 	if ( screen == "mapaction" )
 	{
+		list = menuMaps();
 		if ( sel == 0 )
 		{
-			self setNextMap( level.voteMaps[ mapSel ] );
+			self setNextMap( list[ mapSel ] );
 			return "main";
 		}
 		if ( sel == 1 )
 		{
-			self switchTo( level.voteMaps[ mapSel ] );
+			self switchTo( list[ mapSel ] );
 			return "close";
 		}
 		return "map";
