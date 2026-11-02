@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
-from bot.planner import best_windows, due_reminder, free_hours, heat, render_card
+from bot.planner import best_windows, card_title, due_reminder, free_hours, heat, render_card
 
 NL, CA = "Europe/Amsterdam", "America/Los_Angeles"
 START = datetime(2026, 11, 7, 19, 0, tzinfo=UTC)  # Sat 20:00 NL, 11:00 CA
@@ -24,6 +24,41 @@ def test_card_match_on_and_started():
     people = [("A", "in"), ("B", "in"), ("C", "in")]
     assert "match on" in render_card(START, people, START - timedelta(hours=1), 3)
     assert "🏁 started" in render_card(START, people, START + timedelta(minutes=1), 3)
+
+
+def nl(day: int, hour: int, minute: int = 0) -> datetime:
+    """A November 2026 time on the NL wall clock (CET, UTC+1)."""
+    return datetime(2026, 11, day, hour, minute, tzinfo=UTC) - timedelta(hours=1)
+
+
+def test_title_tonight_same_day():
+    assert card_title(nl(2, 22, 30), nl(2, 9), NL) == "Tonight?"  # Mon morning, Mon 22:30
+
+
+def test_title_tomorrow():
+    # the bug: posted Mon 22:36 for Tue 22:30 said "Tonight?"
+    assert card_title(nl(3, 22, 30), nl(2, 22, 36), NL) == "Tomorrow?"
+
+
+def test_title_later_is_the_weekday():
+    assert card_title(nl(7, 20), nl(2, 9), NL) == "Sat?"
+    assert card_title(nl(9, 20), nl(2, 9), NL) == "Mon?"  # a week out is not "Tonight?"
+
+
+def test_title_around_midnight():
+    assert card_title(nl(3, 0, 30), nl(2, 23, 50), NL) == "Tomorrow?"  # 40 min, but Tue
+    assert card_title(nl(3, 23), nl(3, 0, 10), NL) == "Tonight?"
+    # the day is the zone's: Tue 00:30 NL is still Mon 15:30 in CA
+    assert card_title(nl(3, 0, 30), nl(2, 23, 50), CA) == "Tonight?"
+
+
+def test_title_started_today_is_the_weekday():
+    assert card_title(nl(2, 20), nl(2, 21), NL) == "Mon?"
+
+
+def test_card_title_uses_the_zone():
+    text = render_card(nl(3, 22, 30), [], nl(2, 22, 36), 3, "Amin", NL)
+    assert text.startswith("🎮 <b>Tomorrow?</b> · Amin asks")
 
 
 def test_reminders_30_then_5():

@@ -27,16 +27,30 @@ def rsvp_keyboard(plan_id: int) -> dict:
     }
 
 
+def card_title(starts_at: datetime, now: datetime, tz: str) -> str:
+    """The card's title by the calendar day in tz: "Tonight?" for later today, "Tomorrow?" for
+    the next day, else the weekday ("Sat?")."""
+    z = zone(tz)
+    days = (starts_at.astimezone(z).date() - now.astimezone(z).date()).days
+    if days == 0 and starts_at > now:
+        return "Tonight?"
+    if days == 1:
+        return "Tomorrow?"
+    return f"{DAYS[starts_at.astimezone(z).weekday()].title()}?"
+
+
 def render_card(
     starts_at: datetime,
     people: list[tuple[str, str]],
     now: datetime,
     min_players: int,
     by: str = "",
+    tz: str = ZONES["NL"],
 ) -> str:
     """The /play card: when in both zones, then who is in, maybe and out.
-    people: (name, status) pairs."""
-    lines = [f"🎮 <b>Tonight?</b>{f' · {esc(by)} asks' if by else ''}"]
+    people: (name, status) pairs. tz picks the day for the title."""
+    title = card_title(starts_at, now, tz)
+    lines = [f"🎮 <b>{title}</b>{f' · {esc(by)} asks' if by else ''}"]
     lines.append(f"🗓 {both_zones(starts_at)}")
     ins = sum(1 for _, s in people if s == "in")
     if starts_at > now:

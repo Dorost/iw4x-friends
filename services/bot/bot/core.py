@@ -486,6 +486,7 @@ class Bot:
                 self.now(),
                 self.s.min_players,
                 by.name if by else "",
+                self.s.default_tz,
             )
         return text, plan
 
