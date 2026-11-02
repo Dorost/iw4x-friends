@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MW2 servers</title>
+<!-- Telegram mini app: map and mode of the servers, from the group (app.py: /tg/) -->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    /* Telegram's theme, with plain light colors outside Telegram */
+    --bg: var(--tg-theme-secondary-bg-color, #f1f1f4);
+    --card: var(--tg-theme-section-bg-color, var(--tg-theme-bg-color, #fff));
+    --text: var(--tg-theme-text-color, #000);
+    --hint: var(--tg-theme-hint-color, #8e8e93);
+    --accent: var(--tg-theme-button-color, #2481cc);
+    --accent-text: var(--tg-theme-button-text-color, #fff);
+    --danger: var(--tg-theme-destructive-text-color, #e53935);
+    --sep: var(--tg-theme-section-separator-color, rgba(127, 127, 127, .18));
+    --bottom: var(--tg-safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+    color-scheme: light dark;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body { font: 15px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; }
+  button { font: inherit; color: inherit; border: 0; background: none; padding: 0; cursor: pointer; }
+  main { max-width: 640px; margin: 0 auto; padding: 12px 12px calc(16px + var(--bottom)); }
+
+  /* server cards */
+  .card { background: var(--card); border-radius: 14px; overflow: hidden; margin-bottom: 12px; }
+  .banner { position: relative; aspect-ratio: 16 / 9; background: #263238 center / cover no-repeat; color: #fff; }
+  .banner::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(0,0,0,.45), transparent 35%, transparent 45%, rgba(0,0,0,.8)); }
+  .banner > * { position: absolute; z-index: 1; left: 14px; right: 14px; }
+  .banner .top { top: 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .banner .bottom { bottom: 12px; }
+  .server { font-weight: 600; font-size: 15px; text-shadow: 0 1px 3px rgba(0,0,0,.5); }
+  .status { font-size: 13px; font-weight: 600; padding: 3px 9px; border-radius: 99px; background: rgba(0,0,0,.45); backdrop-filter: blur(6px); white-space: nowrap; }
+  .status::before { content: "●"; margin-right: 5px; color: #9e9e9e; }
+  .status.on::before { color: #4caf50; }
+  .status.warn::before { color: #ffb300; }
+  .map { font-size: 24px; font-weight: 700; letter-spacing: -.01em; text-shadow: 0 1px 4px rgba(0,0,0,.6); }
+  .mode { font-size: 15px; opacity: .92; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
+  .body { padding: 12px 14px 14px; }
+  .players { margin-bottom: 4px; overflow-wrap: anywhere; }
+  .hint { color: var(--hint); font-size: 13px; }
+  .body .hint { margin-bottom: 12px; }
+  .primary, .secondary { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 46px; border-radius: 12px; font-weight: 600; font-size: 16px; }
+  .primary { background: var(--accent); color: var(--accent-text); }
+  .secondary { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+  .primary:disabled, .secondary:disabled { opacity: .45; cursor: default; }
+
+  .row { display: flex; gap: 8px; }
+  .row .primary { flex: 1; width: auto; }
+  .icon { flex: none; width: 52px; }
+
+  /* screens: map picker, bots */
+  .screen header { padding: 4px 4px 12px; }
+  .screen h1 { font-size: 22px; margin: 0; }
+  .label { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--hint); margin: 18px 4px 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { padding: 8px 14px; border-radius: 99px; background: var(--card); font-weight: 500; }
+  .chip.on { background: var(--accent); color: var(--accent-text); }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  @media (min-width: 520px) { .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  .tile { position: relative; display: block; text-align: left; border-radius: 12px; overflow: hidden; background: var(--card); outline: 3px solid transparent; outline-offset: -3px; transition: outline-color .12s; }
+  .tile .img { aspect-ratio: 16 / 9; background: linear-gradient(135deg, #455a64, #263238) center / cover no-repeat; }
+  .tile .name { display: block; padding: 7px 9px 8px; font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile.on { outline-color: var(--accent); }
+  .tile.on::after { content: "✓"; position: absolute; top: 7px; right: 7px; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--accent-text); font-weight: 700; font-size: 14px; }
+  .tile .now { position: absolute; top: 7px; left: 7px; font-size: 11px; font-weight: 700; text-transform: uppercase; padding: 2px 7px; border-radius: 99px; background: rgba(0,0,0,.6); color: #fff; }
+  .tile[hidden], .group[hidden] { display: none; }
+  .actions { position: sticky; bottom: 0; display: flex; gap: 10px; margin: 16px -12px calc(-16px - var(--bottom)); padding: 12px 12px calc(12px + var(--bottom)); background: var(--bg); border-top: 1px solid var(--sep); }
+  .back { color: var(--accent); font-weight: 500; padding: 4px 4px 10px; }
+  .panel { background: var(--card); border-radius: 14px; padding: 12px; }
+  .seg { display: flex; padding: 3px; border-radius: 10px; background: color-mix(in srgb, var(--hint) 16%, transparent); }
+  .seg button { flex: 1; padding: 7px 8px; border-radius: 8px; font-weight: 500; }
+  .seg button.on { background: var(--card); box-shadow: 0 1px 3px rgba(0,0,0,.18); }
+  .stepper { display: flex; align-items: center; gap: 12px; padding: 16px 0 4px; text-align: center; }
+  .stepper > div { flex: 1; }
+  .stepper button { width: 52px; height: 52px; border-radius: 50%; font-size: 26px; line-height: 1; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+  .stepper button:disabled { opacity: .35; cursor: default; }
+  .count { font-size: 40px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .note { margin: 10px 4px 0; }
+
+  .spin { width: 16px; height: 16px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .message { text-align: center; padding: 22vh 24px 0; }
+  .message .icon { font-size: 52px; }
+  .message h1 { font-size: 20px; margin: 12px 0 6px; }
+  .message p { color: var(--hint); margin: 0; }
+  .toast { position: fixed; left: 50%; bottom: calc(86px + var(--bottom)); transform: translate(-50%, 20px); max-width: calc(100% - 32px); width: max-content; padding: 10px 16px; border-radius: 12px; background: rgba(30, 30, 30, .92); color: #fff; font-size: 14px; opacity: 0; transition: .2s; pointer-events: none; z-index: 10; }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast.bad { background: var(--danger); }
+</style>
+</head>
+<body>
+<main id="app"><div class="message"><div class="spin" style="margin: 0 auto"></div></div></main>
+<div id="toast" class="toast"></div>
+<script>
+const tg = window.Telegram && Telegram.WebApp;
+const INIT = tg ? tg.initData : "";
+const SERVERS = ["__SERVERS__"];  // filled in by the server: TELEGRAM_APP_SERVERS
+const app = document.getElementById("app");
+const states = {};  // server -> its /tg/api/state, or {error, code}
+let view = null;    // the open screen: {kind: "map", base, mode, map} or {kind: "bots", base, fill, add, skill}
+let busy = false;
+const BOT_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="4" y="8" width="16" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 8V4M9 13h.01M15 13h.01M2 13v2M22 13v2" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>';
+
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"})[c]);
+const thumb = (base, map) => `${base}/tg/thumb/${encodeURIComponent(map)}.jpg`;
+const hostOf = base => base ? new URL(base).host : location.host;
+const haptic = kind => { try { tg.HapticFeedback.notificationOccurred(kind); } catch (e) {} };
+const tick = () => { try { tg.HapticFeedback.selectionChanged(); } catch (e) {} };
+const nativeBack = () => tg && tg.isVersionAtLeast("6.1");
+
+async function api(base, path, body) {
+  const r = await fetch(base + path, {
+    method: body ? "POST" : "GET",
+    headers: body ? {Authorization: "tma " + INIT, "Content-Type": "application/json"} : {Authorization: "tma " + INIT},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const err = new Error(typeof data.detail === "string" ? data.detail : `the server answered ${r.status}`);
+    err.code = r.status;
+    throw err;
+  }
+  return data;
+}
+
+function message(icon, title, text) {
+  app.innerHTML = `<div class="message"><div class="icon">${icon}</div><h1>${esc(title)}</h1><p>${esc(text)}</p></div>`;
+}
+
+let toastTimer;
+function toast(text, bad) {
+  const t = document.getElementById("toast");
+  t.textContent = text;
+  t.className = "toast show" + (bad ? " bad" : "");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.className = "toast" + (bad ? " bad" : ""), bad ? 5000 : 3000);
+}
+
+async function refresh() {
+  await Promise.all(SERVERS.map(async base => {
+    try { states[base] = await api(base, "/tg/api/state"); }
+    catch (e) { states[base] = {error: e.message, code: e.code}; }
+  }));
+  if (view) return;  // an open screen keeps what it showed
+  const all = SERVERS.map(b => states[b]);
+  if (all.every(s => s.code === 403)) return message("🔒", "Only for the group", "Only members of the group can use this.");
+  if (all.every(s => s.code === 401)) return message("🔄", "Open it again", "Close this and open it again from the group.");
+  renderList();
+}
+
+// a screen over the list (map picker, bots), with Telegram's back button
+function openView(v, html) {
+  view = v;
+  app.innerHTML = `<div class="screen">${nativeBack() ? "" : '<button class="back" onclick="closeView()">‹ Back</button>'}${html}</div>`;
+  if (nativeBack()) tg.BackButton.show();
+  window.scrollTo(0, 0);
+}
+
+function closeView() {
+  if (busy) return;
+  view = null;
+  if (nativeBack()) tg.BackButton.hide();
+  renderList();
+  refresh();
+}
+
+// runs a save from a screen's main button: spinner while it runs, back to the list when done
+async function submit(btn, working, request, done) {
+  busy = true;
+  const label = btn.textContent;
+  btn.innerHTML = `<span class="spin"></span>${working}`;
+  app.querySelectorAll(".actions button").forEach(b => b.disabled = true);
+  try {
+    await request();
+    haptic("success");
+    busy = false;
+    closeView();
+    toast(done);
+  } catch (e) {
+    haptic("error");
+    busy = false;
+    btn.textContent = label;
+    app.querySelectorAll(".actions button").forEach(b => b.disabled = false);
+    if (view.kind === "map") updatePicker();
+    toast(e.message, true);
+  }
+}
+
+// ---------- the servers ----------
+
+function renderList() {
+  app.innerHTML = SERVERS.map((base, i) => card(base, states[base], i)).join("");
+}
+
+function card(base, s, i) {
+  if (!s || s.error) {
+    return `<section class="card"><div class="banner"><div class="top"><span class="server">${esc(hostOf(base))}</span>
+      <span class="status">Unreachable</span></div><div class="bottom"><div class="mode">${esc(s ? s.error : "loading")}</div></div></div></section>`;
+  }
+  const match = s.status === "match";
+  const status = {
+    match: s.players.length ? `${s.players.length} playing` : "No players",
+    lobby: "Lobby", offline: "Server off", "no answer": "Not answering", starting: "Starting",
+  }[s.status] || s.status;
+  const cls = match && s.players.length ? "on" : match || s.status === "lobby" ? "" : "warn";
+  const banner = match ? ` style="background-image: url('${thumb(base, s.map)}')"` : "";
+  const what = match ? `<div class="map">${esc(s.map_name)}</div><div class="mode">${esc(s.mode_name)}</div>`
+    : `<div class="map">${s.status === "lobby" ? "Between matches" : "No match"}</div>`;
+  const people = s.players.length ? esc(s.players.join(", ")) : `<span class="hint">Nobody playing</span>`;
+  const bots = s.bots ? `<span class="hint"> · ${s.bots} bot${s.bots > 1 ? "s" : ""}</span>` : "";
+  return `<section class="card">
+    <div class="banner"${banner}><div class="top"><span class="server">${esc(s.name)}</span><span class="status ${cls}">${esc(status)}</span></div>
+      <div class="bottom">${what}</div></div>
+    <div class="body"><div class="players">${people}${bots}</div>
+      <div class="hint">connect ${esc(s.address)}</div>
+      <div class="row">
+        <button class="primary" onclick="openPicker(${i})" ${s.status === "offline" ? "disabled" : ""}>Change map or mode</button>
+        <button class="secondary icon" onclick="openBots(${i})" aria-label="Bots" title="Bots">${BOT_ICON}</button>
+      </div></div>
+  </section>`;
+}
+
+// ---------- map and mode ----------
+
+function openPicker(i) {
+  const base = SERVERS[i], s = states[base];
+  const tiles = maps => maps.map(m => `<button class="tile" data-id="${esc(m.id)}" data-stock="${m.stock ? 1 : ""}" onclick="pickMap(this)">
+      <div class="img" style="background-image: url('${thumb(base, m.id)}')"></div>
+      ${m.id === s.map ? '<span class="now">Now</span>' : ""}<span class="name">${esc(m.name)}</span></button>`).join("");
+  const stock = s.maps.filter(m => m.stock), more = s.maps.filter(m => !m.stock);
+  openView({kind: "map", base, mode: s.modes.some(m => m.id === s.mode) ? s.mode : "war", map: null}, `
+    <header><h1>${esc(s.name)}</h1><div class="hint">${s.status === "match" ? `Now: ${esc(s.map_name)} · ${esc(s.mode_name)}` : "No match running"}</div></header>
+    <div class="label">Mode</div>
+    <div class="chips">${s.modes.map(m => `<button class="chip" data-mode="${esc(m.id)}" onclick="pickMode(this)">${esc(m.name)}</button>`).join("")}</div>
+    <div class="group"><div class="label">Original maps</div><div class="grid">${tiles(stock)}</div></div>
+    <div class="group more"${more.length ? "" : " hidden"}><div class="label">More maps</div><div class="grid">${tiles(more)}</div></div>
+    <div class="actions">
+      <button class="secondary" id="next" onclick="play(false)">Next match</button>
+      <button class="primary" id="now" onclick="play(true)">Start now</button>
+    </div>`);
+  updatePicker();
+}
+
+function pickMode(el) { if (!busy) { view.mode = el.dataset.mode; updatePicker(); } }
+function pickMap(el) { if (!busy) { view.map = el.dataset.id; updatePicker(); tick(); } }
+
+// marks the picks; Search & Destroy has only the original maps
+function updatePicker() {
+  const sd = view.mode === "sd";
+  app.querySelectorAll(".chip").forEach(c => c.classList.toggle("on", c.dataset.mode === view.mode));
+  app.querySelectorAll(".tile").forEach(t => {
+    t.hidden = sd && !t.dataset.stock;
+    if (t.hidden && t.dataset.id === view.map) view.map = null;
+    t.classList.toggle("on", t.dataset.id === view.map);
+  });
+  app.querySelector(".more").hidden = sd || !app.querySelector(".more .tile");
+  for (const id of ["next", "now"]) document.getElementById(id).disabled = !view.map || busy;
+}
+
+function play(now) {
+  if (!view.map || busy) return;
+  const {base, map, mode} = view, s = states[base];
+  const what = `${s.maps.find(m => m.id === map).name} · ${s.modes.find(m => m.id === mode).name}`;
+  const go = () => submit(document.getElementById(now ? "now" : "next"), now ? "Switching…" : "Saving…",
+    () => api(base, "/tg/api/play", {map, mode, now}),
+    now ? `${s.name}: now ${what}` : `${s.name}: next match ${what}`);
+  if (now && tg && tg.isVersionAtLeast("6.2")) {
+    const ends = s.status === "match" ? " The running match ends for everyone." : "";
+    tg.showConfirm(`Switch ${s.name} to ${what} now?${ends}`, ok => ok && go());
+  } else {
+    go();
+  }
+}
+
+// ---------- bots ----------
+
+function openBots(i) {
+  const base = SERVERS[i], s = states[base];
+  openView({kind: "bots", base, ...s.bot_settings}, `
+    <header><h1>Bots</h1><div class="hint">${esc(s.name)}${s.status === "match" ? ` · ${s.bots} in the match now` : ""}</div></header>
+    <div class="label">How many</div>
+    <div class="panel">
+      <div class="seg"><button data-add="" onclick="setAdd(false)">Fill up</button><button data-add="1" onclick="setAdd(true)">Add on top</button></div>
+      <div class="stepper">
+        <button onclick="stepBots(-1)" aria-label="Fewer">−</button>
+        <div><div class="count" id="count"></div><div class="hint" id="what"></div></div>
+        <button onclick="stepBots(1)" aria-label="More">+</button>
+      </div>
+    </div>
+    <div class="label">Skill</div>
+    <div class="chips">${s.bot_skills.map(k => `<button class="chip" data-skill="${esc(k.id)}" onclick="setSkill(this)">${esc(k.name)}</button>`).join("")}</div>
+    <div class="hint note">1 is the easiest, 7 the hardest. Mixed gives each bot a skill of its own.</div>
+    <div class="actions"><button class="primary" id="save" onclick="saveBots()">Save</button></div>`);
+  updateBots();
+}
+
+function setAdd(add) { if (!busy) { view.add = add; updateBots(); tick(); } }
+function stepBots(d) { if (!busy) { view.fill = Math.max(0, Math.min(17, view.fill + d)); updateBots(); tick(); } }
+function setSkill(el) { if (!busy) { view.skill = el.dataset.skill; updateBots(); tick(); } }
+
+function updateBots() {
+  app.querySelectorAll(".seg button").forEach(b => b.classList.toggle("on", !!b.dataset.add === view.add));
+  app.querySelectorAll(".chip").forEach(c => c.classList.toggle("on", c.dataset.skill === view.skill));
+  document.getElementById("count").textContent = view.fill;
+  document.getElementById("what").textContent = !view.fill ? "no bots"
+    : view.add ? `bot${view.fill > 1 ? "s" : ""} on top of the players`
+    : "players in total: bots take the empty spots";
+  const [less, more] = app.querySelectorAll(".stepper button");
+  less.disabled = view.fill <= 0;
+  more.disabled = view.fill >= 17;
+}
+
+function saveBots() {
+  if (busy) return;
+  const {base, fill, add, skill} = view;
+  submit(document.getElementById("save"), "Saving…", () => api(base, "/tg/api/bots", {fill, add, skill}),
+    `${states[base].name}: bots saved`);
+}
+
+// ---------- start ----------
+
+if (!INIT) {
+  message("🎮", "Open this in Telegram", "Tap 🎮 Servers under a message of the bot in the group.");
+} else {
+  tg.ready();
+  tg.expand();
+  try { tg.setHeaderColor("secondary_bg_color"); tg.setBackgroundColor("secondary_bg_color"); } catch (e) {}
+  if (nativeBack()) tg.BackButton.onClick(closeView);
+  refresh();
+  setInterval(() => { if (!view && !document.hidden) refresh(); }, 5000);
+}
+</script>
+</body>
+</html>
