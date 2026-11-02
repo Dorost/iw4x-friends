@@ -912,10 +912,10 @@ def app_button() -> dict | None:
     return bot_app["button"]
 
 
-# ---------- Telegram mini app: map and mode from the group ----------
-# tg.html, served at /tg/, opens inside Telegram (README: "Map and mode from Telegram"). It shows
+# ---------- Telegram mini app: map, mode and bots from the group ----------
+# tg.html, served at /tg/, opens inside Telegram (README: "Map, mode and bots from Telegram"). It shows
 # the map, mode and players of each server in TELEGRAM_APP_SERVERS and lets members of the
-# TELEGRAM_CHAT_ID group change map and mode. Telegram signs who opened it (initData) with the
+# TELEGRAM_CHAT_ID group change map, mode and bots. Telegram signs who opened it (initData) with the
 # bot token, which every server has, so the page calls each server's /tg/api itself: no web UI
 # password involved, and a server only takes changes from people in the group.
 
@@ -1023,7 +1023,41 @@ def tg_state(request: Request):
         "lobby_count": live["lobby_count"] if status == "lobby" else 0,
         "maps": [{k: m[k] for k in ("id", "name", "stock")} for m in (st["maps"] if st else [])],
         "modes": [{"id": k, "name": v} for k, v in APP_MODES.items()],
+        "bot_settings": tg_bot_settings((st or {}).get("config") or config_view()),
+        "bot_skills": [{"id": k, "name": BOT_SKILL_NAMES.get(k, k)} for k in BOT_SKILLS],
     }
+
+
+BOT_SKILL_NAMES = {"0": "Mixed", "9": "Random"}  # short names for BOT_SKILLS, the rest are 1 to 7
+
+
+def tg_bot_settings(c: dict) -> dict:
+    return {"fill": c["bots_fill"], "add": c["bots_fill_mode"] == "1", "skill": c["bots_skill"]}
+
+
+class Bots(BaseModel):
+    fill: int  # players to fill up to, or bots to add
+    add: bool  # True: add that many bots on top of the players
+    skill: str
+
+
+@app.post("/tg/api/bots")
+def tg_bots(b: Bots, request: Request):
+    """The web UI's bot settings: saved to server.cfg, and set right away on a running
+    server, where the bot mod applies them within seconds."""
+    user = telegram_user(request)
+    if not 0 <= b.fill <= 17 or b.skill not in BOT_SKILLS:
+        raise HTTPException(400, "invalid bot settings")
+    bots = {"bots_manage_fill": str(b.fill), "bots_manage_fill_mode": "1" if b.add else "0", "bots_skill": b.skill}
+    v = read_cfg()
+    v.update(bots, bots_manage_fill_kick="1", bots_main_waitForHostTime="0")  # as write_cfg
+    save_cfg(v)
+    if server_pids():
+        for key, val in bots.items():
+            rcon(f"set {key} {val}")
+    changed()
+    print(f"telegram app: {user.get('id')} {user.get('first_name')!r}: bots {bots}", flush=True)
+    return {"ok": True}
 
 
 class Play(BaseModel):
@@ -1053,13 +1087,8 @@ def tg_play(p: Play, request: Request):
         match_weapons.update(match=(p.map, gametype), value=v.get("sv_funweapons", "0"))
     else:
         select(Pick(map=p.map, gametype=gametype))
-    who = html.escape(user.get("first_name") or user.get("username") or "Someone")
-    server = html.escape(server_name or JOIN_HOST or "the server")
-    pick = f"<b>{html.escape(maps[p.map]['name'])}</b> · {APP_MODES[p.mode]}"
     print(f"telegram app: {user.get('id')} {user.get('first_name')!r}: {p.map} {p.mode} {'now' if p.now else 'next'}",
           flush=True)
-    telegram_outbox.put((f"🗺 {who} switched {server} to {pick}" if p.now
-                         else f"🗺 {who} picked the next match on {server}: {pick}", True))
     return {"ok": True}
 
 

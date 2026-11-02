@@ -49,9 +49,13 @@
   .secondary { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
   .primary:disabled, .secondary:disabled { opacity: .45; cursor: default; }
 
-  /* picker */
-  .picker header { padding: 4px 4px 12px; }
-  .picker h1 { font-size: 22px; margin: 0; }
+  .row { display: flex; gap: 8px; }
+  .row .primary { flex: 1; width: auto; }
+  .icon { flex: none; width: 52px; }
+
+  /* screens: map picker, bots */
+  .screen header { padding: 4px 4px 12px; }
+  .screen h1 { font-size: 22px; margin: 0; }
   .label { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--hint); margin: 18px 4px 8px; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; }
   .chip { padding: 8px 14px; border-radius: 99px; background: var(--card); font-weight: 500; }
@@ -67,6 +71,16 @@
   .tile[hidden], .group[hidden] { display: none; }
   .actions { position: sticky; bottom: 0; display: flex; gap: 10px; margin: 16px -12px calc(-16px - var(--bottom)); padding: 12px 12px calc(12px + var(--bottom)); background: var(--bg); border-top: 1px solid var(--sep); }
   .back { color: var(--accent); font-weight: 500; padding: 4px 4px 10px; }
+  .panel { background: var(--card); border-radius: 14px; padding: 12px; }
+  .seg { display: flex; padding: 3px; border-radius: 10px; background: color-mix(in srgb, var(--hint) 16%, transparent); }
+  .seg button { flex: 1; padding: 7px 8px; border-radius: 8px; font-weight: 500; }
+  .seg button.on { background: var(--card); box-shadow: 0 1px 3px rgba(0,0,0,.18); }
+  .stepper { display: flex; align-items: center; gap: 12px; padding: 16px 0 4px; text-align: center; }
+  .stepper > div { flex: 1; }
+  .stepper button { width: 52px; height: 52px; border-radius: 50%; font-size: 26px; line-height: 1; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+  .stepper button:disabled { opacity: .35; cursor: default; }
+  .count { font-size: 40px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .note { margin: 10px 4px 0; }
 
   .spin { width: 16px; height: 16px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -88,13 +102,16 @@ const INIT = tg ? tg.initData : "";
 const SERVERS = ["__SERVERS__"];  // filled in by the server: TELEGRAM_APP_SERVERS
 const app = document.getElementById("app");
 const states = {};  // server -> its /tg/api/state, or {error, code}
-let pick = null;    // {base, mode, map} while choosing
+let view = null;    // the open screen: {kind: "map", base, mode, map} or {kind: "bots", base, fill, add, skill}
 let busy = false;
+const BOT_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="4" y="8" width="16" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 8V4M9 13h.01M15 13h.01M2 13v2M22 13v2" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>';
 
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"})[c]);
 const thumb = (base, map) => `${base}/tg/thumb/${encodeURIComponent(map)}.jpg`;
 const hostOf = base => base ? new URL(base).host : location.host;
 const haptic = kind => { try { tg.HapticFeedback.notificationOccurred(kind); } catch (e) {} };
+const tick = () => { try { tg.HapticFeedback.selectionChanged(); } catch (e) {} };
+const nativeBack = () => tg && tg.isVersionAtLeast("6.1");
 
 async function api(base, path, body) {
   const r = await fetch(base + path, {
@@ -129,11 +146,49 @@ async function refresh() {
     try { states[base] = await api(base, "/tg/api/state"); }
     catch (e) { states[base] = {error: e.message, code: e.code}; }
   }));
-  if (pick) return;  // the picker keeps what it showed
+  if (view) return;  // an open screen keeps what it showed
   const all = SERVERS.map(b => states[b]);
   if (all.every(s => s.code === 403)) return message("🔒", "Only for the group", "Only members of the group can use this.");
   if (all.every(s => s.code === 401)) return message("🔄", "Open it again", "Close this and open it again from the group.");
   renderList();
+}
+
+// a screen over the list (map picker, bots), with Telegram's back button
+function openView(v, html) {
+  view = v;
+  app.innerHTML = `<div class="screen">${nativeBack() ? "" : '<button class="back" onclick="closeView()">‹ Back</button>'}${html}</div>`;
+  if (nativeBack()) tg.BackButton.show();
+  window.scrollTo(0, 0);
+}
+
+function closeView() {
+  if (busy) return;
+  view = null;
+  if (nativeBack()) tg.BackButton.hide();
+  renderList();
+  refresh();
+}
+
+// runs a save from a screen's main button: spinner while it runs, back to the list when done
+async function submit(btn, working, request, done) {
+  busy = true;
+  const label = btn.textContent;
+  btn.innerHTML = `<span class="spin"></span>${working}`;
+  app.querySelectorAll(".actions button").forEach(b => b.disabled = true);
+  try {
+    await request();
+    haptic("success");
+    busy = false;
+    closeView();
+    toast(done);
+  } catch (e) {
+    haptic("error");
+    busy = false;
+    btn.textContent = label;
+    app.querySelectorAll(".actions button").forEach(b => b.disabled = false);
+    if (view.kind === "map") updatePicker();
+    toast(e.message, true);
+  }
 }
 
 // ---------- the servers ----------
@@ -163,21 +218,22 @@ function card(base, s, i) {
       <div class="bottom">${what}</div></div>
     <div class="body"><div class="players">${people}${bots}</div>
       <div class="hint">connect ${esc(s.address)}</div>
-      <button class="primary" onclick="openPicker(${i})" ${s.status === "offline" ? "disabled" : ""}>Change map or mode</button></div>
+      <div class="row">
+        <button class="primary" onclick="openPicker(${i})" ${s.status === "offline" ? "disabled" : ""}>Change map or mode</button>
+        <button class="secondary icon" onclick="openBots(${i})" aria-label="Bots" title="Bots">${BOT_ICON}</button>
+      </div></div>
   </section>`;
 }
 
-// ---------- the picker ----------
+// ---------- map and mode ----------
 
 function openPicker(i) {
   const base = SERVERS[i], s = states[base];
-  pick = {base, mode: s.modes.some(m => m.id === s.mode) ? s.mode : "war", map: null};
   const tiles = maps => maps.map(m => `<button class="tile" data-id="${esc(m.id)}" data-stock="${m.stock ? 1 : ""}" onclick="pickMap(this)">
       <div class="img" style="background-image: url('${thumb(base, m.id)}')"></div>
       ${m.id === s.map ? '<span class="now">Now</span>' : ""}<span class="name">${esc(m.name)}</span></button>`).join("");
   const stock = s.maps.filter(m => m.stock), more = s.maps.filter(m => !m.stock);
-  app.innerHTML = `<div class="picker">
-    ${tg && tg.BackButton && tg.isVersionAtLeast("6.1") ? "" : '<button class="back" onclick="closePicker()">‹ Back</button>'}
+  openView({kind: "map", base, mode: s.modes.some(m => m.id === s.mode) ? s.mode : "war", map: null}, `
     <header><h1>${esc(s.name)}</h1><div class="hint">${s.status === "match" ? `Now: ${esc(s.map_name)} · ${esc(s.mode_name)}` : "No match running"}</div></header>
     <div class="label">Mode</div>
     <div class="chips">${s.modes.map(m => `<button class="chip" data-mode="${esc(m.id)}" onclick="pickMode(this)">${esc(m.name)}</button>`).join("")}</div>
@@ -186,70 +242,84 @@ function openPicker(i) {
     <div class="actions">
       <button class="secondary" id="next" onclick="play(false)">Next match</button>
       <button class="primary" id="now" onclick="play(true)">Start now</button>
-    </div></div>`;
-  if (tg && tg.isVersionAtLeast("6.1")) tg.BackButton.show();
-  window.scrollTo(0, 0);
-  update();
+    </div>`);
+  updatePicker();
 }
 
-function closePicker() {
-  if (busy) return;
-  pick = null;
-  if (tg && tg.isVersionAtLeast("6.1")) tg.BackButton.hide();
-  renderList();
-  refresh();
-}
-
-function pickMode(el) { if (!busy) { pick.mode = el.dataset.mode; update(); } }
-function pickMap(el) {
-  if (busy) return;
-  pick.map = el.dataset.id;
-  update();
-  try { tg.HapticFeedback.selectionChanged(); } catch (e) {}
-}
+function pickMode(el) { if (!busy) { view.mode = el.dataset.mode; updatePicker(); } }
+function pickMap(el) { if (!busy) { view.map = el.dataset.id; updatePicker(); tick(); } }
 
 // marks the picks; Search & Destroy has only the original maps
-function update() {
-  const sd = pick.mode === "sd";
-  app.querySelectorAll(".chip").forEach(c => c.classList.toggle("on", c.dataset.mode === pick.mode));
+function updatePicker() {
+  const sd = view.mode === "sd";
+  app.querySelectorAll(".chip").forEach(c => c.classList.toggle("on", c.dataset.mode === view.mode));
   app.querySelectorAll(".tile").forEach(t => {
     t.hidden = sd && !t.dataset.stock;
-    if (t.hidden && t.dataset.id === pick.map) pick.map = null;
-    t.classList.toggle("on", t.dataset.id === pick.map);
+    if (t.hidden && t.dataset.id === view.map) view.map = null;
+    t.classList.toggle("on", t.dataset.id === view.map);
   });
   app.querySelector(".more").hidden = sd || !app.querySelector(".more .tile");
-  for (const id of ["next", "now"]) document.getElementById(id).disabled = !pick.map || busy;
+  for (const id of ["next", "now"]) document.getElementById(id).disabled = !view.map || busy;
 }
 
-async function play(now) {
-  if (!pick.map || busy) return;
-  const s = states[pick.base], base = pick.base;
-  const what = `${s.maps.find(m => m.id === pick.map).name} · ${s.modes.find(m => m.id === pick.mode).name}`;
-  const go = async () => {
-    busy = true;
-    const btn = document.getElementById(now ? "now" : "next"), label = btn.textContent;
-    btn.innerHTML = `<span class="spin"></span>${now ? "Switching…" : "Saving…"}`;
-    update();
-    try {
-      await api(base, "/tg/api/play", {map: pick.map, mode: pick.mode, now});
-      haptic("success");
-      busy = false;
-      closePicker();
-      toast(now ? `${s.name}: now ${what}` : `${s.name}: next match ${what}`);
-    } catch (e) {
-      haptic("error");
-      busy = false;
-      btn.textContent = label;
-      update();
-      toast(e.message, true);
-    }
-  };
+function play(now) {
+  if (!view.map || busy) return;
+  const {base, map, mode} = view, s = states[base];
+  const what = `${s.maps.find(m => m.id === map).name} · ${s.modes.find(m => m.id === mode).name}`;
+  const go = () => submit(document.getElementById(now ? "now" : "next"), now ? "Switching…" : "Saving…",
+    () => api(base, "/tg/api/play", {map, mode, now}),
+    now ? `${s.name}: now ${what}` : `${s.name}: next match ${what}`);
   if (now && tg && tg.isVersionAtLeast("6.2")) {
     const ends = s.status === "match" ? " The running match ends for everyone." : "";
     tg.showConfirm(`Switch ${s.name} to ${what} now?${ends}`, ok => ok && go());
   } else {
     go();
   }
+}
+
+// ---------- bots ----------
+
+function openBots(i) {
+  const base = SERVERS[i], s = states[base];
+  openView({kind: "bots", base, ...s.bot_settings}, `
+    <header><h1>Bots</h1><div class="hint">${esc(s.name)}${s.status === "match" ? ` · ${s.bots} in the match now` : ""}</div></header>
+    <div class="label">How many</div>
+    <div class="panel">
+      <div class="seg"><button data-add="" onclick="setAdd(false)">Fill up</button><button data-add="1" onclick="setAdd(true)">Add on top</button></div>
+      <div class="stepper">
+        <button onclick="stepBots(-1)" aria-label="Fewer">−</button>
+        <div><div class="count" id="count"></div><div class="hint" id="what"></div></div>
+        <button onclick="stepBots(1)" aria-label="More">+</button>
+      </div>
+    </div>
+    <div class="label">Skill</div>
+    <div class="chips">${s.bot_skills.map(k => `<button class="chip" data-skill="${esc(k.id)}" onclick="setSkill(this)">${esc(k.name)}</button>`).join("")}</div>
+    <div class="hint note">1 is the easiest, 7 the hardest. Mixed gives each bot a skill of its own.</div>
+    <div class="actions"><button class="primary" id="save" onclick="saveBots()">Save</button></div>`);
+  updateBots();
+}
+
+function setAdd(add) { if (!busy) { view.add = add; updateBots(); tick(); } }
+function stepBots(d) { if (!busy) { view.fill = Math.max(0, Math.min(17, view.fill + d)); updateBots(); tick(); } }
+function setSkill(el) { if (!busy) { view.skill = el.dataset.skill; updateBots(); tick(); } }
+
+function updateBots() {
+  app.querySelectorAll(".seg button").forEach(b => b.classList.toggle("on", !!b.dataset.add === view.add));
+  app.querySelectorAll(".chip").forEach(c => c.classList.toggle("on", c.dataset.skill === view.skill));
+  document.getElementById("count").textContent = view.fill;
+  document.getElementById("what").textContent = !view.fill ? "no bots"
+    : view.add ? `bot${view.fill > 1 ? "s" : ""} on top of the players`
+    : "players in total: bots take the empty spots";
+  const [less, more] = app.querySelectorAll(".stepper button");
+  less.disabled = view.fill <= 0;
+  more.disabled = view.fill >= 17;
+}
+
+function saveBots() {
+  if (busy) return;
+  const {base, fill, add, skill} = view;
+  submit(document.getElementById("save"), "Saving…", () => api(base, "/tg/api/bots", {fill, add, skill}),
+    `${states[base].name}: bots saved`);
 }
 
 // ---------- start ----------
@@ -260,9 +330,9 @@ if (!INIT) {
   tg.ready();
   tg.expand();
   try { tg.setHeaderColor("secondary_bg_color"); tg.setBackgroundColor("secondary_bg_color"); } catch (e) {}
-  if (tg.isVersionAtLeast("6.1")) tg.BackButton.onClick(closePicker);
+  if (nativeBack()) tg.BackButton.onClick(closeView);
   refresh();
-  setInterval(() => { if (!pick && !document.hidden) refresh(); }, 5000);
+  setInterval(() => { if (!view && !document.hidden) refresh(); }, 5000);
 }
 </script>
 </body>

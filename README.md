@@ -134,9 +134,11 @@ Someone counts as gone after a minute away, so a map change, or a game crash or 
 
 On a VPS, put the two lines in the `.env` on the server (`~/iw4x/.env`). Several servers can post to the same group: each message names the server (`sv_hostname`). The web UI's log (`docker compose logs server`) shows whether the bot works.
 
-### Map and mode from Telegram
+### Map, mode and bots from Telegram
 
-With the bot set up (above), a server on a VPS also has a Telegram mini app: a page that opens inside Telegram and shows each server's map, mode and players. Members of the group can change the map and mode there: pick a mode (the 8 stock modes, Gun Game or Gun Game Extended: Free-for-all with the Fun panel's preset of that name), then a map from its picture. **Start now** switches the running match, players stay connected; **Next match** loads it when the match ends. The group gets a message with who changed what. Leaving a gun game turns the weapons back to classes; other Fun settings stay as they are.
+With the bot set up (above), a server on a VPS also has a Telegram mini app: a page that opens inside Telegram and shows each server's map, mode and players. Members of the group can change the map and mode there: pick a mode (the 8 stock modes, Gun Game or Gun Game Extended: Free-for-all with the Fun panel's preset of that name), then a map from its picture. **Start now** switches the running match, players stay connected; **Next match** loads it when the match ends. Leaving a gun game turns the weapons back to classes; other Fun settings stay as they are.
+
+The bot button next to it sets the bots, as in the web UI: fill the match up to a number of players or add a number of bots on top, and their skill. It applies within seconds, also mid-match.
 
 1. List the servers it shows, on each server, in `~/iw4x/.env`: `TELEGRAM_APP_SERVERS=mw2-nl.example.com mw2.example.com` (all with the same bot and group), then `docker compose up -d`
 2. In Telegram, message @BotFather: `/mybots` → your bot → **Bot Settings** → **Configure Mini App** → **Enable Mini App**, and send it the address of one of them: `https://mw2-nl.example.com/tg/`
