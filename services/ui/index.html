@@ -103,9 +103,6 @@
           <label class="lbl">Who hears whom<select id="alltalk" class="inp"><option value="0">own team only</option><option value="1">everyone (all talk)</option></select></label>
           <label class="flex items-center gap-2 text-xs pb-1.5"><input id="deadchat" type="checkbox" class="accent-sky-600">Dead can talk to living</label>
         </div>
-        <div class="grid grid-cols-3 gap-3 items-end mt-2">
-          <label class="flex items-center gap-2 text-xs pb-1.5" title="With no next map picked, a map vote starts 90 s before a timed match ends; the winner loads when the match ends. Chat: !1 .. !4 or press F"><input id="vote" type="checkbox" class="accent-sky-600">Map vote near the end of each match</label>
-        </div>
       </div>
       <div>
         <span class="text-xs font-medium text-slate-600 flex items-center gap-1 mb-1.5"><svg class="w-3.5 h-3.5"><use href="#i-bolt"/></svg>Fun</span>
@@ -229,7 +226,6 @@ function fillForm(c) {
   $('funRules').innerHTML = funFields(S.fun_rules, c.fun);
   renderPresets();
   $('voice').checked = c.voice; $('alltalk').value = c.alltalk ? '1' : '0'; $('deadchat').checked = c.deadchat;
-  $('vote').checked = c.vote;
   const opts = Object.entries(S.gametypes).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
   $('gametype').innerHTML = opts; $('gametype').value = c.gametype;
   fillMaps(c.map);
@@ -330,7 +326,6 @@ function save(btn) {
     hostname: $('hostname').value, password: $('password').value, rcon_password: $('rcon_password').value,
     maxclients: +$('maxclients').value, lan_only: $('lan_only').checked,
     voice: $('voice').checked, alltalk: $('alltalk').value === '1', deadchat: $('deadchat').checked,
-    vote: $('vote').checked,
     bots_fill: +$('bots_fill').value, bots_fill_mode: $('bots_fill_mode').value, bots_skill: $('bots_skill').value,
     fun: funFieldValues(),
   };

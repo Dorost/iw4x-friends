@@ -1,15 +1,14 @@
-// In-game map vote and next game type, with chat commands and an on-screen list.
+// Next map and game type picks, with chat commands and an on-screen menu.
 // Works with stock IW4x clients: chat comes in through IW4x's OnPlayerSay, keys through
 // notifyOnPlayerCommand on the move forward/back, use and melee binds (W/S, F, melee).
-// config/client.cfg also binds the arrow keys to forward/back, Enter to use and F1 .. F6 to
-// "say !1" .. "say !6", so Up/Down/Enter and F1-F6 work for everyone who ran the setup script.
+// config/client.cfg also binds the arrow keys to forward/back and Enter to use, so Up/Down/Enter
+// work for everyone who ran the setup script.
 //
 // Everyone can use all of it; every change is announced with the player's name, last one wins.
-// Voting:   F1 .. F6 or !1 .. !6 vote (or press Enter/F to step through the options), !next, !help
+// Info:     !next, !help
 // Picks:    !gt <mode> sets the next game type (tdm, ffa, dom, sd, hq, ...)
 //           !gt alone opens the menu at the game type list
-//           !vote starts a map vote now, the winner is the next map; !cancel stops it
-//           !map <name> sets the next map (short or partial names: rust, afghan, ship): no vote,
+//           !map <name> sets the next map (short or partial names: rust, afghan, ship):
 //           that map loads after the match; !map <name> now switches right away;
 //           !map alone opens the menu at the map list (S&D: the 16 original maps only);
 //           !map clear drops the pick
@@ -20,20 +19,11 @@
 //           ones that match it, an unknown or unclear !map / !gt name the maps or modes that do
 // No lobby between matches: when a match ends, the scoreboard shows "Next up: <map>, <mode>"
 //   and that match loads right away. Next up is also announced at the start of a match, in its
-//   last minute and whenever it changes. The map is the pick (!map, menu, web UI, vote winner),
-//   else a random other original MW2 map; the mode is the !gt pick or the game type vote winner,
-//   else the one just played.
-// Vote: with no game type picked, a game type vote (S&D, TDM, Dom, FFA, HQ, CTF) runs first, then
-//   the map vote: 6 random maps of the 16 original MW2 maps (no DLC or custom maps).
-// sv_vote_enabled 1: with no map picked, the vote starts by itself 90 s before a timed match
-//   ends (S&D: in the first round that gets there); the winner is the next map.
+//   last minute and whenever it changes. The map is the pick (!map, menu, web UI), else a
+//   random other original MW2 map; the mode is the !gt pick, else the one just played.
 // The web UI writes the installed maps and modes to userraw/scriptdata/vote.txt.
 init()
 {
-	if ( getDvar( "sv_vote_enabled" ) == "" )
-		setDvar( "sv_vote_enabled", 1 );
-	level.voteActive = false;
-	level.voteAutoDone = false;
 	loadLists();
 	OnPlayerSay( ::onSay );
 	level thread menuKeysJoiners();
@@ -42,14 +32,12 @@ init()
 
 start()
 {
-	// remembered for the vote (not offered again) and as the mode of the next match
-	setDvar( "sv_vote_prevmap", getDvar( "mapname" ) );
+	// remembered as the mode of the next match
 	setDvar( "sv_vote_prevmode", getDvar( "g_gametype" ) );
 	// the fallback next map, kept across S&D rounds
 	if ( !listHas( level.voteBaseMaps, getDvar( "sv_vote_next" ) ) || getDvar( "sv_vote_next" ) == getDvar( "mapname" ) )
 		setDvar( "sv_vote_next", randomOtherMap() );
 	level.nextUpShown = nextUpText();
-	level thread autoVote();
 	level thread announceStart();
 	level thread nextUpWatch();
 
@@ -69,20 +57,6 @@ start()
 	startMatch( nextMap(), nextMode() );
 }
 
-// with the vote on and no map picked, the vote starts by itself 90 s before a timed match ends
-autoVote()
-{
-	level endon( "game_ended" );
-
-	if ( !getDvarInt( "sv_vote_enabled" ) || maps\mp\_utility::getTimeLimit() <= 0 )
-		return;
-	while ( maps\mp\gametypes\_gamelogic::getTimeRemaining() > 90000 )
-		wait 1;
-	level.voteAutoDone = true;
-	if ( pickedMap() == "" && !level.voteActive )
-		level thread runVote();
-}
-
 // Next up at the start of the match (S&D: first round only) and in its last minute
 announceStart()
 {
@@ -100,7 +74,7 @@ announceStart()
 	announceNextUp( true );
 }
 
-// a pick (chat, menu, web UI) or a vote winner changes what is next: tell everyone
+// a pick (chat, menu, web UI) changes what is next: tell everyone
 nextUpWatch()
 {
 	level endon( "game_ended" );
@@ -124,24 +98,14 @@ announceNextUp( bold )
 
 nextUpText()
 {
-	map = nextMap();
-	if ( map == "" )
-		map = "map vote";
-	else
-		map = mapName( map );
-	return "Next up: " + map + ", " + modeName( nextMode() );
+	return "Next up: " + mapName( nextMap() ) + ", " + modeName( nextMode() );
 }
 
-// the map the next match loads: the pick, else the random fallback; "" while a map vote runs
-// or is still to come
+// the map the next match loads: the pick, else the random fallback
 nextMap()
 {
 	if ( pickedMap() != "" )
 		return pickedMap();
-	ended = isDefined( level.gameEnded ) && level.gameEnded;
-	timed = maps\mp\_utility::getTimeLimit() > 0;
-	if ( !ended && ( level.voteActive || ( getDvarInt( "sv_vote_enabled" ) && timed && !level.voteAutoDone ) ) )
-		return "";
 	return getDvar( "sv_vote_next" );
 }
 
@@ -212,7 +176,7 @@ loadLists()
 		level.voteModes = strTok( "war dm dom sd koth sab ctf dd", " " );
 		level.voteModeNames = level.voteModes;
 	}
-	// the installed ones: the map vote and the random next map use these, so does the map menu for S&D
+	// the installed ones: the random next map uses these, so does the map menu for S&D
 	level.voteBaseMaps = [];
 	foreach ( map in base )
 		if ( isMap( map ) )
@@ -261,7 +225,7 @@ modeName( mode )
 	return level.voteModeNames[ i ];
 }
 
-// the mode the next voted map starts with
+// the mode the next match starts with
 nextMode()
 {
 	mode = getDvar( "sv_vote_mode" );
@@ -309,25 +273,12 @@ onSay( text, mode )
 	}
 	cmd = args[ 0 ];
 
-	if ( cmd == "v" && args.size > 1 )
-		cmd = args[ 1 ];
-	num = int( cmd );
-	if ( num >= 1 && num <= 9 && cmd == "" + num )
-	{
-		if ( !level.voteActive )
-			self iPrintLn( "No vote running" );
-		else if ( num > level.voteOptions.size )
-			self iPrintLn( "Vote 1 to " + level.voteOptions.size );
-		else
-			self castVote( num - 1 );
-		return 0;
-	}
 
 	switch ( cmd )
 	{
 	case "help":
-		self iPrintLn( "F1 .. F6, !1 .. !6 or Enter/F: vote   !next: next map and game type" );
-		self iPrintLn( "!gt <mode> or !gt (list)   !vote   !cancel" );
+		self iPrintLn( "!next: next map and game type" );
+		self iPrintLn( "!gt <mode> or !gt (list)" );
 		self iPrintLn( "!map <name> [now]   !map (list)   !map clear" );
 		self iPrintLn( "!menu: Up/Down move, Enter pick, melee back" );
 		return 0;
@@ -366,13 +317,6 @@ onSay( text, mode )
 		}
 		self setNextMode( pick );
 		return 0;
-	case "vote":
-	case "mapvote":
-		self startVote();
-		return 0;
-	case "cancel":
-		self cancelVote();
-		return 0;
 	}
 	if ( !isSubStr( "abcdefghijklmnopqrstuvwxyz", cmd[ 0 ] ) )
 		return 1;  // not one of ours ("!!!"): show it
@@ -387,7 +331,6 @@ onSay( text, mode )
 commandList( q, title )
 {
 	all = [];
-	all[ all.size ] = "1 2 3 4 5 6|!1 .. !6|vote (or F1-F6, Enter)";
 	all[ all.size ] = "next|!next|next map and game type";
 	all[ all.size ] = "gt gametype mode|!gt <mode>|next game type";
 	all[ all.size ] = "gt gametype mode|!gt|game type menu";
@@ -395,8 +338,6 @@ commandList( q, title )
 	all[ all.size ] = "map|!map <name> now|switch map now";
 	all[ all.size ] = "map|!map|map menu";
 	all[ all.size ] = "map|!map clear|drop the map pick";
-	all[ all.size ] = "vote mapvote|!vote|start a vote";
-	all[ all.size ] = "cancel|!cancel|stop the map vote";
 	all[ all.size ] = "menu|!menu|server menu";
 	all[ all.size ] = "help|!help|commands in chat";
 	left = [];
@@ -531,28 +472,6 @@ whoName()
 	return "Server";
 }
 
-startVote()
-{
-	if ( level.voteActive )
-	{
-		self iPrintLn( "A map vote is already running" );
-		return;
-	}
-	iPrintLn( self whoName() + " started a map vote" );
-	level thread runVote();
-}
-
-cancelVote()
-{
-	if ( !level.voteActive )
-	{
-		self iPrintLn( "No map vote running" );
-		return;
-	}
-	level.voteCancelled = true;
-	iPrintLn( self whoName() + " cancelled the map vote" );
-}
-
 clearMapPick()
 {
 	setDvar( "sv_vote_map", "none" );
@@ -561,7 +480,6 @@ clearMapPick()
 
 switchTo( map )
 {
-	level.voteCancelled = true;  // a running vote stops without switching
 	iPrintLn( self whoName() + " switched the map to " + mapName( map ) );
 	level thread switchNow( map );
 }
@@ -570,8 +488,6 @@ setNextMode( mode )
 {
 	setDvar( "sv_vote_mode", mode );
 	iPrintLn( self whoName() + " set next game type: " + modeName( mode ) );
-	if ( level.voteActive && isDefined( level.voteModeHud ) )
-		level.voteModeHud setText( modeName( mode ) );
 }
 
 toLowerAscii( s )
@@ -595,18 +511,6 @@ toLowerAscii( s )
 	return out;
 }
 
-// ---------- players ----------
-
-humans()
-{
-	list = [];
-	foreach ( player in level.players )
-		if ( !player isTestClient() )
-			list[ list.size ] = player;
-	return list;
-}
-
-
 plainName( name )
 {
 	out = "";
@@ -620,224 +524,6 @@ plainName( name )
 		out += name[ i ];
 	}
 	return out;
-}
-
-
-// ---------- map vote ----------
-
-runVote()
-{
-	if ( level.voteActive )
-		return;
-	level.voteActive = true;
-	level endon( "game_ended" );
-
-	// no game type picked (!gt, menu, web UI): the game type vote comes first
-	if ( modeIndex( getDvar( "sv_vote_mode" ) ) < 0 )
-	{
-		modes = [];
-		foreach ( mode in strTok( "sd war dom dm koth ctf", " " ) )
-			if ( modeIndex( mode ) >= 0 )
-				modes[ modes.size ] = mode;
-		names = [];
-		foreach ( mode in modes )
-			names[ names.size ] = modeName( mode );
-		win = votePoll( "VOTE FOR THE GAME TYPE", modes, names, "then the map vote", 15 );
-		if ( level.voteCancelled )
-		{
-			level.voteActive = false;
-			return;
-		}
-		if ( win >= 0 )  // no votes: the mode stays
-			setDvar( "sv_vote_mode", modes[ win ] );
-		iPrintLnBold( "Next game type: " + modeName( nextMode() ) );
-	}
-
-	// up to 6 random original maps, not the one just played or this one
-	pool = [];
-	foreach ( map in level.voteBaseMaps )
-		if ( map != getDvar( "mapname" ) && map != getDvar( "sv_vote_prevmap" ) )
-			pool[ pool.size ] = map;
-	if ( !pool.size )
-		pool = level.voteBaseMaps;
-	options = [];
-	while ( options.size < 6 && pool.size )
-	{
-		i = randomInt( pool.size );
-		options[ options.size ] = pool[ i ];
-		pool[ i ] = pool[ pool.size - 1 ];
-		pool[ pool.size - 1 ] = undefined;
-	}
-	names = [];
-	foreach ( map in options )
-		names[ names.size ] = mapName( map );
-	win = votePoll( "VOTE FOR THE NEXT MAP", options, names, modeName( nextMode() ), 20 );
-	level.voteActive = false;
-	if ( level.voteCancelled )
-		return;
-	if ( win < 0 )  // no votes: a coin flip
-		win = randomInt( options.size );
-	setDvar( "sv_vote_map", options[ win ] );
-	announceNextUp( true );
-}
-
-// one vote on screen for everyone: returns the index of the option with the most votes (a tie
-// is a coin flip among the best), -1 with no votes or when cancelled (level.voteCancelled)
-votePoll( title, options, names, sub, seconds )
-{
-	level.voteOptions = options;
-	foreach ( player in level.players )
-		player.voteChoice = -1;
-
-	hud = [];
-	top = -70;
-	head = voteText( top, 1.5, "objective" );
-	head setText( title );
-	head.color = ( 0.55, 0.85, 1 );
-	hud[ hud.size ] = head;
-	level.voteModeHud = voteText( top + 18, 1.2, "default" );
-	level.voteModeHud setText( sub );
-	level.voteModeHud.color = ( 0.8, 0.8, 0.8 );
-	hud[ hud.size ] = level.voteModeHud;
-	counts = [];
-	for ( i = 0; i < options.size; i++ )
-	{
-		row = voteText( top + 40 + i * 16, 1.3, "default" );
-		row setText( "F" + ( i + 1 ) + "  " + names[ i ] );
-		hud[ hud.size ] = row;
-		c = voteText( top + 40 + i * 16, 1.3, "default" );
-		c.x = 170;
-		c setValue( 0 );
-		hud[ hud.size ] = c;
-		counts[ i ] = c;
-	}
-	hint = voteText( top + 46 + options.size * 16, 1.1, "default" );
-	hint setText( "F1-F" + options.size + ", !1-!" + options.size + " in chat or Enter/F to vote" );
-	hint.color = ( 0.75, 0.75, 0.75 );
-	hud[ hud.size ] = hint;
-	timer = voteText( top, 1.5, "objective" );
-	timer.x = 170;
-	timer setTimer( seconds );
-	hud[ hud.size ] = timer;
-
-	foreach ( player in humans() )
-		player thread voteKeys();
-	level thread voteJoiners();
-
-	level.voteCancelled = false;
-	for ( t = 0; t < seconds * 4 && !level.voteCancelled; t++ )
-	{
-		tally = voteTally();
-		for ( i = 0; i < counts.size; i++ )
-			counts[ i ] setValue( tally[ i ] );
-		wait 0.25;
-	}
-	level notify( "vote_done" );
-
-	tally = voteTally();
-	foreach ( e in hud )
-		e destroy();
-	foreach ( player in level.players )
-		if ( isDefined( player.voteBar ) )
-			player.voteBar destroy();
-	level.voteModeHud = undefined;
-	if ( level.voteCancelled )
-		return -1;
-
-	best = 0;
-	foreach ( n in tally )
-		if ( n > best )
-			best = n;
-	if ( !best )
-		return -1;
-	winners = [];
-	for ( i = 0; i < tally.size; i++ )
-		if ( tally[ i ] == best )
-			winners[ winners.size ] = i;
-	return winners[ randomInt( winners.size ) ];
-}
-
-voteTally()
-{
-	tally = [];
-	for ( i = 0; i < level.voteOptions.size; i++ )
-		tally[ i ] = 0;
-	foreach ( player in humans() )
-		if ( isDefined( player.voteChoice ) && player.voteChoice >= 0 && player.voteChoice < tally.size )
-			tally[ player.voteChoice ]++;
-	return tally;
-}
-
-voteText( y, scale, font )
-{
-	t = newHudElem();
-	t.horzAlign = "left";
-	t.vertAlign = "middle";
-	t.alignX = "left";
-	t.alignY = "middle";
-	t.x = 12;
-	t.y = y;
-	t.font = font;
-	t.fontScale = scale;
-	t.hideWhenInMenu = true;
-	t.archived = false;
-	return t;
-}
-
-voteJoiners()
-{
-	level endon( "vote_done" );
-	level endon( "game_ended" );
-
-	for ( ;; )
-	{
-		level waittill( "connected", player );
-		player.voteChoice = -1;
-		if ( !player isTestClient() )
-			player thread voteKeys();
-	}
-}
-
-// Enter/F steps through the options; the highlighted one is your vote
-voteKeys()
-{
-	self endon( "disconnect" );
-	level endon( "vote_done" );
-	level endon( "game_ended" );
-
-	self.menuKey = "";  // a key pressed before the vote does nothing
-	for ( ;; )
-	{
-		if ( !( isDefined( self.menuOpen ) && self.menuOpen ) && self menuKeyTake() == "pick" )
-		{
-			if ( !isDefined( self.voteChoice ) )
-				self.voteChoice = -1;
-			self castVote( ( self.voteChoice + 1 ) % level.voteOptions.size );
-		}
-		wait 0.05;
-	}
-}
-
-castVote( choice )
-{
-	self.voteChoice = choice;
-	if ( !isDefined( self.voteBar ) )
-	{
-		bar = newClientHudElem( self );
-		bar.horzAlign = "left";
-		bar.vertAlign = "middle";
-		bar.alignX = "left";
-		bar.alignY = "middle";
-		bar.x = 8;
-		bar.alpha = 0.35;
-		bar.color = ( 0.3, 0.6, 1 );
-		bar.hideWhenInMenu = true;
-		bar.archived = false;
-		bar.sort = -1;
-		bar setShader( "white", 180, 15 );
-		self.voteBar = bar;
-	}
-	self.voteBar.y = -70 + 40 + choice * 16;
 }
 
 // same as the web UI's Start game from a running match: settings from server.cfg, then the map
@@ -885,7 +571,7 @@ mapCommand( args )
 			self thread hudMenu( "map" );
 		return;
 	}
-	if ( args.size == 2 && ( args[ 1 ] == "clear" || args[ 1 ] == "vote" || args[ 1 ] == "none" ) )
+	if ( args.size == 2 && ( args[ 1 ] == "clear" || args[ 1 ] == "none" ) )
 	{
 		self clearMapPick();
 		return;
@@ -1131,8 +817,6 @@ hudMenu( start )
 			crumb setText( hudMenuCrumb( screen, page, int( ( items.size + per - 1 ) / per ), mapSel ) );
 		}
 		line = nextUpText();
-		if ( level.voteActive )
-			line = line + "   (vote running)";
 		if ( line != shownStatus )
 		{
 			shownStatus = line;
@@ -1294,7 +978,7 @@ hudMenuItems( screen, mapSel )
 		return menuMapNames();
 	if ( screen == "mapaction" )
 		return strTok( "Next match,Switch now,Back", "," );
-	return strTok( "Game type,Map,Start vote,Cancel vote,Clear map pick,Close", "," );
+	return strTok( "Game type,Map,Clear map pick,Close", "," );
 }
 
 hudMenuCrumb( screen, page, pages, mapSel )
@@ -1343,12 +1027,6 @@ hudMenuSelect( screen, sel, mapSel )
 	case 1:
 		return "map";
 	case 2:
-		self startVote();
-		return "close";
-	case 3:
-		self cancelVote();
-		return "";
-	case 4:
 		self clearMapPick();
 		return "";
 	}

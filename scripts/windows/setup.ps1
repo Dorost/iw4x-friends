@@ -391,14 +391,6 @@ bind UPARROW "+forward"
 bind DOWNARROW "+back"
 bind ENTER "+activate"
 bind KP_ENTER "+activate"
-
-// in-game vote (game type, then map): F1 .. F6 vote for option 1 .. 6, same as !1 .. !6 in chat
-bind F1 "say !1"
-bind F2 "say !2"
-bind F3 "say !3"
-bind F4 "say !4"
-bind F5 "say !5"
-bind F6 "say !6"
 '@
 # END client.cfg
 Set-Content -Path (Join-Path $game "main\client_tweaks.cfg") -Value $ClientCfg -Encoding ascii

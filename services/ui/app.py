@@ -258,7 +258,7 @@ WEAPONS_GSC = Path(__file__).resolve().parent / "weapons.gsc"
 PLAYERS_GSC = Path(__file__).resolve().parent / "players.gsc"
 # Search & Destroy extras from the Fun panel (round roulette, clutch, hunted carrier, revive)
 SD_GSC = Path(__file__).resolve().parent / "sdfun.gsc"
-# in-game map vote, game type and map picks for everyone (!1, !gt, !map, !menu); reads VOTE_LIST
+# in-game game type and map picks for everyone (!gt, !map, !menu); reads VOTE_LIST
 VOTE_GSC = Path(__file__).resolve().parent / "vote.gsc"
 VOTE_LIST = "scriptdata/vote.txt"  # in userraw, where IW4x's FileRead looks
 PLAYER_ACTIONS = {"kill", "launch", "up", "give"}
@@ -403,7 +403,6 @@ def config_view() -> dict:
         "voice": v.get("sv_voice", "0") == "1",  # off on dedicated servers unless set
         "alltalk": v.get("sv_alltalk", "0") == "1",
         "deadchat": v.get("g_deadChat", "0") == "1",
-        "vote": v.get("sv_vote_enabled", "1") == "1",
     }
 
 
@@ -419,7 +418,6 @@ class Config(BaseModel):
     voice: bool = True
     alltalk: bool = False
     deadchat: bool = False
-    vote: bool = True
     bots_skill: str
 
 
@@ -459,7 +457,6 @@ def write_cfg(c: Config) -> None:
         "sv_voice": "1" if c.voice else "0",          # voice chat on/off
         "sv_alltalk": "1" if c.alltalk else "0",      # 1: everyone hears everyone, 0: own team only
         "g_deadChat": "1" if c.deadchat else "0",     # dead players can talk to the living
-        "sv_vote_enabled": "1" if c.vote else "0",  # map vote near the end of each match (vote.gsc)
     })
     save_cfg(v)
 
@@ -467,7 +464,7 @@ def write_cfg(c: Config) -> None:
 def save_cfg(v: dict[str, str]) -> None:
     # always a lobby server: an old "party_enable 0" would end the lobby on "exec server.cfg"
     v["party_enable"] = "1"
-    for key in ("sv_mapRotation", "lobby_playlist", "sv_hangout_enabled"):  # left over from older versions
+    for key in ("sv_mapRotation", "lobby_playlist", "sv_hangout_enabled", "sv_vote_enabled"):  # left over from older versions
         v.pop(key, None)
     for key in CHEAT_DVARS:
         if key in v:
