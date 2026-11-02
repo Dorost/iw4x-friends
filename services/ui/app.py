@@ -8,8 +8,10 @@ import asyncio
 import base64
 import hashlib
 import hmac
+import html
 import json
 import os
+import queue
 import re
 import secrets
 import socket
@@ -17,6 +19,8 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.error
+import urllib.request
 import zipfile
 from functools import cache
 from pathlib import Path
@@ -721,6 +725,165 @@ def start_from_lobby() -> bool:
     return True
 
 
+# ---------- Telegram: who joins and leaves ----------
+# With TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID set (README: "Join and leave messages in
+# Telegram"), the poll loop posts to a Telegram group when a player joins or leaves the
+# server; bots are left out. A player counts as gone after LEAVE_SECONDS away while the
+# server answers, so a map change, or a game crash or server restart they come back
+# from, posts nothing.
+
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+TELEGRAM_CHAT = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+TELEGRAM_ON = bool(TELEGRAM_TOKEN and TELEGRAM_CHAT)
+TELEGRAM_API = "https://api.telegram.org"
+LEAVE_SECONDS = 60
+# who is on, so that a restart of the web UI (a deploy) doesn't post them all again
+PRESENCE_FILE = DATA_DIR / "presence.json"
+PRESENCE_MAX_AGE = 600  # older than this when the web UI starts: not used
+
+
+def humans_now(st: dict | None) -> dict[str, str] | None:
+    """guid -> name of the players (not bots) on the server. None when that isn't known:
+    no answer, or a lobby with people in it (IW4x can't list them)."""
+    if st is None:
+        return None
+    if not st["running"]:
+        return {}
+    live = st["live"]
+    if live and live["in_game"]:
+        return {p["guid"]: p["name"] for p in live["players"] if not p["bot"] and p["ping"] != "ZMBI"}
+    if live and live["lobby"] and live["lobby_count"] == 0:
+        return {}
+    return None
+
+
+class Presence:
+    """Turns the poll loop's player lists into joins and leaves."""
+
+    def __init__(self, path: Path):
+        self.path = path
+        self.players: dict[str, str] = {}  # guid -> name: joined and not left yet
+        self.away: dict[str, float] = {}  # guid -> seconds missing while the server answered
+        self.known = False  # False: the next player list is taken as is, nothing posted
+        self.last = 0.0
+        self.saved = 0.0
+        try:
+            saved = json.loads(path.read_text())
+            if time.time() - saved["time"] < PRESENCE_MAX_AGE:
+                self.players, self.known = dict(saved["players"]), True
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+
+    def update(self, humans: dict[str, str] | None, now: float) -> tuple[list[str], list[str]]:
+        """Names that joined and that left since the last call (now: time.monotonic())."""
+        dt = min(now - self.last, 10.0) if self.last else 0.0
+        self.last = now
+        if humans is None:
+            return [], []
+        if not self.known:  # the web UI started with players already on: no news
+            self.players, self.known = dict(humans), True
+            self.save()
+            return [], []
+        before = dict(self.players)
+        joined = [name for guid, name in humans.items() if guid not in self.players]
+        left = []
+        for guid in [g for g in self.players if g not in humans]:
+            self.away[guid] = self.away.get(guid, 0.0) + dt
+            if self.away[guid] >= LEAVE_SECONDS:
+                del self.away[guid]
+                left.append(self.players.pop(guid))
+        for guid in humans:
+            self.away.pop(guid, None)
+        self.players.update(humans)  # also takes new names
+        if self.players != before or time.time() - self.saved > 60:
+            self.save()
+        return joined, left
+
+    def save(self) -> None:
+        try:
+            tmp = self.path.with_suffix(".tmp")
+            tmp.write_text(json.dumps({"time": time.time(), "players": self.players}))
+            tmp.replace(self.path)
+            self.saved = time.time()
+        except OSError as e:
+            print(f"telegram: can't save {self.path}: {e}", flush=True)
+
+
+def presence_message(server: str, joined: list[str], left: list[str], playing: list[str]) -> str:
+    def bold(names: list[str]) -> str:
+        return ", ".join(f"<b>{html.escape(n)}</b>" for n in names)
+
+    lines = []
+    if joined:
+        lines.append(f"🟢 {bold(joined)} joined {html.escape(server)}")
+    if left:
+        lines.append(f"🔴 {bold(left)} left {html.escape(server)}")
+    playing = sorted(playing, key=str.lower)
+    lines.append(f"Playing ({len(playing)}): {html.escape(', '.join(playing))}" if playing else "Nobody playing now")
+    return "\n".join(lines)
+
+
+presence = Presence(PRESENCE_FILE)
+telegram_outbox: queue.Queue[tuple[str, bool]] = queue.Queue()
+server_name = ""  # sv_hostname, kept for when the server doesn't answer
+
+
+def report_presence(st: dict | None) -> None:
+    global server_name
+    if st and st["live"] and st["live"]["hostname"]:
+        server_name = st["live"]["hostname"]
+    joined, left = presence.update(humans_now(st), time.monotonic())
+    if joined or left:
+        print(f"players: joined {joined}, left {left}", flush=True)
+        text = presence_message(server_name or JOIN_HOST or "the server", joined, left,
+                                list(presence.players.values()))
+        telegram_outbox.put((text, not joined))  # only leaves: no notification sound
+
+
+def telegram(method: str, **params) -> dict:
+    """Calls the Telegram Bot API. A failure comes back as {"ok": False, "description": ...}."""
+    req = urllib.request.Request(f"{TELEGRAM_API}/bot{TELEGRAM_TOKEN}/{method}",
+                                 data=json.dumps(params).encode(),
+                                 headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            return json.load(r)
+    except urllib.error.HTTPError as e:  # Telegram says why in the body
+        try:
+            return json.load(e)
+        except ValueError:
+            return {"ok": False, "error_code": e.code, "description": str(e)}
+    except (OSError, ValueError) as e:
+        return {"ok": False, "description": str(e)}
+
+
+def telegram_loop() -> None:
+    """Sends the queued messages in order, trying again while Telegram can't be reached."""
+    global TELEGRAM_CHAT
+    me = telegram("getMe")
+    if me.get("ok"):
+        print(f"telegram: posting joins and leaves as @{me['result']['username']} to {TELEGRAM_CHAT}", flush=True)
+    else:
+        print(f"telegram: bot not usable ({me.get('description')}), check TELEGRAM_BOT_TOKEN", flush=True)
+    while True:
+        text, silent = telegram_outbox.get()
+        for attempt in range(6):
+            r = telegram("sendMessage", chat_id=TELEGRAM_CHAT, text=text, parse_mode="HTML",
+                         disable_notification=silent)
+            if r.get("ok"):
+                break
+            params = r.get("parameters") or {}
+            if params.get("migrate_to_chat_id"):  # the group became a supergroup, with a new id
+                TELEGRAM_CHAT = str(params["migrate_to_chat_id"])
+                print(f"telegram: the group has a new id, set TELEGRAM_CHAT_ID={TELEGRAM_CHAT} in .env", flush=True)
+                continue
+            print(f"telegram: message not sent: {r.get('description')}", flush=True)
+            code = r.get("error_code", 0)
+            if 400 <= code < 500 and code != 429:
+                break  # e.g. a wrong chat id: sending it again won't help
+            time.sleep(params.get("retry_after") or 5 * 2**attempt)
+
+
 # ---------- live updates ----------
 # One background thread queries the server for every open page and pushes changes to
 # them (SSE), instead of each page polling: rcon allows only one request per 500 ms.
@@ -739,9 +902,15 @@ def poll_loop() -> None:
     while True:
         poked.clear()
         try:
-            data = {"state": state(), "log": log()["lines"]}
+            st = state()
+            data = {"state": st, "log": log()["lines"]}
         except Exception as e:  # noqa: BLE001  keep pushing: one failed query must not stop live updates
-            data = {"error": str(e)}
+            st, data = None, {"error": str(e)}
+        if TELEGRAM_ON:
+            try:
+                report_presence(st)
+            except Exception as e:  # noqa: BLE001  nor a failure here
+                print(f"telegram: {e!r}", flush=True)
         if server_pids() and time.monotonic() - last_alive > WATCHDOG_SECONDS:
             print(f"game server not answering for {WATCHDOG_SECONDS} s, restarting it", flush=True)
             stop_server()
@@ -1089,6 +1258,10 @@ if __name__ == "__main__":
     install_lobby_gsc()
     if os.environ.get("AUTOSTART") == "1":
         start_server()
+    if TELEGRAM_ON:
+        threading.Thread(target=telegram_loop, daemon=True).start()
+    elif TELEGRAM_TOKEN or TELEGRAM_CHAT:
+        print("telegram: set both TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID for join and leave messages", flush=True)
     threading.Thread(target=poll_loop, daemon=True).start()
     # an open live-update stream would otherwise keep the server from shutting down
     uvicorn.run(app, host=UI_HOST, port=UI_PORT, timeout_graceful_shutdown=2)

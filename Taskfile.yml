@@ -127,6 +127,11 @@ tasks:
       - cmd: bash scripts/mac/install-maps.sh --dir game {{.CLI_ARGS}}
         platforms: [linux]
 
+  telegram:
+    desc: "Telegram join/leave messages: list the bot's groups with their chat ids, or with TELEGRAM_CHAT_ID set, send a test message"
+    cmds:
+      - uv run scripts/tools/telegram.py
+
   sync-config:
     desc: Copy config/client.cfg and config/classes.cfg into the standalone setup scripts
     cmds:
