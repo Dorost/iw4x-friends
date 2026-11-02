@@ -39,6 +39,13 @@ jobs:
       - name: Lint web UI
         run: uvx ruff@0.17.2 check services/ui
 
+      - name: Planner bot tests and lint
+        working-directory: services/bot
+        run: |
+          uv run pytest -q
+          uv run black --check .
+          uv run ruff check .
+
       - name: Shell scripts parse
         run: |
           sudo apt-get install -y -qq zsh
@@ -47,7 +54,7 @@ jobs:
           done
 
       - name: Docker compose config valid
-        run: DOMAIN=example.com UI_PASSWORD=x docker compose config -q
+        run: DOMAIN=example.com UI_PASSWORD=x docker compose --profile bot config -q
 
       - name: PowerShell scripts parse
         shell: pwsh

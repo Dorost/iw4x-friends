@@ -27,14 +27,39 @@ services:
       - ./game:/game
       - ui-data:/data
 
+  # the "Tonight?" planner bot (README): runs on one server only, the one with
+  # COMPOSE_PROFILES=bot in its .env (NL). It is the only program that reads the bot's messages
+  bot:
+    build: services/bot
+    image: iw4x-friends-bot:local # built on the server (scripts/deploy/deploy.sh)
+    profiles: [bot]
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      TELEGRAM_APP_SERVERS: ${TELEGRAM_APP_SERVERS:-} # the servers /online and friend alerts ask
+      BOT_DEFAULT_TZ: ${BOT_DEFAULT_TZ:-Europe/Amsterdam}
+      BOT_MIN_PLAYERS: ${BOT_MIN_PLAYERS:-3}
+      BOT_PORT: ${BOT_PORT:-8090}
+      BOT_HOST: 127.0.0.1 # only reachable through Caddy (/bot/)
+      BOT_DB_PATH: /data/bot.db
+    volumes:
+      - bot-data:/data
+
   caddy:
     image: caddy:2.8.4
     network_mode: host
     restart: unless-stopped
-    command: caddy reverse-proxy --from ${DOMAIN:?set DOMAIN in .env} --to 127.0.0.1:${UI_PORT:-8080}
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+      UI_PORT: ${UI_PORT:-8080}
+      BOT_PORT: ${BOT_PORT:-8090}
     volumes:
+      - ./services/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
 
 volumes:
+  bot-data:
   caddy-data:
   ui-data:

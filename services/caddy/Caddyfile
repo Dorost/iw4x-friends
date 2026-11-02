@@ -1,0 +1,10 @@
+# HTTPS for the web UI (services/ui), and /bot/* for the planner bot (services/bot) on the
+# server that runs it (COMPOSE_PROFILES=bot); elsewhere /bot/* has nothing behind it
+{$DOMAIN} {
+	handle /bot/* {
+		reverse_proxy 127.0.0.1:{$BOT_PORT:8090}
+	}
+	handle {
+		reverse_proxy 127.0.0.1:{$UI_PORT:8080}
+	}
+}

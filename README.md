@@ -143,7 +143,42 @@ The bot button next to it sets the bots, as in the web UI: fill the match up to 
 1. List the servers it shows, on each server, in `~/iw4x/.env`: `TELEGRAM_APP_SERVERS=mw2-nl.example.com mw2.example.com` (all with the same bot and group), then `docker compose up -d`
 2. In Telegram, message @BotFather: `/mybots` → your bot → **Bot Settings** → **Configure Mini App** → **Enable Mini App**, and send it the address of one of them: `https://mw2-nl.example.com/tg/`
 
-The bot's messages in the group then get a **🎮 Servers** button that opens it, and so does the bot's profile (**Open App**). Anyone can also send `/servers` in the group (or to the bot) and get the button. The first server in `TELEGRAM_APP_SERVERS` answers it: Telegram lets only one of them read the bot's messages, so from then on `task telegram` can't list groups; `/servers` in another group puts its chat id in that server's log. Nobody needs the web UI password: Telegram signs who opened the app, and each server asks Telegram whether they are in the group. The map pictures are the loading screens from each server's own game files.
+The bot's messages in the group then get a **🎮 Servers** button that opens it, and so does the bot's profile (**Open App**). `/servers` in the group (or to the bot) answers with the button too: the planner bot (below) handles it. Nobody needs the web UI password: Telegram signs who opened the app, and each server asks Telegram whether they are in the group. The map pictures are the loading screens from each server's own game files.
+
+### Tonight? planner bot
+
+The same Telegram bot also plans the nights, for friends in NL and California. It runs on one server only (NL), as the `bot` service of `docker-compose.yml`, and is the only program that reads the bot's messages (`services/bot`).
+
+- 📣 `/play sat 20:00` (or `tomorrow 9pm`, `tonight`, `in 2h`, `21:30 ca`) posts a card with the time in both zones, **Sat 20:00 NL · 11:00 CA**, and **✅ In / 🤔 Maybe / ❌ Out** buttons. Once `BOT_MIN_PLAYERS` (3) are in it posts **🔥 Match on!** and pins the card (the bot has to be an admin to pin)
+- ⏰ 30 and 5 minutes before, everyone who is in gets a DM with `connect mw2-nl.dorost.nl`; who never started the bot in private is mentioned in the group instead
+- 🌍 `/tz` sets your zone (Amsterdam, Los Angeles, or `/tz Area/City`); without one it's `BOT_DEFAULT_TZ`. Times follow summer time in each zone
+- 🗓 **📅 Plan** in the mini app: tap the hours you're usually free, per weekday, in your own zone. `/when` lists the best times for everyone this week, with a button to post one as a card
+- 🟢 `/online` shows who is on each server
+- 🔔 `/link <in-game name>` ties you to your name in the game, `/watch <name>` (or `@username` of someone who did `/link`) DMs you when they join a server, `/unwatch` stops it
+- 🕹 `/servers` answers with the mini app buttons
+
+The bot asks each server in `TELEGRAM_APP_SERVERS` who is playing (`/tg/api/state`) every 20 seconds, signed like the mini app as the bot itself, which is in the group: nothing to change on the game servers. Caddy sends `https://<domain>/bot/` to the bot, which serves the Plan page; the servers' mini app opens it.
+
+To run it on a server, add to its `.env` (the `TELEGRAM_*` lines are already there):
+
+```sh
+COMPOSE_PROFILES=bot
+BOT_DEFAULT_TZ=Europe/Amsterdam
+BOT_MIN_PLAYERS=3
+```
+
+then `docker compose up -d --build`. Deploys from GitHub build it on that server. Its data is in the `bot-data` volume (`/data/bot.db`, SQLite; the bot creates and upgrades the tables when it starts).
+
+#### Try it with a test bot first
+
+A second bot from @BotFather (`/newbot`) and a test group, so the real group and bot stay untouched:
+
+1. Add the test bot to a test group, send `/start@<test bot name>` there, and get its chat id: `TELEGRAM_BOT_TOKEN=<test token> TELEGRAM_CHAT_ID= uv run scripts/tools/telegram.py` (straight, so `.env` can't put the real token in)
+2. In `.env` here: `BOT_DEV_TOKEN=<test token>`, `BOT_DEV_CHAT_ID=<test chat id>`
+3. `task bot:dev`: the bot with its own `services/bot/dev.db` and fake game servers from `services/bot/dev-state.json` (edit the players there to try `/online` and friend alerts). It stops when `BOT_DEV_TOKEN` is the real bot's token
+4. The Plan page in a browser, without Telegram: set `BOT_DEV_USER_ID=<your Telegram user id>` and open `http://localhost:8090/bot/`. Inside Telegram it needs HTTPS: point a tunnel (e.g. `cloudflared tunnel --url http://localhost:8090`) at it and give BotFather `https://<tunnel>/bot/` as the test bot's Mini App
+
+`task bot:test` runs the tests (time parsing over summer time in both zones, cards and RSVPs, overlaps, reminders, access checks, a dry run against a fake Telegram), black and ruff.
 
 ### Updates from GitHub
 
@@ -177,5 +212,7 @@ A new server also gets an environment with its own `DEPLOY_SSH_KEY`, a deploy jo
 - `scripts/deploy/`: deploys from GitHub Actions to the servers (see [Updates from GitHub](#updates-from-github))
 - `config/`: shared game settings and classes, copied into the setup scripts by `task sync-config`
 - `services/ui/`: the server's web control page
+- `services/bot/`: the Tonight? planner bot (see [Tonight? planner bot](#tonight-planner-bot))
+- `services/caddy/`: Caddy's config: HTTPS, the web UI and `/bot/`
 
 The setup scripts carry the `mw.zip` and maps pack links encrypted with the setup password. To set or change them, run `task links` (asks for both links and the password), then commit the updated scripts.

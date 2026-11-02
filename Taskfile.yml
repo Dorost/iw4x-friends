@@ -12,6 +12,35 @@ tasks:
     cmds:
       - uv run app.py
 
+  bot:
+    desc: Start the Tonight? planner bot (TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID; nothing else may read the bot's messages)
+    dir: services/bot
+    cmds:
+      - uv run python -m bot
+
+  bot:test:
+    desc: Test and lint the planner bot (pytest, black, ruff)
+    dir: services/bot
+    cmds:
+      - uv run pytest -q
+      - uv run black --check .
+      - uv run ruff check .
+
+  bot:dev:
+    desc: Run the planner bot here with a TEST bot (BOT_DEV_TOKEN, BOT_DEV_CHAT_ID), dev.db and fake game servers (dev-state.json)
+    dir: services/bot
+    cmds:
+      - |
+        : "${BOT_DEV_TOKEN:?set BOT_DEV_TOKEN in .env: a separate test bot from @BotFather}"
+        : "${BOT_DEV_CHAT_ID:?set BOT_DEV_CHAT_ID in .env: chat id of the test group}"
+        if [ "$BOT_DEV_TOKEN" = "${TELEGRAM_BOT_TOKEN:-}" ]; then
+          echo "BOT_DEV_TOKEN is the real bot's token: use a test bot"; exit 1
+        fi
+        TELEGRAM_BOT_TOKEN="$BOT_DEV_TOKEN" TELEGRAM_CHAT_ID="$BOT_DEV_CHAT_ID" \
+        BOT_DB_PATH=dev.db BOT_FAKE_STATE="${BOT_FAKE_STATE:-dev-state.json}" BOT_POLL_SECONDS=5 \
+        BOT_DEV_USER_ID="${BOT_DEV_USER_ID:-}" \
+          uv run python -m bot
+
   server:
     desc: Start the dedicated server in the foreground (console in terminal)
     cmds:

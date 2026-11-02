@@ -88,6 +88,9 @@
   .message .icon { font-size: 52px; }
   .message h1 { font-size: 20px; margin: 12px 0 6px; }
   .message p { color: var(--hint); margin: 0; }
+  .plan { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 12px 14px; }
+  .plan .emoji { font-size: 24px; }
+  .plan .go { margin-left: auto; color: var(--hint); font-size: 20px; }
   .toast { position: fixed; left: 50%; bottom: calc(86px + var(--bottom)); transform: translate(-50%, 20px); max-width: calc(100% - 32px); width: max-content; padding: 10px 16px; border-radius: 12px; background: rgba(30, 30, 30, .92); color: #fff; font-size: 14px; opacity: 0; transition: .2s; pointer-events: none; z-index: 10; }
   .toast.show { opacity: 1; transform: translate(-50%, 0); }
   .toast.bad { background: var(--danger); }
@@ -100,6 +103,7 @@
 const tg = window.Telegram && Telegram.WebApp;
 const INIT = tg ? tg.initData : "";
 const SERVERS = ["__SERVERS__"];  // filled in by the server: TELEGRAM_APP_SERVERS
+const PLAN = "__PLAN__";  // the planner bot's Plan page (services/bot)
 const app = document.getElementById("app");
 const states = {};  // server -> its /tg/api/state, or {error, code}
 let view = null;    // the open screen: {kind: "map", base, mode, map} or {kind: "bots", base, fill, add, skill}
@@ -194,7 +198,16 @@ async function submit(btn, working, request, done) {
 // ---------- the servers ----------
 
 function renderList() {
-  app.innerHTML = SERVERS.map((base, i) => card(base, states[base], i)).join("");
+  app.innerHTML = `<button class="card plan" onclick="openPlan()"><span class="emoji">📅</span>
+      <span><b>Plan</b><br><span class="hint">Your free hours and the best times for everyone</span></span><span class="go">›</span></button>`
+    + SERVERS.map((base, i) => card(base, states[base], i)).join("");
+}
+
+// the Plan page is on the bot's server: it gets Telegram's launch data in its address, as Telegram does
+function openPlan(replace) {
+  const params = new URLSearchParams({tgWebAppData: INIT, tgWebAppVersion: tg.version, tgWebAppPlatform: tg.platform,
+    tgWebAppThemeParams: JSON.stringify(tg.themeParams)});
+  location[replace ? "replace" : "assign"](`${PLAN}#${params}`);
 }
 
 function card(base, s, i) {
@@ -331,7 +344,8 @@ if (!INIT) {
   tg.expand();
   try { tg.setHeaderColor("secondary_bg_color"); tg.setBackgroundColor("secondary_bg_color"); } catch (e) {}
   if (nativeBack()) tg.BackButton.onClick(closeView);
-  refresh();
+  if (tg.initDataUnsafe.start_param === "plan") openPlan(true);  // t.me/<bot>?startapp=plan
+  else refresh();
   setInterval(() => { if (!view && !document.hidden) refresh(); }, 5000);
 }
 </script>

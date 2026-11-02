@@ -896,7 +896,7 @@ def telegram_loop() -> None:
             time.sleep(params.get("retry_after") or 5 * 2**attempt)
 
 
-bot_app = {"checked": 0.0, "button": None, "username": ""}
+bot_app = {"checked": 0.0, "button": None}
 
 
 def app_button() -> dict | None:
@@ -906,65 +906,10 @@ def app_button() -> dict | None:
         me = telegram("getMe")
         if me.get("ok"):
             bot = me["result"]
-            bot_app["checked"], bot_app["username"] = time.monotonic(), bot["username"]
+            bot_app["checked"] = time.monotonic()
             bot_app["button"] = {"inline_keyboard": [[
                 {"text": "🎮 Servers", "url": f"https://t.me/{bot['username']}?startapp"}]]} if bot.get("has_main_web_app") else None
     return bot_app["button"]
-
-
-# ---------- Telegram: /servers ----------
-# Telegram lets one program read a bot's messages, so one server does: the first in
-# TELEGRAM_APP_SERVERS, or this one without a list. It answers /servers with the button
-# that opens the mini app, in the group and in private chats with the bot.
-
-COMMANDS = [{"command": "servers", "description": "Map, mode, players and bots of the servers"}]
-COMMAND_MAX_AGE = 120  # older ones are left over from before a restart
-
-
-def reads_commands() -> bool:
-    return not TELEGRAM_APP_SERVERS or urllib.parse.urlsplit(TELEGRAM_APP_SERVERS[0]).hostname == JOIN_HOST
-
-
-def answer_command(m: dict) -> None:
-    name, _, to = (m.get("text") or "").partition(" ")[0].partition("@")
-    if name not in ("/servers", "/start") or time.time() - m.get("date", 0) > COMMAND_MAX_AGE:
-        return
-    button = app_button()  # also learns the bot's name
-    if to and to.lower() != bot_app["username"].lower():
-        return  # for another bot
-    chat = m.get("chat") or {}
-    if chat.get("type") != "private" and str(chat.get("id")) != TELEGRAM_CHAT:
-        print(f"telegram: {name} in another group, not answered: {chat.get('title')!r}, chat id {chat.get('id')}", flush=True)
-        return
-    text = ("Map, mode, players and bots of the servers:" if button
-            else 'The mini app isn\'t set up in BotFather yet (README: "Map, mode and bots from Telegram").')
-    r = telegram("sendMessage", chat_id=chat["id"], text=text, **({"reply_markup": button} if button else {}),
-                 reply_parameters={"message_id": m["message_id"], "allow_sending_without_reply": True})
-    if not r.get("ok"):
-        print(f"telegram: {name} not answered: {r.get('description')}", flush=True)
-
-
-def commands_loop() -> None:
-    """Reads the bot's messages (long polling) and answers the commands."""
-    telegram("setMyCommands", commands=COMMANDS)  # the / menu in Telegram
-    print("telegram: answering /servers", flush=True)
-    offset, conflict = 0, False
-    while True:
-        r = telegram("getUpdates", wait=70, offset=offset, timeout=50, allowed_updates=["message"])
-        if not r.get("ok"):
-            if r.get("error_code") == 409 and not conflict:
-                print("telegram: something else reads this bot's messages too, e.g. another server with "
-                      "itself first in TELEGRAM_APP_SERVERS", flush=True)
-            conflict = r.get("error_code") == 409
-            time.sleep(10)
-            continue
-        conflict = False
-        for update in r["result"]:
-            offset = update["update_id"] + 1
-            try:
-                answer_command(update.get("message") or {})
-            except Exception as e:  # noqa: BLE001  one odd message must not stop the commands
-                print(f"telegram: {e!r}", flush=True)
 
 
 # ---------- Telegram mini app: map, mode and bots from the group ----------
@@ -1048,7 +993,9 @@ def tg_mode(gametype: str, weapons: str) -> tuple[str, str]:
 @app.get("/tg/", response_class=HTMLResponse)
 def tg_page():
     servers = TELEGRAM_APP_SERVERS or [""]  # empty: only this server
-    return (Path(__file__).parent / "tg.html").read_text().replace('["__SERVERS__"]', json.dumps(servers))
+    # the Plan page of the planner bot (services/bot), behind the first server's /bot/
+    return ((Path(__file__).parent / "tg.html").read_text().replace('["__SERVERS__"]', json.dumps(servers))
+            .replace('"__PLAN__"', json.dumps(f"{servers[0]}/bot/")))
 
 
 @app.get("/tg/api/state")
@@ -1576,8 +1523,6 @@ if __name__ == "__main__":
         start_server()
     if TELEGRAM_ON:
         threading.Thread(target=telegram_loop, daemon=True).start()
-        if reads_commands():
-            threading.Thread(target=commands_loop, daemon=True).start()
     elif TELEGRAM_TOKEN or TELEGRAM_CHAT:
         print("telegram: set both TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID for join and leave messages", flush=True)
     threading.Thread(target=poll_loop, daemon=True).start()

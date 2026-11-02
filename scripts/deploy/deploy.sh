@@ -12,6 +12,7 @@
 #   4. waits for the web UI and the game to answer, and goes back to the previous commit
 #      and image when they don't
 #   5. keeps the 3 newest images
+# With COMPOSE_PROFILES=bot in .env (the NL server), step 3 also builds the planner bot.
 # game/, server.cfg and .env stay as they are, except IMAGE_TAG in .env.
 #
 #   bash scripts/deploy/deploy.sh <commit sha>     (over SSH: deploy <commit sha>)
@@ -92,6 +93,13 @@ $edits"
   before=$(docker compose ps -q server)
   git checkout -q --detach "$sha"
   setenv IMAGE_TAG "$tag"
+  # the planner bot (services/bot) runs where .env has COMPOSE_PROFILES=bot, built here; a
+  # cached build when it didn't change
+  if [[ ",$(getenv COMPOSE_PROFILES)," == *,bot,* ]] && ! docker compose build -q bot; then
+    git checkout -q --detach "$old"
+    setenv IMAGE_TAG "$old_tag"
+    die "the planner bot doesn't build, staying on ${old:0:7}"
+  fi
   # up recreates only what changed; a recreated server has to answer
   if docker compose up -d --no-build && { [[ "$(docker compose ps -q server)" == "$before" ]] || healthy; }; then
     ok "on ${sha:0:7}, image ${tag:0:7}"
