@@ -13,7 +13,7 @@ def test_card_shows_both_zones_and_people():
         START - timedelta(hours=3),
         3,
     )
-    assert "<b>Sat 20:00</b> NL · <b>11:00</b> CA" in text
+    assert "<b>Sat 20:00</b> NL · <b>14:00</b> ET · <b>11:00</b> PT" in text
     assert "✅ In (2): <b>Amin</b>, <b>bob</b>" in text
     assert "🤔 Maybe (1): Sara" in text
     assert "❌ Out (1): Kim" in text

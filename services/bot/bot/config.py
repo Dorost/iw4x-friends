@@ -5,8 +5,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
 
-# the two zones every card shows: label -> IANA name
-ZONES = {"NL": "Europe/Amsterdam", "CA": "America/Los_Angeles"}
+# the zones every card shows, east to west: label -> IANA name
+ZONES = {"NL": "Europe/Amsterdam", "ET": "America/New_York", "PT": "America/Los_Angeles"}
 
 
 def _servers(raw: str) -> list[str]:

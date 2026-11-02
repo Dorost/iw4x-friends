@@ -5,8 +5,8 @@ import pytest
 
 from bot.when import BadTime, both_zones, parse_when, valid_zone
 
-NL, CA = "Europe/Amsterdam", "America/Los_Angeles"
-AMS, LA = ZoneInfo(NL), ZoneInfo(CA)
+NL, CA, ET = "Europe/Amsterdam", "America/Los_Angeles", "America/New_York"
+AMS, LA, NY = ZoneInfo(NL), ZoneInfo(CA), ZoneInfo(ET)
 
 
 def local(t: datetime, z: ZoneInfo) -> str:
@@ -32,6 +32,13 @@ NOW = datetime(2026, 11, 4, 11, 0, tzinfo=UTC)
         ("sat 11:00 ca", NL, "Sat 2026-11-07 11:00", LA),  # zone word wins over the sender's
         ("fri 12am", CA, "Fri 2026-11-06 00:00", LA),
         ("sat at 8 pm", CA, "Sat 2026-11-07 20:00", LA),
+        ("sat 14:00 et", NL, "Sat 2026-11-07 14:00", NY),
+        ("sat 14:00 eastern", NL, "Sat 2026-11-07 14:00", NY),
+        ("sat 14:00 ny", NL, "Sat 2026-11-07 14:00", NY),
+        ("sat 11:00 pt", NL, "Sat 2026-11-07 11:00", LA),
+        ("sat 11:00 pacific", NL, "Sat 2026-11-07 11:00", LA),
+        ("sat 11:00 la", NL, "Sat 2026-11-07 11:00", LA),
+        ("tomorrow 9pm", ET, "Thu 2026-11-05 21:00", NY),
     ],
 )
 def test_parse(text, tz, want, zone):
@@ -51,7 +58,7 @@ def test_bad(text):
 
 def test_same_card_both_zones_winter():
     t = parse_when("sat 20:00", NL, NOW)
-    assert both_zones(t, bold=False) == "Sat 20:00 NL · 11:00 CA"
+    assert both_zones(t, bold=False) == "Sat 20:00 NL · 14:00 ET · 11:00 PT"
 
 
 def test_dst_gap_week_between_eu_and_us_changes():
@@ -59,10 +66,10 @@ def test_dst_gap_week_between_eu_and_us_changes():
     now = datetime(2026, 10, 26, 10, 0, tzinfo=UTC)
     t = parse_when("sat 20:00", NL, now)
     assert t == datetime(2026, 10, 31, 19, 0, tzinfo=UTC)
-    assert both_zones(t, bold=False) == "Sat 20:00 NL · 12:00 CA"
+    assert both_zones(t, bold=False) == "Sat 20:00 NL · 15:00 ET · 12:00 PT"
     # a week later both are on winter time: 9 hours
     t = parse_when("sat 20:00", NL, now + timedelta(days=7))
-    assert both_zones(t, bold=False) == "Sat 20:00 NL · 11:00 CA"
+    assert both_zones(t, bold=False) == "Sat 20:00 NL · 14:00 ET · 11:00 PT"
 
 
 def test_next_week_keeps_wall_clock_over_dst():
@@ -81,9 +88,13 @@ def test_spring_forward_gap_is_still_a_real_time():
 
 def test_california_evening_is_next_day_in_nl():
     t = parse_when("fri 19:00", CA, NOW)
-    assert both_zones(t, bold=False) == "Sat 04:00 NL · Fri 19:00 CA"
+    assert both_zones(t, bold=False) == "Sat 04:00 NL · Fri 22:00 ET · Fri 19:00 PT"
 
 
 def test_valid_zone():
     assert valid_zone("europe/london") == "Europe/London"
     assert valid_zone("Mars/Base") is None
+    for word in ("pacific", "PT", "la", "ca"):
+        assert valid_zone(word) == CA
+    for word in ("eastern", "ET", "ny"):
+        assert valid_zone(word) == ET

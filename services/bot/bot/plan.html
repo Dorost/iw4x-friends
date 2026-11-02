@@ -125,7 +125,7 @@ function render() {
     <div class="label">${ICON.star}Best times this week</div>
     <div class="card">${best}</div>
     <div class="label">${ICON.globe}Your zone · ${esc(data.tz)}</div>
-    <div class="seg">${zones.map(([label, tz]) => `<button class="${tz === data.tz ? "on" : ""}" onclick="setTz('${tz}')">${label === "NL" ? "🇳🇱 Amsterdam" : label === "CA" ? "🇺🇸 Los Angeles" : label}</button>`).join("")}
+    <div class="seg">${zones.map(([label, tz]) => `<button class="${tz === data.tz ? "on" : ""}" onclick="setTz('${tz}')">${{NL: "🇳🇱 Amsterdam", ET: "🇺🇸 Eastern", PT: "🇺🇸 Pacific"}[label] || label}</button>`).join("")}
       <button class="${known ? "" : "on"}" onclick="otherTz()">🌐 ${known ? "Other" : esc(data.tz.split("/").pop().replace(/_/g, " "))}</button></div>
     <div class="label">${ICON.clock}When you're usually free</div>
     <div class="days">${DAYS.map((d, i) => `<button class="day ${i === day ? "on" : ""}" onclick="pickDay(${i})">${d}<small>${count(i) || "·"}</small></button>`).join("")}</div>

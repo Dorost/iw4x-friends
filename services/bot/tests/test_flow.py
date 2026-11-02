@@ -32,7 +32,10 @@ async def test_play_rsvp_match_on_and_reminders(tmp_path):
     await bot.handle(press("tz:America/Los_Angeles", JOE, "Joe"))
     await bot.handle(msg("/play sat 20:00", AMIN, "Amin"))
     card = tg.sent(GROUP)[-1]
-    assert "<b>Sat 20:00</b> NL · <b>11:00</b> CA" in card and "✅ In (1): <b>Amin</b>" in card
+    assert (
+        "<b>Sat 20:00</b> NL · <b>14:00</b> ET · <b>11:00</b> PT" in card
+        and "✅ In (1): <b>Amin</b>" in card
+    )
 
     await bot.handle(press("rsvp:1:in", SARA, "Sara"))
     await bot.handle(press("rsvp:1:maybe", JOE, "Joe"))
@@ -85,10 +88,13 @@ async def test_when_suggests_overlap(tmp_path):
     await bot.handle(msg("/when", AMIN, "Amin"))
     text = tg.sent(GROUP)[-1]
     print(text)
-    assert "🥇 <b>Sat 20:00</b> to 22:00 NL · <b>Sat 11:00</b> to 13:00 CA" in text
+    assert (
+        "🥇 <b>Sat 20:00</b> to 22:00 NL · <b>Sat 14:00</b> to 16:00 ET"
+        " · <b>Sat 11:00</b> to 13:00 PT"
+    ) in text
     buttons = tg.calls[-1][1]["reply_markup"]["inline_keyboard"][0]
     await bot.handle(press(buttons[0]["callback_data"], JOE, "Joe"))
-    assert "<b>Sat 20:00</b> NL · <b>11:00</b> CA" in tg.sent(GROUP)[-1]
+    assert "<b>Sat 20:00</b> NL · <b>14:00</b> ET · <b>11:00</b> PT" in tg.sent(GROUP)[-1]
 
 
 @pytest.mark.anyio
@@ -139,3 +145,16 @@ async def test_online_and_friend_alert(tmp_path):
     bot.joins.seen["https://mw2-nl.dorost.nl"].clear()
     await bot.watch_servers()  # again within half an hour: no second DM
     assert len([t for t in tg.sent(SARA) if "just joined" in t]) == 1
+
+
+@pytest.mark.anyio
+async def test_tz_picker_and_zone_words(tmp_path):
+    bot, tg, _, _ = make_bot(tmp_path, NOW, members={JOE})
+    await bot.handle(msg("/tz", JOE, "Joe", private=True))
+    _, p = tg.calls[-1]
+    buttons = [b["text"] for b in p["reply_markup"]["inline_keyboard"][0]]
+    assert buttons == ["🇳🇱 Amsterdam", "🇺🇸 Eastern", "🇺🇸 Pacific"]
+    await bot.handle(msg("/tz eastern", JOE, "Joe", private=True))
+    assert "America/New_York" in tg.sent(JOE)[-1]
+    await bot.handle(msg("/tz pt", JOE, "Joe", private=True))
+    assert "America/Los_Angeles" in tg.sent(JOE)[-1]

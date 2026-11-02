@@ -165,7 +165,7 @@ def heat(free: dict[datetime, set[int]], tz: str, skip: int | None = None) -> di
 
 
 def window_text(w: Window, names: dict[int, str]) -> str:
-    """'Sat 20:00 to 23:00 NL · 11:00 to 14:00 CA', with who."""
+    """'Sat 20:00 to 23:00 NL · Sat 14:00 to 17:00 ET · Sat 11:00 to 14:00 PT', with who."""
     parts = []
     for label, name in ZONES.items():
         a, b = w.start.astimezone(zone(name)), w.end.astimezone(zone(name))

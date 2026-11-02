@@ -45,7 +45,11 @@ HELP = (
 COMMAND_MAX_AGE = 120  # older messages are left over from before a restart
 MEMBER_CACHE = (600, 60)  # seconds to trust "in the group" and "not in the group"
 ALERT_COOLDOWN = 1800  # one DM per watcher and friend per half hour
-TZ_PICKS = [("🇳🇱 Amsterdam", ZONES["NL"]), ("🇺🇸 Los Angeles", ZONES["CA"])]
+TZ_PICKS = [
+    ("🇳🇱 Amsterdam", ZONES["NL"]),
+    ("🇺🇸 Eastern", ZONES["ET"]),
+    ("🇺🇸 Pacific", ZONES["PT"]),
+]
 
 
 def mention(user_id: int, name: str) -> str:
@@ -246,7 +250,9 @@ class Bot:
         if arg:
             name = valid_zone(arg)
             if not name:
-                await self.reply(m, "🌍 Unknown zone. Try <code>/tz Europe/London</code>")
+                await self.reply(
+                    m, "🌍 Unknown zone. Try <code>/tz eastern</code> or <code>/tz pacific</code>"
+                )
                 return
             await self.set_tz(uid, name)
             await self.reply(m, f"🌍 Your zone: <b>{esc(name)}</b>")

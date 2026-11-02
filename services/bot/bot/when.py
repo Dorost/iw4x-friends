@@ -21,7 +21,11 @@ DAY_NAMES = {
     "thurs": 3,
 }
 # a zone at the end, "sat 20:00 ca": the time is in that zone instead of the sender's
-ZONE_WORDS = {"nl": ZONES["NL"], "cet": ZONES["NL"], "ca": ZONES["CA"], "pt": ZONES["CA"]}
+ZONE_WORDS = {
+    **dict.fromkeys(["nl", "cet"], ZONES["NL"]),
+    **dict.fromkeys(["pt", "pacific", "la", "ca"], ZONES["PT"]),
+    **dict.fromkeys(["et", "eastern", "ny"], ZONES["ET"]),
+}
 TONIGHT_HOUR = 21
 TIME = re.compile(r"^(\d{1,2})(?:[:.h](\d{2}))?\s*(am|pm)?$")
 IN = re.compile(r"^in\s+(\d+)\s*(m|min|mins|minutes?|h|hr|hrs|hours?)$")
@@ -39,7 +43,10 @@ def zone(name: str | None, default: str = ZONES["NL"]) -> ZoneInfo:
 
 
 def valid_zone(name: str) -> str | None:
-    """The IANA name, case fixed ("europe/london" -> "Europe/London"), or None."""
+    """The IANA name, case fixed ("europe/london" -> "Europe/London"), or None. A zone word
+    ("pacific", "et") gives its zone."""
+    if name.strip().lower() in ZONE_WORDS:
+        return ZONE_WORDS[name.strip().lower()]
     by_lower = {z.lower(): z for z in available_timezones()}
     return by_lower.get(name.strip().lower())
 
@@ -62,7 +69,7 @@ def parse_when(text: str, tz: str, now: datetime | None = None) -> datetime:
     """The next moment the text means, in UTC. tz is the sender's zone (IANA name).
 
     "20:00", "8pm", "tonight", "today 21:00", "tomorrow 9pm", "sat 20:00", "saturday",
-    "in 2h", "in 30m"; an "nl" or "ca" at the end reads the time in that zone."""
+    "in 2h", "in 30m"; a zone word at the end ("nl", "pt", "et") reads the time in that zone."""
     now = (now or datetime.now(UTC)).astimezone(UTC)
     words = text.strip().lower().replace(",", " ").split()
     if not words:
@@ -124,7 +131,7 @@ def day_hhmm(t: datetime) -> str:
 
 
 def both_zones(when: datetime, bold: bool = True) -> str:
-    """'Sat 20:00 NL · 11:00 CA' (the second day only when it differs)."""
+    """'Sat 20:00 NL · 14:00 ET · 11:00 PT' (another zone's day only when it differs)."""
     parts = []
     first = None
     for label, name in ZONES.items():
