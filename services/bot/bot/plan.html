@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Plan</title>
+<!-- Telegram mini app: the hours you're usually free, and the best times for everyone (bot/web.py) -->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-secondary-bg-color, #f1f1f4);
+    --card: var(--tg-theme-section-bg-color, var(--tg-theme-bg-color, #fff));
+    --text: var(--tg-theme-text-color, #1c1c1e);
+    --hint: var(--tg-theme-hint-color, #8e8e93);
+    --accent: var(--tg-theme-button-color, #4a7fb5);
+    --accent-text: var(--tg-theme-button-text-color, #fff);
+    --danger: var(--tg-theme-destructive-text-color, #d9534f);
+    --sep: var(--tg-theme-section-separator-color, rgba(127, 127, 127, .18));
+    --bottom: var(--tg-safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+    color-scheme: light dark;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body { font: 14px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; }
+  button { font: inherit; color: inherit; border: 0; background: none; padding: 0; cursor: pointer; }
+  main { max-width: 640px; margin: 0 auto; padding: 12px 12px calc(20px + var(--bottom)); }
+  header { display: flex; align-items: center; gap: 10px; padding: 4px 4px 10px; }
+  header h1 { font-size: 20px; margin: 0; flex: 1; }
+  .back { color: var(--accent); font-weight: 500; }
+  .card { background: var(--card); border-radius: 14px; padding: 12px 14px; margin-bottom: 12px; }
+  .label { display: flex; align-items: center; gap: 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--hint); margin: 16px 4px 8px; }
+  .label svg { width: 14px; height: 14px; }
+  .hint { color: var(--hint); font-size: 12px; }
+  .best { display: flex; gap: 10px; padding: 8px 0; border-top: 1px solid var(--sep); }
+  .best:first-child { border-top: 0; padding-top: 2px; }
+  .best .medal { font-size: 18px; line-height: 1.2; }
+  .best b { font-weight: 600; }
+  .seg { display: flex; padding: 3px; border-radius: 10px; background: color-mix(in srgb, var(--hint) 16%, transparent); }
+  .seg button { flex: 1; min-width: 0; padding: 7px 6px; border-radius: 8px; font-weight: 500; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .seg button.on { background: var(--card); box-shadow: 0 1px 3px rgba(0,0,0,.14); }
+  .days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+  .day { padding: 8px 0 6px; border-radius: 10px; background: var(--card); text-align: center; font-weight: 600; font-size: 13px; }
+  .day small { display: block; font-weight: 400; font-size: 11px; color: var(--hint); }
+  .day.on { background: var(--accent); color: var(--accent-text); }
+  .day.on small { color: inherit; opacity: .8; }
+  .hours { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .hour { position: relative; padding: 9px 0; border-radius: 10px; background: var(--card); font-variant-numeric: tabular-nums; font-size: 13px; }
+  .hour.on { background: color-mix(in srgb, var(--accent) 82%, transparent); color: var(--accent-text); font-weight: 600; }
+  .hour .n { position: absolute; top: 3px; right: 5px; font-size: 10px; font-weight: 600; color: #5b9a6b; }
+  .hour.on .n { color: inherit; opacity: .85; }
+  .tools { display: flex; gap: 8px; margin-top: 10px; }
+  .tools button { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 9px; border-radius: 10px; font-weight: 500; font-size: 13px; background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+  .tools svg { width: 15px; height: 15px; }
+  .message { text-align: center; padding: 22vh 24px 0; }
+  .message .icon { font-size: 48px; }
+  .message h1 { font-size: 18px; margin: 12px 0 6px; }
+  .message p { color: var(--hint); margin: 0; }
+  .spin { width: 16px; height: 16px; margin: 0 auto; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .toast { position: fixed; left: 50%; bottom: calc(24px + var(--bottom)); transform: translate(-50%, 20px); max-width: calc(100% - 32px); width: max-content; padding: 9px 14px; border-radius: 12px; background: rgba(40, 40, 44, .92); color: #fff; font-size: 13px; opacity: 0; transition: .2s; pointer-events: none; }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast.bad { background: var(--danger); }
+</style>
+</head>
+<body>
+<main id="app"><div class="message"><div class="spin"></div></div></main>
+<div id="toast" class="toast"></div>
+<script>
+const tg = window.Telegram && Telegram.WebApp;
+const INIT = tg ? tg.initData : "";
+const API = location.pathname.replace(/\/[^/]*$/, "") + "/api";  // /bot/api
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const ICON = {
+  clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  globe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/></svg>',
+  star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>',
+  copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>',
+  moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>',
+  clear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+};
+const app = document.getElementById("app");
+let data = null, day = (new Date().getDay() + 6) % 7, mine = new Set(), saveTimer = null;
+
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"})[c]);
+const tick = () => { try { tg.HapticFeedback.selectionChanged(); } catch (e) {} };
+
+async function api(path, body) {
+  const headers = {"Content-Type": "application/json"};
+  if (INIT) headers.Authorization = "tma " + INIT;
+  const r = await fetch(API + path, {method: body ? "PUT" : "GET", headers, body: body ? JSON.stringify(body) : undefined});
+  const out = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error(typeof out.detail === "string" ? out.detail : `error ${r.status}`); e.code = r.status; throw e; }
+  return out;
+}
+
+let toastTimer;
+function toast(text, bad) {
+  const t = document.getElementById("toast");
+  t.textContent = text;
+  t.className = "toast show" + (bad ? " bad" : "");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.className = "toast", bad ? 4000 : 1500);
+}
+
+function message(icon, title, text) {
+  app.innerHTML = `<div class="message"><div class="icon">${icon}</div><h1>${esc(title)}</h1><p>${esc(text)}</p></div>`;
+}
+
+// "Sat 20:00 to 23:00" in a zone
+function span(start, hours, tz) {
+  const f = (t, o) => new Intl.DateTimeFormat("en-GB", {timeZone: tz, ...o}).format(new Date(t * 1000));
+  return `<b>${f(start, {weekday: "short"})} ${f(start, {hour: "2-digit", minute: "2-digit"})}</b> to ${f(start + hours * 3600, {hour: "2-digit", minute: "2-digit"})}`;
+}
+
+function render() {
+  const zones = Object.entries(data.zones);
+  const best = data.best.length ? data.best.map((w, i) => `<div class="best"><span class="medal">${["🥇", "🥈", "🥉"][i]}</span><div>
+      ${zones.map(([label, tz]) => `${span(w.start, w.hours, tz)} ${label}`).join(" · ")}
+      <div class="hint">👥 ${w.people.length}: ${esc(w.people.join(", "))}</div></div></div>`).join("")
+    : `<div class="hint">No overlap yet. ${data.others ? "Mark your hours below." : "Mark your hours and ask the others to do the same."}</div>`;
+  const known = zones.some(([, tz]) => tz === data.tz);
+  const count = d => [...mine].filter(k => k.startsWith(d + "-")).length;
+  app.innerHTML = `
+    <header>${history.length > 1 && !nativeBack() ? '<button class="back" onclick="history.back()">‹</button>' : ""}<h1>📅 Plan</h1></header>
+    <div class="label">${ICON.star}Best times this week</div>
+    <div class="card">${best}</div>
+    <div class="label">${ICON.globe}Your zone · ${esc(data.tz)}</div>
+    <div class="seg">${zones.map(([label, tz]) => `<button class="${tz === data.tz ? "on" : ""}" onclick="setTz('${tz}')">${label === "NL" ? "🇳🇱 Amsterdam" : label === "CA" ? "🇺🇸 Los Angeles" : label}</button>`).join("")}
+      <button class="${known ? "" : "on"}" onclick="otherTz()">🌐 ${known ? "Other" : esc(data.tz.split("/").pop().replace(/_/g, " "))}</button></div>
+    <div class="label">${ICON.clock}When you're usually free</div>
+    <div class="days">${DAYS.map((d, i) => `<button class="day ${i === day ? "on" : ""}" onclick="pickDay(${i})">${d}<small>${count(i) || "·"}</small></button>`).join("")}</div>
+    <div class="label" style="margin-top: 12px"><span class="hint">Tap the hours. The small number: how many others are free then.</span></div>
+    <div class="hours">${Array.from({length: 24}, (_, h) => {
+      const k = `${day}-${h}`, n = data.heat[k] || 0;
+      return `<button class="hour ${mine.has(k) ? "on" : ""}" onclick="toggle(${h})">${String(h).padStart(2, "0")}:00${n ? `<span class="n">${n}</span>` : ""}</button>`;
+    }).join("")}</div>
+    <div class="tools">
+      <button onclick="evenings()">${ICON.moon}19 to 23</button>
+      <button onclick="copyAll()">${ICON.copy}Every day</button>
+      <button onclick="clearDay()">${ICON.clear}Clear</button>
+    </div>`;
+}
+
+const nativeBack = () => tg && tg.isVersionAtLeast && tg.isVersionAtLeast("6.1") && INIT;
+
+function pickDay(d) { day = d; tick(); render(); }
+function toggle(h) { const k = `${day}-${h}`; mine.has(k) ? mine.delete(k) : mine.add(k); tick(); render(); save(); }
+function evenings() { for (let h = 19; h <= 22; h++) mine.add(`${day}-${h}`); tick(); render(); save(); }
+function clearDay() { for (let h = 0; h < 24; h++) mine.delete(`${day}-${h}`); tick(); render(); save(); }
+function copyAll() {
+  const hours = [...mine].filter(k => k.startsWith(day + "-")).map(k => k.split("-")[1]);
+  mine = new Set([...Array(7).keys()].flatMap(d => hours.map(h => `${d}-${h}`)));
+  tick(); render(); save();
+}
+
+// saves a moment after the last tap
+function save() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    try {
+      load(await api("/slots", {slots: [...mine].map(k => k.split("-").map(Number))}));
+      toast("✓ Saved");
+    } catch (e) { toast(e.message, true); }
+  }, 700);
+}
+
+async function setTz(tz) {
+  try { load(await api("/tz", {tz})); toast(`🌍 ${tz}`); } catch (e) { toast(e.message, true); }
+}
+
+function otherTz() {
+  const guess = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const tz = prompt("Time zone, like Europe/London", guess);
+  if (tz) setTz(tz.trim());
+}
+
+function load(d) {
+  data = d;
+  mine = new Set(d.slots.map(([w, h]) => `${w}-${h}`));
+  render();
+}
+
+async function start() {
+  try { load(await api("/me")); }
+  catch (e) {
+    if (e.code === 403) return message("🔒", "Only for the group", "Only members of the group can use this.");
+    if (e.code === 401) return message("🔄", "Open it again", "Close this and open it again from the group.");
+    message("⚠️", "Can't load", e.message);
+  }
+}
+
+if (tg && INIT) {
+  tg.ready();
+  tg.expand();
+  try { tg.setHeaderColor("secondary_bg_color"); tg.setBackgroundColor("secondary_bg_color"); } catch (e) {}
+  if (nativeBack() && history.length > 1) { tg.BackButton.show(); tg.BackButton.onClick(() => history.back()); }
+}
+start();
+</script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+{
+  "mw2-nl.dorost.nl": {
+    "status": "match",
+    "name": "MW2 NL",
+    "address": "mw2-nl.dorost.nl",
+    "map_name": "Favela",
+    "mode_name": "Team Deathmatch",
+    "players": ["Amin"],
+    "bots": 4
+  },
+  "mw2.dorost.nl": {
+    "status": "lobby",
+    "name": "MW2 US",
+    "address": "mw2.dorost.nl",
+    "players": [],
+    "bots": 0
+  }
+}
