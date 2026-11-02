@@ -924,9 +924,12 @@ TELEGRAM_APP_SERVERS = [
     for s in os.environ.get("TELEGRAM_APP_SERVERS", "").replace(",", " ").split()
 ]
 APP_MODES = {g: GAMETYPE_NAMES[g] for g in ("war", "dm", "dom", "sd", "koth", "sab", "ctf", "dd")}
-APP_MODES["gungame"] = "Gun Game Extended"  # Free-for-all with the Fun panel's preset
-GUN_GAME = FUN_PRESETS["Weapons"]["Gun game extended"][1]
-NO_GUN_GAME = {key: FUN_RULES[key][1] for key in GUN_GAME}  # the game's defaults
+# the gun games: Free-for-all with the Fun panel's preset of that name
+GUN_GAMES = {"gungame": ("Gun Game", "Gun game"), "gungame_ext": ("Gun Game Extended", "Gun game extended")}
+APP_MODES |= {mode: name for mode, (name, _) in GUN_GAMES.items()}
+GUN_GAME_PRESETS = {mode: FUN_PRESETS["Weapons"][preset][1] for mode, (_, preset) in GUN_GAMES.items()}
+GUN_GAME_WEAPONS = {dvars["sv_funweapons"]: mode for mode, dvars in GUN_GAME_PRESETS.items()}
+NO_GUN_GAME = {key: FUN_RULES[key][1] for key in GUN_GAME_PRESETS["gungame"]}  # the game's defaults
 INIT_DATA_MAX_AGE = 86400  # an app left open longer has to be opened again
 TG_CORS = {"Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Authorization, Content-Type",
            "Access-Control-Allow-Methods": "GET, POST", "Access-Control-Max-Age": "86400"}
@@ -978,9 +981,9 @@ def telegram_user(request: Request) -> dict:
 
 
 def tg_mode(gametype: str, weapons: str) -> tuple[str, str]:
-    """(mode id, name) as the app shows them: gun game extended is a mode of its own."""
-    if gametype == "dm" and weapons == GUN_GAME["sv_funweapons"]:
-        return "gungame", APP_MODES["gungame"]
+    """(mode id, name) as the app shows them: the gun games are modes of their own."""
+    if gametype == "dm" and weapons in GUN_GAME_WEAPONS:
+        return GUN_GAME_WEAPONS[weapons], APP_MODES[GUN_GAME_WEAPONS[weapons]]
     name = GAMETYPE_NAMES.get(gametype, gametype)
     if weapons != "0":  # a Fun panel weapons rule, e.g. "Team Deathmatch · snipers only"
         name += " · " + FUN_RULES["sv_funweapons"][3].get(weapons, f"weapons {weapons}")
@@ -1034,14 +1037,14 @@ def tg_play(p: Play, request: Request):
     user = telegram_user(request)
     if p.mode not in APP_MODES:
         raise HTTPException(400, "unknown mode")
-    gametype = "dm" if p.mode == "gungame" else p.mode
+    gametype = "dm" if p.mode in GUN_GAMES else p.mode
     maps = {m["id"]: m for m in installed_maps()}
     if p.map not in maps or (gametype == "sd" and not maps[p.map]["stock"]):
         raise HTTPException(400, "that map isn't available in this mode")
     v = read_cfg()
-    if p.mode == "gungame":
-        v.update(GUN_GAME)
-    elif v.get("sv_funweapons") in ("15", "16"):  # out of gun game: classes again
+    if p.mode in GUN_GAMES:
+        v.update(GUN_GAME_PRESETS[p.mode])
+    elif v.get("sv_funweapons") in GUN_GAME_WEAPONS:  # out of gun game: classes again
         v.update(NO_GUN_GAME)
     save_cfg(v)  # read again by Start game; the end of a match runs exec server.cfg
     if p.now:

@@ -136,7 +136,7 @@ On a VPS, put the two lines in the `.env` on the server (`~/iw4x/.env`). Several
 
 ### Map and mode from Telegram
 
-With the bot set up (above), a server on a VPS also has a Telegram mini app: a page that opens inside Telegram and shows each server's map, mode and players. Members of the group can change the map and mode there: pick a mode (the 8 stock modes, or Gun Game Extended: Free-for-all with the Fun panel's preset), then a map from its picture. **Start now** switches the running match, players stay connected; **Next match** loads it when the match ends. The group gets a message with who changed what. Leaving Gun Game Extended turns the weapons back to classes; other Fun settings stay as they are.
+With the bot set up (above), a server on a VPS also has a Telegram mini app: a page that opens inside Telegram and shows each server's map, mode and players. Members of the group can change the map and mode there: pick a mode (the 8 stock modes, Gun Game or Gun Game Extended: Free-for-all with the Fun panel's preset of that name), then a map from its picture. **Start now** switches the running match, players stay connected; **Next match** loads it when the match ends. The group gets a message with who changed what. Leaving a gun game turns the weapons back to classes; other Fun settings stay as they are.
 
 1. List the servers it shows, on each server, in `~/iw4x/.env`: `TELEGRAM_APP_SERVERS=mw2-nl.example.com mw2.example.com` (all with the same bot and group), then `docker compose up -d`
 2. In Telegram, message @BotFather: `/mybots` → your bot → **Bot Settings** → **Configure Mini App** → **Enable Mini App**, and send it the address of one of them: `https://mw2-nl.example.com/tg/`
