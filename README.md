@@ -149,9 +149,9 @@ The bot's messages in the group then get a **🎮 Servers** button that opens it
 
 The same Telegram bot also plans the nights, for friends in NL and California. It runs on one server only (NL), as the `bot` service of `docker-compose.yml`, and is the only program that reads the bot's messages (`services/bot`).
 
-- 📣 `/play sat 20:00` (or `tomorrow 9pm`, `tonight`, `in 2h`, `21:30 pt`, `21:30 et`) posts a card with the time in each zone, **Sat 20:00 NL · 14:00 ET · 11:00 PT**, and **✅ In / 🤔 Maybe / ❌ Out** buttons. Once `BOT_MIN_PLAYERS` (3) are in it posts **🔥 Match on!** and pins the card (the bot has to be an admin to pin)
+- 📣 `/play sat 20:00` (or `tomorrow 9pm`, `tonight`, `in 2h`, `21:30 pt`, `21:30 et`) posts a card with the time in each zone, **Sat 20:00 NL · 14:00 ET · 11:00 PT**, and **✅ In / 🤔 Maybe / ❌ Out** buttons. Once `BOT_MIN_PLAYERS` (3) are in it posts **🔥 Match on!** as a reply to the card. It never pins, so the group's pinned message stays
 - ⏰ 30 and 5 minutes before, everyone who is in gets a DM with `connect mw2-nl.dorost.nl`; who never started the bot in private is mentioned in the group instead
-- 🌍 `/tz` sets your zone (Amsterdam, Los Angeles, or `/tz Area/City`); without one it's `BOT_DEFAULT_TZ`. Times follow summer time in each zone
+- 🌍 `/tz` sets your zone (Amsterdam, Eastern, Pacific, `/tz et`, or `/tz Area/City`); without one it's `BOT_DEFAULT_TZ`. Times follow summer time in each zone
 - 🗓 **📅 Plan** in the mini app: tap the hours you're usually free, per weekday, in your own zone. `/when` lists the best times for everyone this week, with a button to post one as a card
 - 🟢 `/online` shows who is on each server
 - 🔔 `/link <in-game name>` ties you to your name in the game, `/watch <name>` (or `@username` of someone who did `/link`) DMs you when they join a server, `/unwatch` stops it

@@ -531,17 +531,7 @@ class Bot:
             self.chat_id,
             planner.match_on_text(starts, names, self.s.connect_host),
             **({"reply_parameters": {"message_id": message_id}} if message_id else {}),
-        )
-        if message_id:
-            try:
-                await self.tg.call(
-                    "pinChatMessage",
-                    chat_id=self.chat_id,
-                    message_id=message_id,
-                    disable_notification=True,
-                )
-            except TelegramError as e:
-                log.info("card not pinned (the bot needs to be an admin): %s", e.description)
+        )  # no pin: the group's own pinned message stays the pinned one
 
     async def tick(self) -> None:
         """Reminders 30 and 5 minutes before, to everyone who is in."""

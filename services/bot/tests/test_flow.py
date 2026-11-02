@@ -39,14 +39,18 @@ async def test_play_rsvp_match_on_and_reminders(tmp_path):
 
     await bot.handle(press("rsvp:1:in", SARA, "Sara"))
     await bot.handle(press("rsvp:1:maybe", JOE, "Joe"))
-    assert "pinChatMessage" not in tg.methods()
     await bot.handle(press("rsvp:1:in", KIM, "Kim"))
     edits = [p["text"] for m, p in tg.calls if m == "editMessageText"]
     assert "✅ In (3): <b>Amin</b>, <b>Kim</b>, <b>Sara</b>" in edits[-1]
     assert "🤔 Maybe (1): Joe" in edits[-1]
     match_on = [t for t in tg.sent(GROUP) if "Match on" in t]
     assert len(match_on) == 1 and "connect mw2-nl.dorost.nl" in match_on[0]
-    assert "pinChatMessage" in tg.methods()
+    # the group's pinned message stays: no pin, unpin or delete, edits only on the card
+    touch = {"pinChatMessage", "unpinChatMessage", "unpinAllChatMessages", "deleteMessage"}
+    assert not touch & set(tg.methods())
+    with sessions.begin() as db:
+        card_id = db.get(Plan, 1).message_id
+    assert card_id and {p["message_id"] for m, p in tg.calls if m == "editMessageText"} == {card_id}
     await bot.handle(press("rsvp:1:in", JOE, "Joe"))  # a 4th: no second announcement
     assert len([t for t in tg.sent(GROUP) if "Match on" in t]) == 1
     n = show(tg)
