@@ -134,6 +134,15 @@ Someone counts as gone after a minute away, so a map change, or a game crash or 
 
 On a VPS, put the two lines in the `.env` on the server (`~/iw4x/.env`). Several servers can post to the same group: each message names the server (`sv_hostname`). The web UI's log (`docker compose logs server`) shows whether the bot works.
 
+### Map and mode from Telegram
+
+With the bot set up (above), a server on a VPS also has a Telegram mini app: a page that opens inside Telegram and shows each server's map, mode and players. Members of the group can change the map and mode there: pick a mode (the 8 stock modes, or Gun Game Extended: Free-for-all with the Fun panel's preset), then a map from its picture. **Start now** switches the running match, players stay connected; **Next match** loads it when the match ends. The group gets a message with who changed what. Leaving Gun Game Extended turns the weapons back to classes; other Fun settings stay as they are.
+
+1. List the servers it shows, on each server, in `~/iw4x/.env`: `TELEGRAM_APP_SERVERS=mw2-nl.example.com mw2.example.com` (all with the same bot and group), then `docker compose up -d`
+2. In Telegram, message @BotFather: `/mybots` → your bot → **Bot Settings** → **Configure Mini App** → **Enable Mini App**, and send it the address of one of them: `https://mw2-nl.example.com/tg/`
+
+The bot's messages in the group then get a **🎮 Servers** button that opens it, and so does the bot's profile (**Open App**). Nobody needs the web UI password: Telegram signs who opened the app, and each server asks Telegram whether they are in the group. The map pictures are the loading screens from each server's own game files.
+
 ### Updates from GitHub
 
 The servers behind `mw2.dorost.nl` and `mw2-nl.dorost.nl` get their updates from GitHub. Every push builds the server image and starts its web UI as a test; on `main` the image goes to `ghcr.io/dorost/iw4x-friends:<commit>` and is deployed to the NL server, then the US one: [`scripts/deploy/deploy.sh`](scripts/deploy/deploy.sh) checks out the commit and, when `services/ui` changed, restarts the game server with the new image (players get disconnected and can rejoin right away). If the web UI or the game doesn't answer after that, it goes back to the previous version and leaves the US server alone. A file changed by hand on a server (`scp`, `vps:sync-ui`) stops the deploy: put the change in `main` instead.

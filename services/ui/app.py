@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["fastapi", "uvicorn", "psutil"]
+# dependencies = ["fastapi", "uvicorn", "psutil", "pillow"]
 # ///
 """Small web UI to configure and control the IW4x LAN dedicated server."""
 
@@ -9,17 +9,20 @@ import base64
 import hashlib
 import hmac
 import html
+import io
 import json
 import os
 import queue
 import re
 import secrets
 import socket
+import struct
 import subprocess
 import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import zipfile
 from functools import cache
@@ -29,11 +32,13 @@ import psutil
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import (
+    FileResponse,
     HTMLResponse,
     RedirectResponse,
     Response,
     StreamingResponse,
 )
+from PIL import Image
 from pydantic import BaseModel
 
 IS_WINDOWS = sys.platform == "win32"
@@ -324,6 +329,12 @@ def basic_auth_ok(request: Request) -> bool:
 @app.middleware("http")
 async def require_password(request: Request, call_next):
     """With UI_PASSWORD set, everything but the login form needs a session."""
+    if request.url.path.startswith("/tg/"):
+        # the Telegram mini app: Telegram's signature instead of the password (telegram_user),
+        # and its page on another server calls this one (TELEGRAM_APP_SERVERS)
+        response = Response(status_code=204) if request.method == "OPTIONS" else await call_next(request)
+        response.headers.update(TG_CORS)
+        return response
     if UI_PASSWORD and request.url.path not in AUTH_OPEN and not logged_in(request) and not basic_auth_ok(request):
         if request.url.path == "/":
             return RedirectResponse("/login")
@@ -868,8 +879,9 @@ def telegram_loop() -> None:
     while True:
         text, silent = telegram_outbox.get()
         for attempt in range(6):
+            extra = {"reply_markup": button} if (button := app_button()) else {}
             r = telegram("sendMessage", chat_id=TELEGRAM_CHAT, text=text, parse_mode="HTML",
-                         disable_notification=silent)
+                         disable_notification=silent, **extra)
             if r.get("ok"):
                 break
             params = r.get("parameters") or {}
@@ -882,6 +894,222 @@ def telegram_loop() -> None:
             if 400 <= code < 500 and code != 429:
                 break  # e.g. a wrong chat id: sending it again won't help
             time.sleep(params.get("retry_after") or 5 * 2**attempt)
+
+
+bot_app = {"checked": 0.0, "button": None}
+
+
+def app_button() -> dict | None:
+    """A button under the bot's messages that opens the mini app, once BotFather has it as the
+    bot's main Mini App. Asks Telegram again after 10 minutes, so setting it up needs no restart."""
+    if not bot_app["checked"] or time.monotonic() - bot_app["checked"] > 600:
+        me = telegram("getMe")
+        if me.get("ok"):
+            bot = me["result"]
+            bot_app["checked"] = time.monotonic()
+            bot_app["button"] = {"inline_keyboard": [[
+                {"text": "🎮 Servers", "url": f"https://t.me/{bot['username']}?startapp"}]]} if bot.get("has_main_web_app") else None
+    return bot_app["button"]
+
+
+# ---------- Telegram mini app: map and mode from the group ----------
+# tg.html, served at /tg/, opens inside Telegram (README: "Map and mode from Telegram"). It shows
+# the map, mode and players of each server in TELEGRAM_APP_SERVERS and lets members of the
+# TELEGRAM_CHAT_ID group change map and mode. Telegram signs who opened it (initData) with the
+# bot token, which every server has, so the page calls each server's /tg/api itself: no web UI
+# password involved, and a server only takes changes from people in the group.
+
+TELEGRAM_APP_SERVERS = [
+    s if s.startswith("http") else f"https://{s}"
+    for s in os.environ.get("TELEGRAM_APP_SERVERS", "").replace(",", " ").split()
+]
+APP_MODES = {g: GAMETYPE_NAMES[g] for g in ("war", "dm", "dom", "sd", "koth", "sab", "ctf", "dd")}
+APP_MODES["gungame"] = "Gun Game Extended"  # Free-for-all with the Fun panel's preset
+GUN_GAME = FUN_PRESETS["Weapons"]["Gun game extended"][1]
+NO_GUN_GAME = {key: FUN_RULES[key][1] for key in GUN_GAME}  # the game's defaults
+INIT_DATA_MAX_AGE = 86400  # an app left open longer has to be opened again
+TG_CORS = {"Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Authorization, Content-Type",
+           "Access-Control-Allow-Methods": "GET, POST", "Access-Control-Max-Age": "86400"}
+THUMBS = DATA_DIR / "thumbs"
+members: dict[int, tuple[float, bool]] = {}  # Telegram user id -> (when asked, in the group)
+# sv_funweapons of the running match: read from server.cfg when a new map or mode shows up,
+# right after vote.gsc or Start game ran exec server.cfg for it
+match_weapons: dict = {"match": None, "value": "0"}
+
+
+def track_match(st: dict | None) -> None:
+    live = st and st["live"]
+    if live and live["in_game"] and (live["map"], live["gametype"]) != match_weapons["match"]:
+        match_weapons.update(match=(live["map"], live["gametype"]), value=read_cfg().get("sv_funweapons", "0"))
+
+
+def in_group(user_id: int) -> bool:
+    hit = members.get(user_id)
+    if hit and time.monotonic() - hit[0] < (600 if hit[1] else 60):
+        return hit[1]
+    r = telegram("getChatMember", chat_id=TELEGRAM_CHAT, user_id=user_id)
+    if not r.get("ok") and r.get("error_code") != 400:  # 400: not a member
+        raise HTTPException(503, "Telegram can't be reached, try again")
+    m = r.get("result") or {}
+    ok = m.get("status") in ("creator", "administrator", "member") or bool(m.get("is_member"))
+    members[user_id] = (time.monotonic(), ok)
+    return ok
+
+
+def telegram_user(request: Request) -> dict:
+    """The Telegram user who opened the mini app, from the initData Telegram signed for this
+    bot (header Authorization: tma <initData>), if they are in the group."""
+    if not TELEGRAM_ON:
+        raise HTTPException(503, "Telegram is not set up on this server")
+    header = request.headers.get("authorization", "")
+    if not header.startswith("tma "):
+        raise HTTPException(401, "open this from Telegram")
+    fields = dict(urllib.parse.parse_qsl(header[4:], keep_blank_values=True))
+    signed = "\n".join(f"{k}={v}" for k, v in sorted(fields.items()) if k != "hash")
+    key = hmac.new(b"WebAppData", TELEGRAM_TOKEN.encode(), hashlib.sha256).digest()
+    if not hmac.compare_digest(hmac.new(key, signed.encode(), hashlib.sha256).hexdigest(), fields.get("hash", "")):
+        raise HTTPException(401, "not signed by Telegram for this bot")
+    if time.time() - int(fields.get("auth_date") or 0) > INIT_DATA_MAX_AGE:
+        raise HTTPException(401, "open the app again from Telegram")
+    user = json.loads(fields.get("user") or "{}")
+    if not user.get("id") or not in_group(user["id"]):
+        raise HTTPException(403, "only for members of the group")
+    return user
+
+
+def tg_mode(gametype: str, weapons: str) -> tuple[str, str]:
+    """(mode id, name) as the app shows them: gun game extended is a mode of its own."""
+    if gametype == "dm" and weapons == GUN_GAME["sv_funweapons"]:
+        return "gungame", APP_MODES["gungame"]
+    name = GAMETYPE_NAMES.get(gametype, gametype)
+    if weapons != "0":  # a Fun panel weapons rule, e.g. "Team Deathmatch · snipers only"
+        name += " · " + FUN_RULES["sv_funweapons"][3].get(weapons, f"weapons {weapons}")
+    return gametype, name
+
+
+@app.get("/tg/", response_class=HTMLResponse)
+def tg_page():
+    servers = TELEGRAM_APP_SERVERS or [""]  # empty: only this server
+    return (Path(__file__).parent / "tg.html").read_text().replace('["__SERVERS__"]', json.dumps(servers))
+
+
+@app.get("/tg/api/state")
+def tg_state(request: Request):
+    telegram_user(request)
+    with snapshot_lock:
+        st = (snapshot["data"] or {}).get("state")
+    live = st and st["live"]
+    status = ("starting" if not st else "offline" if not st["running"] else "no answer" if not live
+              else "match" if live["in_game"] else "lobby" if live["lobby"] else "no answer")
+    mode, mode_name = "", ""
+    if status == "match":
+        weapons = (match_weapons["value"] if match_weapons["match"] == (live["map"], live["gametype"])
+                   else read_cfg().get("sv_funweapons", "0"))  # until the poll loop sees the new match
+        mode, mode_name = tg_mode(live["gametype"], weapons)
+    players = live["players"] if status == "match" else []
+    return {
+        "name": (live and live["hostname"]) or server_name or JOIN_HOST or "IW4x",
+        "address": st["address"] if st else "",
+        "status": status,
+        "map": live["map"] if status == "match" else "",
+        "map_name": MAP_NAMES.get(live["map"], live["map"]) if status == "match" else "",
+        "mode": mode,
+        "mode_name": mode_name,
+        "players": sorted((p["name"] for p in players if not p["bot"]), key=str.lower),
+        "bots": sum(p["bot"] for p in players),
+        "lobby_count": live["lobby_count"] if status == "lobby" else 0,
+        "maps": [{k: m[k] for k in ("id", "name", "stock")} for m in (st["maps"] if st else [])],
+        "modes": [{"id": k, "name": v} for k, v in APP_MODES.items()],
+    }
+
+
+class Play(BaseModel):
+    map: str
+    mode: str
+    now: bool  # False: the next match
+
+
+@app.post("/tg/api/play")
+def tg_play(p: Play, request: Request):
+    user = telegram_user(request)
+    if p.mode not in APP_MODES:
+        raise HTTPException(400, "unknown mode")
+    gametype = "dm" if p.mode == "gungame" else p.mode
+    maps = {m["id"]: m for m in installed_maps()}
+    if p.map not in maps or (gametype == "sd" and not maps[p.map]["stock"]):
+        raise HTTPException(400, "that map isn't available in this mode")
+    v = read_cfg()
+    if p.mode == "gungame":
+        v.update(GUN_GAME)
+    elif v.get("sv_funweapons") in ("15", "16"):  # out of gun game: classes again
+        v.update(NO_GUN_GAME)
+    save_cfg(v)  # read again by Start game; the end of a match runs exec server.cfg
+    if p.now:
+        # the mode's limits as they are (Start game resets the empty ones)
+        start_game(Game(map=p.map, gametype=gametype, **{k: v.get(f"scr_{gametype}_{k}", "") for k in MODE_LIMITS}))
+        match_weapons.update(match=(p.map, gametype), value=v.get("sv_funweapons", "0"))
+    else:
+        select(Pick(map=p.map, gametype=gametype))
+    who = html.escape(user.get("first_name") or user.get("username") or "Someone")
+    server = html.escape(server_name or JOIN_HOST or "the server")
+    pick = f"<b>{html.escape(maps[p.map]['name'])}</b> · {APP_MODES[p.mode]}"
+    print(f"telegram app: {user.get('id')} {user.get('first_name')!r}: {p.map} {p.mode} {'now' if p.now else 'next'}",
+          flush=True)
+    telegram_outbox.put((f"🗺 {who} switched {server} to {pick}" if p.now
+                         else f"🗺 {who} picked the next match on {server}: {pick}", True))
+    return {"ok": True}
+
+
+def iwi_image(raw: bytes) -> Image.Image:
+    """Decodes an IW4 .iwi image (version 8 or 9): uncompressed BGR, DXT1 or DXT5."""
+    if raw[:3] != b"IWi" or len(raw) < 32:
+        raise ValueError("not an iwi image")
+    fmt, width, height = raw[8], *struct.unpack("<HH", raw[10:14])
+    if fmt == 2:
+        size = width * height * 3
+        return Image.frombytes("RGB", (width, height), raw[-size:], "raw", "BGR")
+    if fmt in (11, 13):  # mipmaps go smallest first: the full image is at the end
+        size = width * height // (2 if fmt == 11 else 1)
+        dds = struct.pack("<4s7I44s2I4s5I5I", b"DDS ", 124, 0x81007, height, width, size, 0, 1, b"\0" * 44,
+                          32, 4, b"DXT1" if fmt == 11 else b"DXT5", 0, 0, 0, 0, 0, 0x1000, 0, 0, 0, 0)
+        return Image.open(io.BytesIO(dds + raw[-size:])).convert("RGB")
+    raise ValueError(f"iwi format {fmt}")
+
+
+@cache
+def loadscreens() -> dict[str, tuple[Path, str]]:
+    """map -> (archive, file) of its loading screen image in the game files."""
+    found = {}
+    archives = [*sorted(GAME_DIR.glob("main/*.iwd")), *sorted(GAME_DIR.glob("main/iw4x/**/*.iwd")),
+                *sorted(GAME_DIR.glob("usermaps/*/*.iwd"))]
+    for iwd in archives:
+        try:
+            for info in zipfile.ZipFile(iwd).infolist():
+                if (m := re.fullmatch(r"images/loadscreen_(mp_\w+)\.iwi", info.filename, re.IGNORECASE)) \
+                        and info.file_size > 1024:  # not an empty placeholder
+                    found[m[1].lower()] = (iwd, info.filename)
+        except (zipfile.BadZipFile, OSError):
+            continue
+    return found
+
+
+@app.get("/tg/thumb/{map_id}.jpg")
+def tg_thumb(map_id: str):
+    """A map's loading screen as a small JPEG, made once from the game files."""
+    path = THUMBS / f"{map_id}.jpg"
+    if not path.exists():
+        if not re.fullmatch(r"mp_\w+", map_id) or not (src := loadscreens().get(map_id)):
+            raise HTTPException(404)
+        try:
+            image = iwi_image(zipfile.ZipFile(src[0]).read(src[1])).resize((480, 270), Image.Resampling.LANCZOS)
+        except (ValueError, OSError, zipfile.BadZipFile) as e:
+            print(f"thumbnail of {map_id}: {e}", flush=True)
+            raise HTTPException(404) from None
+        THUMBS.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(f".{threading.get_ident()}.tmp")
+        image.save(tmp, "JPEG", quality=80)
+        tmp.replace(path)
+    return FileResponse(path, headers={"Cache-Control": "public, max-age=604800"})
 
 
 # ---------- live updates ----------
@@ -904,6 +1132,7 @@ def poll_loop() -> None:
         try:
             st = state()
             data = {"state": st, "log": log()["lines"]}
+            track_match(st)
         except Exception as e:  # noqa: BLE001  keep pushing: one failed query must not stop live updates
             st, data = None, {"error": str(e)}
         if TELEGRAM_ON:
