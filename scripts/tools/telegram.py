@@ -26,6 +26,10 @@ def call(method: str, **params) -> dict:
         with urllib.request.urlopen(req, timeout=20) as r:
             return json.load(r)["result"]
     except urllib.error.HTTPError as e:
+        if e.code == 409:  # a server answering /servers reads the bot's messages: only one may
+            sys.exit("A server reads this bot's messages (it answers /servers), so this can't list the groups."
+                     " Send /servers in the group instead: the server's log (docker compose logs server)"
+                     " shows the chat id of a group that isn't TELEGRAM_CHAT_ID.")
         sys.exit(f"Telegram: {json.load(e).get('description', e)}")
     except OSError as e:
         sys.exit(f"Telegram not reachable: {e}")

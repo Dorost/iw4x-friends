@@ -143,7 +143,7 @@ The bot button next to it sets the bots, as in the web UI: fill the match up to 
 1. List the servers it shows, on each server, in `~/iw4x/.env`: `TELEGRAM_APP_SERVERS=mw2-nl.example.com mw2.example.com` (all with the same bot and group), then `docker compose up -d`
 2. In Telegram, message @BotFather: `/mybots` → your bot → **Bot Settings** → **Configure Mini App** → **Enable Mini App**, and send it the address of one of them: `https://mw2-nl.example.com/tg/`
 
-The bot's messages in the group then get a **🎮 Servers** button that opens it, and so does the bot's profile (**Open App**). Nobody needs the web UI password: Telegram signs who opened the app, and each server asks Telegram whether they are in the group. The map pictures are the loading screens from each server's own game files.
+The bot's messages in the group then get a **🎮 Servers** button that opens it, and so does the bot's profile (**Open App**). Anyone can also send `/servers` in the group (or to the bot) and get the button. The first server in `TELEGRAM_APP_SERVERS` answers it: Telegram lets only one of them read the bot's messages, so from then on `task telegram` can't list groups; `/servers` in another group puts its chat id in that server's log. Nobody needs the web UI password: Telegram signs who opened the app, and each server asks Telegram whether they are in the group. The map pictures are the loading screens from each server's own game files.
 
 ### Updates from GitHub
 
