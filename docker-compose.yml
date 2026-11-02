@@ -19,6 +19,9 @@ services:
       JOIN_HOST: ${JOIN_HOST:-${DOMAIN:-}} # players connect to this name instead of the IP
       UI_DATA_DIR: /data
       AUTOSTART: "1" # start the game server with the container, e.g. after a reboot
+      # join and leave messages in a Telegram group (README); empty = none
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
     volumes:
       - ./game:/game
       - ui-data:/data

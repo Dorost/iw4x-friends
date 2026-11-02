@@ -117,6 +117,23 @@ Creates the VPS (New York, high frequency 2 CPU / 4 GB), copies this repo, runs 
 
 A second server next to it (e.g. Amsterdam): put `VPS_LABEL`, `VPS_REGION` and `VPS_DOMAIN` in front of each command, e.g. `VPS_LABEL=iw4x-nl VPS_REGION=ams VPS_DOMAIN=mw2-nl.example.com uv run scripts/tools/vultr.py up` (also `status`, `down`, `sync-iw4x`).
 
+### Join and leave messages in Telegram
+
+The server can post to a Telegram group when someone joins or leaves (bots don't count), with who is playing now:
+
+> 🟢 **Amin** joined Dorost NL
+> Playing (3): Amin, Bob, Yashar
+
+Someone counts as gone after a minute away, so a map change, or a game crash or server restart they come back from, posts nothing. Leaves come without a notification sound.
+
+1. In Telegram, message [@BotFather](https://t.me/BotFather): `/newbot`, pick a name. It answers with the bot's token
+2. Add the bot to your group and send `/start@<bot name>` in it
+3. Put the token in `.env`: `TELEGRAM_BOT_TOKEN=...`, then run `task telegram`: it lists the group with its chat id
+4. Put that in `.env` too: `TELEGRAM_CHAT_ID=-100...`, then `task telegram` again sends a test message
+5. Restart the web UI: on a Mac or Windows PC close its window and start it again, on Linux run `docker compose up -d` (restarts the game server)
+
+On a VPS, put the two lines in the `.env` on the server (`~/iw4x/.env`). Several servers can post to the same group: each message names the server (`sv_hostname`). The web UI's log (`docker compose logs server`) shows whether the bot works.
+
 ### Updates from GitHub
 
 The servers behind `mw2.dorost.nl` and `mw2-nl.dorost.nl` get their updates from GitHub. Every push builds the server image and starts its web UI as a test; on `main` the image goes to `ghcr.io/dorost/iw4x-friends:<commit>` and is deployed to the NL server, then the US one: [`scripts/deploy/deploy.sh`](scripts/deploy/deploy.sh) checks out the commit and, when `services/ui` changed, restarts the game server with the new image (players get disconnected and can rejoin right away). If the web UI or the game doesn't answer after that, it goes back to the previous version and leaves the US server alone. A file changed by hand on a server (`scp`, `vps:sync-ui`) stops the deploy: put the change in `main` instead.
@@ -145,7 +162,7 @@ A new server also gets an environment with its own `DEPLOY_SSH_KEY`, a deploy jo
 ## Repo layout
 
 - `scripts/windows/`, `scripts/mac/`, `scripts/linux/`: setup and helper scripts per system
-- `scripts/tools/`: maintenance (`task sync-config`, `task links`)
+- `scripts/tools/`: maintenance (`task sync-config`, `task links`, `task telegram`)
 - `scripts/deploy/`: deploys from GitHub Actions to the servers (see [Updates from GitHub](#updates-from-github))
 - `config/`: shared game settings and classes, copied into the setup scripts by `task sync-config`
 - `services/ui/`: the server's web control page
