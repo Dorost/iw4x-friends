@@ -21,6 +21,7 @@ DATA=/srv/iw4x
 STEP_FILE=/run/iw4x-step
 COMPOSE=(docker compose -f deploy/node/docker-compose.yml)
 export DEBIAN_FRONTEND=noninteractive
+export HOME="${HOME:-/root}"  # unset at first boot; scripts/linux/setup.sh needs it
 
 report() {  # report <text> [1 = failed]
   local body

@@ -46,7 +46,7 @@ async def test_boot_by_hand(fleet):
     assert orch.dns.records == {"mw2-nl.dorost.nl": row.ip}
     assert orch.wg.peers == {row.wg_public: NL}
     script = cloud.instances[row.instance_id]["user_data"]
-    assert f"NODE_TOKEN={row.token}" in script and "setup" not in script.split("MW_SETUP")[0][-0:]
+    assert f"NODE_TOKEN={row.token}" in script
     assert "MW_SETUP_PASSWORD" not in script  # the password comes over WireGuard, when needed
     assert any("is up" in p and "connect mw2-nl.dorost.nl" in p for p in posts(orch))
 

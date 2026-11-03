@@ -14,6 +14,7 @@ set -euo pipefail
 exec >> /var/log/iw4x-bootstrap.log 2>&1
 echo "=== $(date -u) {what}"
 export DEBIAN_FRONTEND=noninteractive
+export HOME=/root  # first boot scripts run without it, and the setup scripts use it
 """
 
 
