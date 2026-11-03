@@ -8,11 +8,6 @@ name: deploy
 
 on:
   workflow_call:
-    inputs:
-      new-bastion:
-        description: The bastion was just created, wait for it to take SSH connections
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -33,8 +28,6 @@ jobs:
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           BASTION_SSH_HOST_KEY: ${{ secrets.BASTION_SSH_HOST_KEY }}
-          NEW_BASTION: ${{ inputs.new-bastion }}
-          TRIES: ${{ inputs.new-bastion && 40 || 3 }}
           # what the bastion gets (deploy/bastion/docker-compose.yml); empty ones are left out
           UI_PASSWORD: ${{ secrets.UI_PASSWORD }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -64,13 +57,11 @@ jobs:
           echo "$host $host_key" > "$RUNNER_TEMP/known_hosts"
           # A push before the bastion exists, while the domain still leads to another machine
           # (it answers with another host key): nothing to deploy to yet, the bastion workflow
-          # creates it. No answer at all is not skipped: that's a bastion that is down
-          if [ "$NEW_BASTION" != true ]; then
-            answer=$(ssh-keyscan -T 15 -t ed25519 "$host" 2>/dev/null | cut -d' ' -f2,3)
-            if [ -n "$answer" ] && [ "$answer" != "$host_key" ]; then
-              echo "::notice::$host isn't the bastion yet (another SSH host key answers), nothing deployed. Create it with Actions → bastion → Run workflow"
-              exit 0
-            fi
+          # creates it. No answer at all is not skipped: a bastion that is starting, or down
+          answer=$(ssh-keyscan -T 15 -t ed25519 "$host" 2>/dev/null | cut -d' ' -f2,3)
+          if [ -n "$answer" ] && [ "$answer" != "$host_key" ]; then
+            echo "::notice::$host isn't the bastion yet (another SSH host key answers), nothing deployed. Create it with Actions → bastion → Run workflow"
+            exit 0
           fi
 
           # .env lines, single quoted: compose then takes them as they are ($ and all)
@@ -95,15 +86,16 @@ jobs:
           eval "$(ssh-agent -s)" >/dev/null
           trap 'ssh-agent -k >/dev/null; rm -f "$RUNNER_TEMP/settings" "$RUNNER_TEMP/known_hosts"' EXIT
           ssh-add -q - <<< "$DEPLOY_SSH_KEY"
-          # A new bastion takes a few minutes to answer with its own host key and to have the
-          # repo (255: no connection, 127: no deploy script yet); other failures are final
+          # A bastion that is setting itself up (new, or rebuilt; a push can come along meanwhile)
+          # takes a few minutes to take connections and to have the repo (255: no connection,
+          # 127: no deploy script yet): up to 13 minutes. Other failures are final
           for (( try = 1; ; try++ )); do
             code=0
             ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/known_hosts" \
                 -o ConnectTimeout=20 -o ServerAliveInterval=15 "root@$host" deploy "$GITHUB_SHA" \
                 < "$RUNNER_TEMP/settings" || code=$?
             if [ "$code" = 0 ]; then break; fi
-            if [ "$code" != 255 ] && [ "$code" != 127 ] || [ "$try" -ge "$TRIES" ]; then exit "$code"; fi
+            if [ "$code" != 255 ] && [ "$code" != 127 ] || [ "$try" -ge 40 ]; then exit "$code"; fi
             echo "not reachable yet ($code), again in 20 s"
             sleep 20
           done

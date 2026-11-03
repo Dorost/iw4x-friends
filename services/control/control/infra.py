@@ -83,9 +83,6 @@ async def bastion_up(sha: str, rebuild: bool) -> None:
         await vultr.attach_volume(volume, instance_id)
         await dns.point(b.domain, inst.ip)
         print(f"{b.domain} -> {inst.ip}")
-        if out := os.environ.get("GITHUB_OUTPUT"):
-            with open(out, "a") as f:
-                f.write(f"ip={inst.ip}\ncreated={'false' if existing else 'true'}\n")
     finally:
         await vultr.close()
         await dns.close()
