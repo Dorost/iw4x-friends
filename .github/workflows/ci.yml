@@ -105,6 +105,14 @@ jobs:
         if: failure()
         run: docker logs ui
 
+      # the prefix's DLLs are hard links to Wine's own (services/ui/Dockerfile): Wine still starts
+      - name: Wine starts in the image
+        run: |
+          docker image ls iw4x-friends:test
+          docker run --rm iw4x-friends:test sh -c \
+            'Xvfb :99 -nolisten tcp & sleep 1; timeout 120 wine cmd /c echo wine-ok' | tee wine.log
+          grep -q wine-ok wine.log
+
       - name: Log in to GHCR
         if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
         uses: docker/login-action@v4.7.0
@@ -114,13 +122,14 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # Only main moves :main and writes the cache, so a branch with other Wine layers
-      # doesn't make the servers download them again on the next deploy from main
+      # doesn't make the servers download them again on the next deploy from main.
+      # zstd layers: smaller than gzip and faster for a server to unpack
       - name: Push
         if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
         uses: docker/build-push-action@v7.4.0
         with:
           context: services/ui
-          push: true
+          outputs: type=registry,compression=zstd,force-compression=true,oci-mediatypes=true
           tags: |
             ${{ env.IMAGE }}:${{ github.sha }}
             ${{ github.ref == 'refs/heads/main' && format('{0}:main', env.IMAGE) || '' }}

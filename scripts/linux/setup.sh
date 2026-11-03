@@ -58,13 +58,17 @@ size_of() { [[ -f "$1" ]] && stat -c%s "$1" || echo 0; }
 free_gb() { echo $(( $(df -Pk "$1" | awk 'NR==2 {print $4}') / 1024 / 1024 )); }
 random() { LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "$1" || true; }   # tr gets SIGPIPE when head is done
 
-# Download $1 ($2 bytes) to $3 over 8 connections at once: S3 serves each one at only
+# Download $1 ($2 bytes) to $3 over $PARTS connections at once: S3 serves each one at only
 # ~13 MB/s. Parts are kept in $3.parts/ so a re-run resumes them, then joined into $3.
+PARTS=16
 fetch_parallel() {
-  local url=$1 size=$2 out=$3 n=8 chunk i start last have round p alive
+  local url=$1 size=$2 out=$3 n=$PARTS chunk i start last have round p alive
   local -a pids
   chunk=$(( (size + n - 1) / n ))
+  # parts cut for another count of connections (an older run) don't fit these: start over
+  [[ "$(cat "$out.parts/count" 2>/dev/null)" == "$n" ]] || rm -rf "$out.parts"
   mkdir -p "$out.parts"
+  echo "$n" > "$out.parts/count"
   for round in 1 2 3 4 5; do
     pids=()
     for (( i = 0; i < n; i++ )); do
@@ -89,13 +93,14 @@ fetch_parallel() {
   (( $(parts_size "$out") == size )) || return 1
   rm -f "$out"
   for (( i = 0; i < n; i++ )); do cat "$out.parts/$i" >> "$out"; rm "$out.parts/$i"; done
+  rm "$out.parts/count"
   rmdir "$out.parts"
 }
 
 # bytes downloaded so far into the parts of $1
 parts_size() {
   local i total=0
-  for (( i = 0; i < 8; i++ )); do total=$(( total + $(size_of "$1.parts/$i") )); done   # (( total += 0 )) fails under set -e
+  for (( i = 0; i < PARTS; i++ )); do total=$(( total + $(size_of "$1.parts/$i") )); done   # (( total += 0 )) fails under set -e
   echo $total
 }
 
@@ -243,7 +248,30 @@ fi
 
 # ---------------------------------------------------------------- server.cfg
 step "Custom maps + bots"
-bash "$REPO/scripts/mac/install-maps.sh" --dir "$GAME" ${MAPS_LINK:+--maps-url "$MAPS_LINK"} || warn "custom maps not installed, run: bash scripts/mac/install-maps.sh --dir game"
+# the pack over parallel connections too when its server allows it; install-maps.sh downloads
+# it the plain way otherwise, or when this fails
+MAPS_ZIP=""
+if [[ -n "$MAPS_LINK" && ! -f "$MAPS_LINK" && ! -f "$GAME/.iw4x-maps-installed-v2" ]]; then  # install-maps.sh's mark
+  url="$MAPS_LINK"
+  if [[ "$MAPS_LINK" =~ /d/([A-Za-z0-9_-]{20,}) ]] || [[ "$MAPS_LINK" =~ [?\&]id=([A-Za-z0-9_-]{20,}) ]]; then
+    url="https://drive.usercontent.google.com/download?id=${BASH_REMATCH[1]}&export=download&confirm=t"
+  fi
+  head=$(curl -sIL --max-time 20 "$url" || true)
+  remote_size=$(awk 'tolower($1)=="content-length:" {s=$2} END {gsub("\r","",s); print s}' <<< "$head")
+  if grep -qi '^accept-ranges: bytes' <<< "$head" && ! grep -qi '^content-type: text/html' <<< "$head" \
+     && [[ "$remote_size" =~ ^[1-9][0-9]*$ ]]; then
+    MAPS_ZIP="$(dirname "$DOWNLOAD_ZIP")/mw2-iw4x-maps-bots.zip"
+    mkdir -p "$(dirname "$MAPS_ZIP")"
+    echo "    Downloading the pack to $MAPS_ZIP"
+    if ! fetch_parallel "$url" "$remote_size" "$MAPS_ZIP" || [[ "$(size_of "$MAPS_ZIP")" != "$remote_size" ]]; then
+      warn "the parallel download of the pack failed, trying the plain one"
+      rm -rf "$MAPS_ZIP" "$MAPS_ZIP.parts"
+      MAPS_ZIP=""
+    fi
+  fi
+fi
+bash "$REPO/scripts/mac/install-maps.sh" --dir "$GAME" ${MAPS_ZIP:+--zip "$MAPS_ZIP"} ${MAPS_LINK:+--maps-url "$MAPS_LINK"} || warn "custom maps not installed, run: bash scripts/mac/install-maps.sh --dir game"
+[[ -z "$MAPS_ZIP" ]] || rm -f "$MAPS_ZIP"
 
 step "Server config"
 cfg="$GAME/main/server.cfg"

@@ -17,7 +17,7 @@ TAG = "iw4x-fleet"
 class Vultr:
     name = "vultr"
 
-    def __init__(self, api_key: str, http: httpx.AsyncClient | None = None, poll: float = 5):
+    def __init__(self, api_key: str, http: httpx.AsyncClient | None = None, poll: float = 2):
         self.http = http or httpx.AsyncClient(timeout=30)
         self.headers = {"Authorization": f"Bearer {api_key}"}
         self.poll = poll
@@ -69,7 +69,7 @@ class Vultr:
                 },
             )
         )["block"]
-        for _ in range(60):
+        for _ in range(150):  # 5 minutes
             if (await self.call("GET", f"/blocks/{block['id']}"))["block"]["status"] == "active":
                 return block["id"]
             await asyncio.sleep(self.poll)
@@ -86,7 +86,7 @@ class Vultr:
         await self.call(
             "POST", f"/blocks/{volume_id}/attach", {"instance_id": instance_id, "live": True}
         )
-        for _ in range(60):
+        for _ in range(150):  # 5 minutes
             block = (await self.call("GET", f"/blocks/{volume_id}"))["block"]
             if block.get("attached_to_instance") == instance_id:
                 return
@@ -98,7 +98,7 @@ class Vultr:
         if block.get("attached_to_instance") != instance_id:
             return
         await self.call("POST", f"/blocks/{volume_id}/detach", {"live": True})
-        for _ in range(60):
+        for _ in range(150):  # 5 minutes
             if not (await self.call("GET", f"/blocks/{volume_id}"))["block"].get(
                 "attached_to_instance"
             ):

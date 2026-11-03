@@ -69,7 +69,7 @@ class Orchestrator:
         nodes,
         tg: Telegram,
         now: Callable[[], float] = time.time,
-        poll: float = 5,
+        poll: float = 2,
     ):
         self.s, self.db, self.providers = s, db, providers
         self.dns, self.wg, self.nodes, self.tg = dns, wg, nodes, tg
@@ -157,7 +157,7 @@ class Orchestrator:
             except Exception:
                 log.exception("loop")
             tick += 1
-            await asyncio.sleep(5)
+            await asyncio.sleep(2)
 
     async def reconcile(self) -> None:
         """Starts what the rules ask for: boots, shutdowns, retries, updates."""
@@ -294,13 +294,15 @@ class Orchestrator:
                     return row.name
         return None
 
-    def node_progress(self, name: str, step: str, failed: bool) -> None:
+    def node_progress(self, name: str, step: str, failed: bool, event: bool = False) -> None:
         self.progress_at[name] = time.monotonic()
         step = step[:200]
         if failed:
             self.update(name, error=f"setup failed: {step}")
         else:
             self.update(name, step=step)
+            if event:  # the steps with their times stay in the events, for how long a boot took
+                self.event(name, step)
 
     def node_config(self, name: str, need_game: bool) -> dict:
         spec = self.s.fleet.servers[name]

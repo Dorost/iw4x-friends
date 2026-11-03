@@ -29,6 +29,17 @@ def _file(path: str, content: str, mode: str = "600") -> str:
     )
 
 
+# A game server lives for a few hours: no apt runs of its own that hold the dpkg lock while it
+# sets up (they start at boot on Ubuntu). Timers are stopped; a run already going finishes.
+# No translations either: apt update fetches less.
+QUIET_APT = (
+    "systemctl mask -q --now apt-daily.timer apt-daily-upgrade.timer || true\n"
+    "systemctl mask -q apt-daily.service apt-daily-upgrade.service unattended-upgrades.service"
+    " || true\n"
+    "echo 'Acquire::Languages \"none\";' > /etc/apt/apt.conf.d/99iw4x\n"
+)
+
+
 def _clone(repo: str, sha: str) -> str:
     return (
         "apt-get -o DPkg::Lock::Timeout=600 update -q\n"
@@ -74,6 +85,7 @@ def node(
     )
     return (
         HEAD.format(what=f"iw4x game server {spec.name}")
+        + QUIET_APT
         + _file("/root/.ssh/authorized_keys", "\n".join(ssh_keys))
         + _file("/etc/iw4x/node.env", env)
         + _file("/etc/wireguard/wg0.conf", wg)

@@ -3,14 +3,16 @@
 # (services/control/control/userdata.py) wrote the WireGuard config and /etc/iw4x/node.env,
 # cloned the repo at the bastion's commit and runs this. Each step is reported to the bastion,
 # which counts the server as up once its web UI answers.
-#   0. WireGuard up: the reports and the settings come through it
-#   1. Docker; the data disk at /srv/iw4x (formatted the first time)
+#   0. WireGuard and Docker in one apt run, then the commit's image pulls in the background
+#      while the rest goes on; WireGuard up: the reports and the settings come through it
+#   1. the data disk at /srv/iw4x (formatted the first time)
 #   2. the settings from the bastion: the commit's image, the domain, and the setup password
 #      when the game isn't on the disk yet
 #   3. the game onto the disk, the first time only (scripts/linux/setup.sh --game-only)
 #   4. the firewall: the game port open to all, the rest only over WireGuard
-#   5. the game server's container (deploy/node/docker-compose.yml)
-# The log is in /var/log/iw4x-bootstrap.log.
+#   5. the game server's container (deploy/node/docker-compose.yml), once the pull is done
+# The log is in /var/log/iw4x-bootstrap.log; each step there and in its report says how many
+# seconds into the bootstrap it started, and the end of the log has the boot's timings.
 
 set -euo pipefail
 
@@ -20,19 +22,21 @@ cd /opt/iw4x
 DATA=/srv/iw4x
 STEP_FILE=/run/iw4x-step
 COMPOSE=(docker compose -f deploy/node/docker-compose.yml)
+IMAGE=ghcr.io/dorost/iw4x-friends  # as in deploy/node/docker-compose.yml
 export DEBIAN_FRONTEND=noninteractive
 export HOME="${HOME:-/root}"  # unset at first boot; scripts/linux/setup.sh needs it
 
-report() {  # report <text> [1 = failed]
+report() {  # report <text> [1 = failed] [1 = a new step: the bastion keeps it as an event]
   local body
-  body=$(python3 -c 'import json, sys; print(json.dumps({"step": sys.argv[1], "failed": sys.argv[2] == "1"}))' "$1" "${2:-0}")
+  body=$(python3 -c 'import json, sys; print(json.dumps({"step": sys.argv[1], "failed": sys.argv[2] == "1", "event": sys.argv[3] == "1"}))' "$1" "${2:-0}" "${3:-0}")
   curl -fsS -m 10 -o /dev/null -H "Authorization: Bearer $NODE_TOKEN" -H "Content-Type: application/json" \
     -d "$body" "$CONTROL_URL/node/progress" || true
 }
-step() {
-  echo "$1" > "$STEP_FILE"
-  printf '\n==> %s\n' "$1"
-  report "$1"
+step() {  # $SECONDS: since the bootstrap started; the uptime: since the VM booted
+  local text="$1 (at ${SECONDS}s)"
+  echo "$text" > "$STEP_FILE"
+  printf '\n==> %s, %ss since boot\n' "$text" "$(cut -d. -f1 /proc/uptime)"
+  report "$text" 0 1
 }
 trap 'report "$(cat "$STEP_FILE" 2>/dev/null) (bootstrap.sh line $LINENO)" 1' ERR
 
@@ -49,9 +53,15 @@ trap 'report "$(cat "$STEP_FILE" 2>/dev/null) (bootstrap.sh line $LINENO)" 1' ER
 heartbeat=$!
 trap 'kill $heartbeat 2>/dev/null || true' EXIT
 
-# the tunnel to the bastion first: until it's up, nothing reaches the bastion (not even a report)
+# the tunnel to the bastion first: until it's up, nothing reaches the bastion (not even a report).
+# Docker comes in the same apt run, so the image can download while the rest goes on.
 echo "connecting to the bastion" > "$STEP_FILE"
-apt-get -o DPkg::Lock::Timeout=600 install -yq wireguard-tools >/dev/null
+printf '==> installing WireGuard and Docker, %ss since boot\n' "$(cut -d. -f1 /proc/uptime)"
+apt-get -o DPkg::Lock::Timeout=600 install -yq wireguard-tools \
+  docker.io docker-compose-v2 jq unzip openssl netcat-openbsd ufw curl >/dev/null
+# the commit's image (the tag the settings name too); a failed pull is retried below by compose
+docker pull -q "$IMAGE:$GIT_SHA" >/dev/null &
+pull=$!
 systemctl enable -q --now wg-quick@wg0
 
 step "waiting for the bastion over WireGuard"
@@ -60,9 +70,6 @@ for (( i = 0; i < 60; i++ )); do
   sleep 5
 done
 curl -fsS -m 5 -o /dev/null "$CONTROL_URL/healthz"
-
-step "installing Docker"
-apt-get -o DPkg::Lock::Timeout=600 install -yq docker.io docker-compose-v2 jq unzip openssl netcat-openbsd ufw curl >/dev/null
 
 step "mounting its disk"
 bash deploy/common/mount-data.sh "$DATA"
@@ -109,7 +116,10 @@ ufw allow in on wg0 >/dev/null      # the web UI and SSH, from the bastion
 ufw --force enable >/dev/null
 
 step "pulling the game server"
-"${COMPOSE[@]}" pull -q
+if ! wait "$pull" || [[ "$(value image_tag)" != "$GIT_SHA" ]]; then
+  echo "    the early pull didn't get the image, pulling it now"
+  "${COMPOSE[@]}" pull -q
+fi
 
 step "starting the game server"
 "${COMPOSE[@]}" up -d
@@ -117,3 +127,8 @@ step "starting the game server"
 step "waiting for the game to answer"
 mkdir -p /var/lib/iw4x
 touch /var/lib/iw4x/bootstrapped
+
+# where the boot's time went, for the next speed-up; neither may fail the bootstrap
+printf '\n==> done in %ss, %ss since boot\n' "$SECONDS" "$(cut -d. -f1 /proc/uptime)"
+timeout 30 cloud-init analyze blame 2>&1 | head -25 || true
+timeout 30 systemd-analyze critical-chain 2>&1 || true
