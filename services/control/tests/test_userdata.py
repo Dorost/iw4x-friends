@@ -35,6 +35,7 @@ def test_node_script():
     assert f"checkout -q --detach '{SHA}'" in script
     assert "ssh-ed25519 BBBB admin" in script
     assert "deploy/node/bootstrap.sh" in script
+    assert "export HOME=/root" in script  # first boot runs without it, setup.sh needs it
 
 
 def test_bastion_script():

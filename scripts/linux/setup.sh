@@ -181,7 +181,7 @@ else
     [[ -f "$ZIP" ]] || die "zip not found: $ZIP"
     ok "using existing $ZIP"
   else
-    [[ -n "$GAME_LINK" ]] || die "no download link given. Pass --game-url <link>, or put mw.zip in $REPO"
+    [[ -n "$GAME_LINK" ]] || die "no download link given. Pass --game-url <link>, or put mw.zip in $(dirname "$DOWNLOAD_ZIP")"
     url="$GAME_LINK"
     if [[ "$GAME_LINK" =~ /d/([A-Za-z0-9_-]{20,}) ]] || [[ "$GAME_LINK" =~ [?\&]id=([A-Za-z0-9_-]{20,}) ]]; then
       url="https://drive.usercontent.google.com/download?id=${BASH_REMATCH[1]}&export=download&confirm=t"
