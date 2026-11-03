@@ -3,9 +3,11 @@
 # (services/control/control/userdata.py) wrote the WireGuard config and /etc/iw4x/node.env,
 # cloned the repo at the bastion's commit and runs this. Each step is reported to the bastion,
 # which counts the server as up once its web UI answers.
-#   0. WireGuard and Docker in one apt run, then the commit's image pulls in the background
-#      while the rest goes on; WireGuard up: the reports and the settings come through it
-#   1. the data disk at /srv/iw4x (formatted the first time)
+#   0. WireGuard and Docker in one apt run (Docker held back from starting); WireGuard up: the
+#      reports and the settings come through it
+#   1. the data disk at /srv/iw4x (formatted the first time). Docker keeps its images there, so
+#      a boot only downloads the layers that changed since the last one; then Docker starts and
+#      the commit's image pulls in the background while the rest goes on
 #   2. the settings from the bastion: the commit's image, the domain, and the setup password
 #      when the game isn't on the disk yet
 #   3. the game onto the disk, the first time only (scripts/linux/setup.sh --game-only)
@@ -54,14 +56,15 @@ heartbeat=$!
 trap 'kill $heartbeat 2>/dev/null || true' EXIT
 
 # the tunnel to the bastion first: until it's up, nothing reaches the bastion (not even a report).
-# Docker comes in the same apt run, so the image can download while the rest goes on.
+# Docker comes in the same apt run, but doesn't start yet (policy-rc.d): its images live on the
+# data disk, which isn't mounted yet
 echo "connecting to the bastion" > "$STEP_FILE"
 printf '==> installing WireGuard and Docker, %ss since boot\n' "$(cut -d. -f1 /proc/uptime)"
+printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d
+chmod +x /usr/sbin/policy-rc.d
 apt-get -o DPkg::Lock::Timeout=600 install -yq wireguard-tools \
   docker.io docker-compose-v2 jq unzip openssl netcat-openbsd ufw curl >/dev/null
-# the commit's image (the tag the settings name too); a failed pull is retried below by compose
-docker pull -q "$IMAGE:$GIT_SHA" >/dev/null &
-pull=$!
+rm -f /usr/sbin/policy-rc.d
 systemctl enable -q --now wg-quick@wg0
 
 step "waiting for the bastion over WireGuard"
@@ -73,7 +76,15 @@ curl -fsS -m 5 -o /dev/null "$CONTROL_URL/healthz"
 
 step "mounting its disk"
 bash deploy/common/mount-data.sh "$DATA"
-mkdir -p "$DATA/ui-data"
+mkdir -p "$DATA/ui-data" /etc/docker
+# Docker's images on the disk, which outlives the VM: a pull only downloads the layers that
+# changed since the last boot, and writes them there for the next one. Docker 29 keeps images
+# in containerd's own store by default; without that, they all go under data-root
+echo '{"data-root": "/srv/iw4x/docker", "features": {"containerd-snapshotter": false}}' > /etc/docker/daemon.json
+systemctl restart containerd docker  # restart: takes daemon.json even if it had started
+# the commit's image (the tag the settings name too); a failed pull is retried below by compose
+docker pull -q "$IMAGE:$GIT_SHA" >/dev/null &
+pull=$!
 has_game=0
 [[ -f "$DATA/game/iw4x.exe" ]] && has_game=1
 
@@ -123,6 +134,8 @@ fi
 
 step "starting the game server"
 "${COMPOSE[@]}" up -d
+# the disk keeps only the image in use: the next boot downloads what changed since this one
+docker image prune -af >/dev/null 2>&1 || true
 
 step "waiting for the game to answer"
 mkdir -p /var/lib/iw4x

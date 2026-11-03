@@ -87,20 +87,35 @@ def test_the_server_brings_up_wireguard_before_it_needs_the_bastion():
 
 
 def test_the_server_pulls_its_image_while_it_sets_up():
-    """One apt run for WireGuard and Docker, then the commit's image downloads in the background
-    while the disk, the settings and the firewall go on; compose pulls it if that failed."""
+    """One apt run for WireGuard and Docker, Docker held back until the data disk is mounted
+    (its images live there), then the commit's image downloads in the background while the
+    settings, the game and the firewall go on; compose pulls it if that failed."""
     script = (FLEET.parent / "node" / "bootstrap.sh").read_text()
     assert script.count("apt-get ") == 1
+    held = script.index("> /usr/sbin/policy-rc.d")
     install = script.index("install -yq wireguard-tools \\\n  docker.io docker-compose-v2")
+    released = script.index("rm -f /usr/sbin/policy-rc.d")
+    mount = script.index('bash deploy/common/mount-data.sh "$DATA"')
+    data_root = script.index('{"data-root": "/srv/iw4x/docker"')
+    docker = script.index("systemctl restart containerd docker")
     pull = script.index('docker pull -q "$IMAGE:$GIT_SHA" >/dev/null &')
-    assert install < pull < script.index('step "mounting its disk"')
+    assert held < install < released < mount < data_root < docker < pull
+    assert pull < script.index('step "getting its settings"')
     waited = script.index('if ! wait "$pull" || [[ "$(value image_tag)" != "$GIT_SHA" ]]; then')
     fallback = script.index('"${COMPOSE[@]}" pull -q')
     assert script.index('step "opening the firewall"') < waited < fallback
-    assert fallback < script.index('"${COMPOSE[@]}" up -d')
+    up = script.index('"${COMPOSE[@]}" up -d')
+    assert fallback < up < script.index("docker image prune -af")
     image = (FLEET.parent / "node" / "docker-compose.yml").read_text()
     assert "image: ghcr.io/dorost/iw4x-friends:${IMAGE_TAG" in image
     assert "IMAGE=ghcr.io/dorost/iw4x-friends " in script
+
+
+def test_stopping_stops_docker_before_the_disk_goes():
+    """Docker's images are on the data disk: it has to stop before the unmount."""
+    script = (FLEET.parent / "node" / "stop.sh").read_text()
+    down = script.index("down -t 20")
+    assert down < script.index("systemctl stop docker.socket docker") < script.index("umount")
 
 
 @pytest.mark.parametrize("early_pull_works", [True, False])
