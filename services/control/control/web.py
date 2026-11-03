@@ -63,6 +63,7 @@ class ScheduleIn(BaseModel):
 class Progress(BaseModel):
     step: str
     failed: bool = False
+    event: bool = False  # a new step of the bootstrap (not a heartbeat): kept in the events
 
 
 def page(name: str) -> HTMLResponse:
@@ -450,7 +451,7 @@ def routes(app: FastAPI, orch: Orchestrator, proxy_http: httpx.AsyncClient | Non
 
     @app.post("/node/progress")
     def node_progress(body: Progress, request: Request):
-        orch.node_progress(node_of(request), body.step, body.failed)
+        orch.node_progress(node_of(request), body.step, body.failed, body.event)
         return {"ok": True}
 
     @app.get("/node/config")

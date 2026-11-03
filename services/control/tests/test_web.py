@@ -183,6 +183,9 @@ def test_game_servers_report_over_wireguard_only(tmp_path, web):
         == 200
     )
     assert orch.row("nl").step == "mounting its disk"
+    step = {"step": "getting its settings (at 50s)", "event": True}
+    assert inside.post("/node/progress", json=step, headers=auth).status_code == 200
+    assert orch.row("nl").step == "getting its settings (at 50s)"
     config = inside.get("/node/config?has_game=0", headers=auth).json()
     assert config["setup_password"] == "setup" and config["join_host"] == "mw2-nl.dorost.nl"
     assert inside.get("/node/config?has_game=1", headers=auth).json()["setup_password"] == ""

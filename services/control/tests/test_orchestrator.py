@@ -3,8 +3,9 @@ import base64
 
 import pytest
 from fakes import SHA, at, make, posts
+from sqlalchemy import select
 
-from control.db import FAILED, OFF, RUNNING
+from control.db import FAILED, OFF, RUNNING, Event
 from control.db import Schedule as ScheduleRow
 from control.orchestrator import FAILED_KEEP, Busy
 
@@ -202,6 +203,16 @@ async def test_server_reports_a_failed_setup(fleet):
     await settle(orch)
     row = orch.row("nl")
     assert row.status == FAILED and "downloading the game" in row.error
+
+
+def test_bootstrap_steps_are_kept_as_events_and_heartbeats_are_not(fleet):
+    orch, _, _ = fleet
+    orch.node_progress("nl", "mounting its disk (at 41s)", failed=False, event=True)
+    orch.node_progress("nl", "mounting its disk (at 41s)", failed=False)  # the heartbeat
+    with orch.db.begin() as db:
+        texts = db.scalars(select(Event.text).where(Event.server == "nl")).all()
+    assert texts == ["mounting its disk (at 41s)"]
+    assert orch.row("nl").step == "mounting its disk (at 41s)"
 
 
 @pytest.mark.anyio
