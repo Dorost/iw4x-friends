@@ -309,10 +309,7 @@ class Orchestrator:
         row = self.row(name)
         now = ""
         if row.status == RUNNING and row.token:
-            password = "" if public else self.s.game_password
-            r = await self.nodes.request(
-                spec.wg_ip, row.token, "POST", "/api/join-password", {"password": password}
-            )
+            r = await self.push_join_password(name)
             if r.status_code == 404:  # a server on an older version: it takes it when it updates
                 now = " (from its next update)"
             elif r.status_code >= 400:
@@ -323,6 +320,16 @@ class Orchestrator:
         self.event(name, f"{'open to everyone' if public else 'password protected'}{now} ({by})")
         icon = "🌐" if public else "🔒"
         self.tg.post(f"{icon} <b>{esc(who(by))}</b> {what.format(t=esc(spec.title))}{esc(now)}")
+
+    async def push_join_password(self, name: str):
+        """Sets a running server's join password as the fleet has it: GAME_JOIN_PASSWORD, or
+        empty when it is open to everyone. A boot does this in deploy/node/bootstrap.sh; an
+        in-place update (deploy/node/update.sh) doesn't, so _update calls this."""
+        spec, row = self.s.servers[name], self.row(name)
+        password = "" if row.join_public else self.s.game_password
+        return await self.nodes.request(
+            spec.wg_ip, row.token, "POST", "/api/join-password", {"password": password}
+        )
 
     async def update_now(self, name: str) -> None:
         row = self.row(name)
@@ -561,6 +568,15 @@ class Orchestrator:
         )
         if code == 0:
             self.update(name, version=sha, step="")
+            if self.s.game_password:  # the update doesn't set it, a boot would
+                try:
+                    r = await self.push_join_password(name)
+                    if r.status_code >= 400:
+                        log.warning(
+                            "%s: join password not set after the update: %s", name, r.status_code
+                        )
+                except Exception as e:  # noqa: BLE001  the update itself went fine
+                    log.warning("%s: join password not set after the update: %s", name, e)
             self.event(name, f"updated to {sha[:7]}")
         else:
             self.update_failed[name] = sha
