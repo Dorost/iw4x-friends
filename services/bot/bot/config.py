@@ -22,6 +22,7 @@ class Settings:
     min_players: int = 3
     servers: list[str] = field(default_factory=list)
     fake_state: Path | None = None  # JSON file instead of the game servers (task bot:dev)
+    states_url: str = ""  # the bastion's control plane answers for all servers (BOT_STATES_URL)
     dev_user_id: int = 0  # mini app in a plain browser as this Telegram user (task bot:dev)
     host: str = "127.0.0.1"
     port: int = 8090
@@ -48,6 +49,7 @@ def load() -> Settings:
         min_players=int(env("BOT_MIN_PLAYERS", "3")),
         servers=_servers(env("TELEGRAM_APP_SERVERS", "")),
         fake_state=Path(fake) if fake else None,
+        states_url=env("BOT_STATES_URL", "").strip(),
         dev_user_id=int(env("BOT_DEV_USER_ID", "0") or 0),
         host=env("BOT_HOST", "127.0.0.1"),
         port=int(env("BOT_PORT", "8090")),

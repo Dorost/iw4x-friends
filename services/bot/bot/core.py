@@ -566,7 +566,12 @@ class Bot:
 
     async def states(self) -> dict[str, dict | None]:
         return await fetch_states(
-            self.s.servers, self.s.token, self.s.bot_id, self.http, self.s.fake_state
+            self.s.servers,
+            self.s.token,
+            self.s.bot_id,
+            self.http,
+            self.s.fake_state,
+            self.s.states_url,
         )
 
     async def watch_servers(self) -> None:

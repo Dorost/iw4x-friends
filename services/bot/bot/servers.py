@@ -53,9 +53,16 @@ def short(base: str) -> str:
 
 
 async def fetch_states(
-    servers: list[str], token: str, bot_id: int, http: httpx.AsyncClient, fake: Path | None = None
+    servers: list[str],
+    token: str,
+    bot_id: int,
+    http: httpx.AsyncClient,
+    fake: Path | None = None,
+    states_url: str = "",
 ) -> dict[str, dict | None]:
-    """server -> its state ({status, players, map_name, mode_name, ...}), None when unreachable."""
+    """server -> its state ({status, players, map_name, mode_name, ...}), None when unreachable.
+    With states_url (BOT_STATES_URL), the bastion's control plane answers for all of them at
+    once (services/control: /tg/api/states), "offline" for a server that is shut down."""
     if fake:
         try:
             data = json.loads(fake.read_text())
@@ -63,6 +70,15 @@ async def fetch_states(
             return {}
         return {(k if k.startswith("http") else f"https://{k}"): v for k, v in data.items()}
     auth = {"Authorization": "tma " + sign_init_data(token, {"id": bot_id, "first_name": "bot"})}
+    if states_url:
+        try:
+            r = await http.get(states_url, headers=auth, timeout=8)
+            data = r.json() if r.status_code == 200 else None
+        except (httpx.HTTPError, ValueError):
+            data = None
+        if not isinstance(data, dict):
+            return dict.fromkeys(servers)
+        return data
     out: dict[str, dict | None] = {}
     for base in servers:
         try:
