@@ -6,6 +6,7 @@ services/ui/server.log
 __pycache__/
 .DS_Store
 game-files/
+_scratch/
 # the settings deploys write on the bastion and the game servers
 deploy/*/.env
 deploy/*/.env.previous
