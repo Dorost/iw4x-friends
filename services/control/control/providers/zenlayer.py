@@ -66,9 +66,10 @@ def sign(key_id: str, key_password: str, body: bytes, timestamp: int) -> str:
 
 
 def random_password() -> str:
-    """For the VM's root login, which is never used (SSH keys only), but Zenlayer wants one."""
+    """For the VM's root login, which is never used (SSH keys only), but Zenlayer wants one: at
+    most 16 characters, with upper and lower case letters, digits and one of ~!@$^*-_=+."""
     alphabet = string.ascii_letters + string.digits
-    return "Ix-" + "".join(secrets.choice(alphabet) for _ in range(24)) + "9a"
+    return "Ix-" + "".join(secrets.choice(alphabet) for _ in range(11)) + "9a"
 
 
 class Zenlayer:

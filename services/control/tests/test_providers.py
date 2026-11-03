@@ -102,7 +102,11 @@ async def test_zenlayer_create_and_get():
     assert params["imageId"] == "ubuntu2404_x" and params["zoneId"] == "europe-east-1a"
     assert params["subnetId"] == "sub-1" and params["systemDisk"] == {"diskSize": 60}
     assert base64.b64decode(params["userData"]).decode().startswith("#!/bin/bash")
-    assert params["password"] and params["bandwidth"] == 50
+    assert params["bandwidth"] == 50
+    password = params["password"]  # Zenlayer: 16 at most, upper, lower, digit and special
+    assert len(password) == 16 and "-" in password
+    assert any(c.isupper() for c in password) and any(c.islower() for c in password)
+    assert any(c.isdigit() for c in password)
     inst = await z.get_instance("i-1")
     assert inst.status == ACTIVE and inst.ip == "203.0.113.7"
 
