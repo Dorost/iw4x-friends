@@ -22,8 +22,6 @@ jobs:
     runs-on: ubuntu-latest
     environment: bastion
     concurrency: deploy-bastion
-    outputs:
-      created: ${{ steps.up.outputs.created }}
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.2
@@ -46,7 +44,6 @@ jobs:
           exit 1
 
       - name: Bastion up
-        id: up
         working-directory: services/control
         env:
           VULTR_API_KEY: ${{ secrets.VULTR_API_KEY }}
@@ -59,6 +56,4 @@ jobs:
   deploy:
     needs: up
     uses: ./.github/workflows/deploy.yml
-    with:
-      new-bastion: ${{ needs.up.outputs.created == 'true' }}
     secrets: inherit

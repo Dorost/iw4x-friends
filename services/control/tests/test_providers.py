@@ -4,7 +4,7 @@ import json
 import httpx
 import pytest
 
-from control.providers import ACTIVE, GONE, PENDING, CloudError, Machine
+from control.providers import ACTIVE, GONE, PENDING, CloudError, Instance, Machine
 from control.providers.vultr import Vultr
 from control.providers.zenlayer import Zenlayer, sign
 
@@ -121,6 +121,15 @@ class VultrFake:
             {"id": "b-old", "label": "iw4x-fleet-nl", "region": "ewr", "status": "active"}
         ]
         self.attached: str | None = None
+        ip = "203.0.113.5"
+        self.vms = {  # as Vultr shows a new VM: installing, booting, ready
+            "vm-1": {"status": "pending", "power_status": "stopped", "server_status": "none",
+                     "main_ip": "0.0.0.0"},
+            "vm-2": {"status": "active", "power_status": "running", "server_status": "locked",
+                     "main_ip": ip},
+            "vm-3": {"status": "active", "power_status": "running", "server_status": "ok",
+                     "main_ip": ip},
+        }  # fmt: skip
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content) if request.content else None
@@ -145,17 +154,8 @@ class VultrFake:
             return httpx.Response(200, json={"os": [{"id": 2284, "name": "Ubuntu 24.04 LTS x64"}]})
         if path == "/instances" and request.method == "POST":
             return httpx.Response(202, json={"instance": {"id": "vm-1"}})
-        if path == "/instances/vm-1" and request.method == "GET":
-            return httpx.Response(
-                200,
-                json={
-                    "instance": {
-                        "status": "pending",
-                        "power_status": "stopped",
-                        "main_ip": "0.0.0.0",
-                    }
-                },
-            )
+        if path.rsplit("/", 1)[-1] in self.vms and request.method == "GET":
+            return httpx.Response(200, json={"instance": self.vms[path.rsplit("/", 1)[-1]]})
         if path.startswith("/instances/") and request.method == "GET":
             return httpx.Response(404, json={"error": "not found"})
         if path.startswith("/instances/") and request.method == "DELETE":
@@ -196,6 +196,8 @@ async def test_vultr_create_get_destroy():
     )
     assert base64.b64decode(body["user_data"]) == b"#!/bin/bash\n"
     assert (await v.get_instance("vm-1")).status == PENDING
+    assert (await v.get_instance("vm-2")).status == PENDING  # "locked" while installing
+    assert (await v.get_instance("vm-3")) == Instance("vm-3", ACTIVE, "203.0.113.5")
     assert (await v.get_instance("vm-9")).status == GONE
     fake.attached = "vm-1"
     await v.destroy_instance("vm-1", "b-old")

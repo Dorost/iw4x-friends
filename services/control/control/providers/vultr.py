@@ -133,9 +133,16 @@ class Vultr:
                 return Instance(instance_id, GONE)
             raise
         ip = inst.get("main_ip") if inst.get("main_ip") not in (None, "", "0.0.0.0") else None
-        if inst.get("server_status") == "locked" or inst.get("status") in ("suspended", "closed"):
+        if inst.get("status") == "suspended":
             return Instance(instance_id, FAILED, ip)
-        ready = inst.get("status") == "active" and inst.get("power_status") == "running" and ip
+        # server_status goes "locked" (installing) -> "installingbooting" -> "ok": only then can
+        # a disk be attached
+        ready = (
+            inst.get("status") == "active"
+            and inst.get("power_status") == "running"
+            and inst.get("server_status") == "ok"
+            and ip
+        )
         return Instance(instance_id, ACTIVE if ready else PENDING, ip)
 
     async def find_instances(self, label: str) -> list[str]:
