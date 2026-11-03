@@ -1,0 +1,16 @@
+# The bastion's HTTPS (deploy/bastion/docker-compose.yml): the planner bot at /bot/, everything
+# else is the control plane (the fleet page, the servers' own pages, the Telegram mini app)
+{$DOMAIN} {
+	handle /bot/* {
+		reverse_proxy 127.0.0.1:8090
+	}
+	# the game servers report here over WireGuard only
+	handle /node/* {
+		respond 404
+	}
+	handle {
+		reverse_proxy 127.0.0.1:8070 {
+			flush_interval -1 # the servers' pages get live updates (server-sent events)
+		}
+	}
+}

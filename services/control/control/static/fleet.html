@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MW2 Servers</title>
+<!-- the bastion's fleet page (services/control): every game server, boot / shut down, schedules -->
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-size: 13px; }
+  input, select { outline: none; }
+</style>
+</head>
+<body class="bg-slate-100 text-slate-700 min-h-screen">
+
+<svg style="display:none">
+  <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 3v8M6.3 6.3a8 8 0 1 0 11.4 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5v14l11-7z" fill="currentColor"/></symbol>
+  <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 9h18M8 14h3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 10h18M8 3v4M16 3v4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M11 12l9-9M17 6l3 3M14 9l2 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-spin" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+</svg>
+
+<div class="max-w-6xl mx-auto p-4 space-y-4">
+
+  <header class="bg-white rounded-xl shadow-sm p-4 flex flex-wrap items-center gap-3">
+    <h1 class="text-base font-semibold text-slate-800">MW2 Servers</h1>
+    <span id="conn" class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-400">loading</span>
+    <span id="version" class="text-[11px] text-slate-400"></span>
+    <button onclick="logout()" class="btn ml-auto bg-slate-100 text-slate-600 hover:bg-slate-200"><svg class="w-3.5 h-3.5"><use href="#i-key"/></svg>Log out</button>
+  </header>
+
+  <div id="servers" class="grid md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+
+  <section class="bg-white rounded-xl shadow-sm p-4 space-y-3">
+    <h2 class="title"><svg class="w-4 h-4"><use href="#i-cal"/></svg>Schedules</h2>
+    <p id="rule" class="text-[11px] text-slate-400"></p>
+    <div id="schedules" class="divide-y divide-slate-100"></div>
+
+    <form id="form" onsubmit="saveSchedule(event)" class="bg-slate-50 rounded-lg p-3 space-y-3">
+      <div class="text-xs font-medium text-slate-600" id="formTitle">New schedule</div>
+      <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div class="lbl">Servers<div id="fServers" class="mt-1 flex flex-wrap gap-1.5"></div></div>
+        <div class="lbl sm:col-span-2 lg:col-span-1">Days<div id="fDays" class="mt-1 flex flex-wrap gap-1"></div>
+          <div class="mt-1 flex gap-2 text-[11px] text-sky-700">
+            <button type="button" onclick="setDays([0,1,2,3,4])">weekdays</button>
+            <button type="button" onclick="setDays([5,6])">weekends</button>
+            <button type="button" onclick="setDays([0,1,2,3,4,5,6])">every day</button>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="lbl">From<input id="fStart" type="time" required class="inp"></label>
+          <label class="lbl">To<input id="fEnd" type="time" required class="inp"></label>
+        </div>
+        <label class="lbl">Time zone<select id="fTz" class="inp"></select></label>
+      </div>
+      <div class="grid sm:grid-cols-[1fr_auto] gap-3 items-end">
+        <label class="lbl">Note<input id="fNote" maxlength="100" class="inp" placeholder="optional, e.g. Friday night"></label>
+        <label class="flex items-center gap-2 text-xs pb-1.5"><input id="fEnabled" type="checkbox" checked class="accent-sky-600">On</label>
+      </div>
+      <div class="flex gap-2">
+        <button id="fSave" class="btn bg-sky-600 text-white hover:bg-sky-700">Add schedule</button>
+        <button type="button" id="fCancel" onclick="resetForm()" style="display: none" class="btn bg-slate-200 text-slate-600 hover:bg-slate-300">Cancel</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="bg-white rounded-xl shadow-sm p-4">
+    <h2 class="title mb-2"><svg class="w-4 h-4"><use href="#i-list"/></svg>What happened</h2>
+    <div id="events" class="text-xs space-y-1 max-h-80 overflow-y-auto"></div>
+  </section>
+</div>
+
+<div id="toast" class="hidden fixed bottom-4 right-4 bg-slate-800 text-white text-xs px-3 py-2 rounded-lg shadow"></div>
+
+<style type="text/tailwindcss">
+  .btn { @apply inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition active:scale-95 disabled:opacity-40 disabled:pointer-events-none; }
+  .btn.busy svg { @apply animate-spin; }
+  .inp { @apply mt-1 w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:border-sky-400; }
+  .lbl { @apply text-xs text-slate-600; }
+  .title { @apply text-sm font-semibold text-slate-700 flex items-center gap-1.5; }
+  .chip { @apply px-2 py-1 rounded-md text-[11px] font-medium bg-white border border-slate-200 text-slate-500 cursor-pointer select-none; }
+  .chip.on { @apply bg-sky-600 border-sky-600 text-white; }
+</style>
+
+<script>
+const $ = id => document.getElementById(id);
+const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const ZONES = ['Europe/Amsterdam', 'Europe/Istanbul', 'America/New_York', 'America/Los_Angeles', 'UTC'];
+const STATUS = {
+  off: ['Off', 'bg-slate-100 text-slate-500', 'bg-slate-300'],
+  provisioning: ['Starting', 'bg-amber-50 text-amber-700', 'bg-amber-400'],
+  booting: ['Setting up', 'bg-amber-50 text-amber-700', 'bg-amber-400'],
+  running: ['Running', 'bg-emerald-50 text-emerald-700', 'bg-emerald-500'],
+  stopping: ['Shutting down', 'bg-slate-100 text-slate-600', 'bg-slate-400'],
+  failed: ['Failed', 'bg-rose-50 text-rose-700', 'bg-rose-500'],
+};
+let F = null, editing = null, form = {servers: new Set(), days: new Set()};
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+const when = ts => new Date(ts * 1000).toLocaleString([], {weekday: 'short', hour: '2-digit', minute: '2-digit'});
+const clock = ts => new Date(ts * 1000).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+function rel(ts) {
+  const m = Math.round((ts - F.now) / 60), a = Math.abs(m);
+  const text = a < 1 ? 'now' : a < 60 ? `${a} min` : a < 1440 ? `${Math.floor(a / 60)}h ${a % 60 ? (a % 60) + 'm' : ''}`.trim() : `${Math.floor(a / 1440)}d ${Math.floor(a % 1440 / 60)}h`;
+  return a < 1 ? text : m > 0 ? `in ${text}` : `${text} ago`;
+}
+
+async function api(path, body, method) {
+  const r = await fetch(path, body === undefined && !method ? {} : {
+    method: method || 'POST', headers: {'Content-Type': 'application/json'}, body: body === undefined ? undefined : JSON.stringify(body)});
+  if (r.status === 401) { location.href = '/login'; throw new Error('logged out'); }
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
+  return r.json();
+}
+function toast(msg, err) {
+  const t = $('toast'); t.textContent = msg;
+  t.className = `fixed bottom-4 right-4 text-white text-xs px-3 py-2 rounded-lg shadow ${err ? 'bg-rose-600' : 'bg-slate-800'}`;
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.add('hidden'), err ? 6000 : 2500);
+}
+async function busy(btn, fn) {
+  const use = btn && btn.querySelector('use'), icon = use && use.getAttribute('href');
+  if (btn) { btn.disabled = true; btn.classList.add('busy'); use && use.setAttribute('href', '#i-spin'); }
+  try { return await fn(); }
+  catch (e) { toast(e.message, true); }
+  finally { if (btn) { btn.disabled = false; btn.classList.remove('busy'); use && use.setAttribute('href', icon); } }
+}
+async function copy(text, btn) {
+  await navigator.clipboard.writeText(text).catch(() => {});
+  const use = btn.querySelector('use'); use.setAttribute('href', '#i-check');
+  setTimeout(() => use.setAttribute('href', '#i-copy'), 1500);
+}
+
+// ---------- servers ----------
+
+function card(s) {
+  const [label, badge, dot] = STATUS[s.status] || [s.status, 'bg-slate-100', 'bg-slate-300'];
+  const working = s.busy || ['provisioning', 'booting', 'stopping'].includes(s.status);
+  let body = '';
+  if (!s.available) {
+    body = `<p class="text-xs text-slate-400">No ${esc(s.provider)} API key on the bastion yet, so it can't boot.</p>`;
+  } else if (s.status === 'running') {
+    const g = s.game;
+    const players = g && g.players.length ? g.players.map(esc).join(', ') : '<span class="text-slate-400">nobody playing</span>';
+    const bots = g && g.bots ? ` <span class="text-slate-400">+ ${g.bots} bot${g.bots > 1 ? 's' : ''}</span>` : '';
+    const what = g ? (g.status === 'match' ? `${esc(g.map_name)} · ${esc(g.mode_name)}` : g.status === 'lobby' ? 'between matches' : esc(g.status)) : 'not answering';
+    const until = s.reason === 'scheduled' ? `Scheduled until ${clock(s.stops_at)}`
+      : s.reason === 'players on' ? `Stays up while people play, then ${F.idle_minutes} min`
+      : s.stops_at ? `Shuts down ${rel(s.stops_at)} (${clock(s.stops_at)}) unless someone joins` : '';
+    body = `
+      <div class="flex items-center gap-2">
+        <code class="flex-1 min-w-0 truncate bg-slate-800 text-emerald-300 font-mono text-xs px-3 py-1.5 rounded-lg">connect ${esc(s.domain)}</code>
+        <button onclick="copy('connect ${esc(s.domain)}', this)" class="btn bg-slate-100 hover:bg-slate-200" title="Copy"><svg class="w-3.5 h-3.5"><use href="#i-copy"/></svg></button>
+      </div>
+      <div class="text-xs"><b class="text-slate-700">${what}</b></div>
+      <div class="text-xs">${players}${bots}</div>
+      <div class="text-[11px] text-slate-400">${until}</div>
+      <div class="text-[11px] text-slate-400">Up ${s.ready_at ? rel(s.ready_at).replace(' ago', '') : ''} · ${esc(s.boot_by)} · ${esc(s.ip || '')} · ${s.version ? esc(s.version.slice(0, 7)) : ''}
+        ${s.outdated ? `<span class="ml-1 px-1.5 rounded bg-amber-50 text-amber-700">new version ${esc(F.version.slice(0, 7))}: updates when empty</span>` : ''}</div>`;
+  } else if (working) {
+    body = `<div class="flex items-center gap-2 text-xs"><svg class="w-3.5 h-3.5 animate-spin text-amber-500"><use href="#i-spin"/></svg>${esc(s.step || 'working')}</div>
+      ${s.booted_at && s.status !== 'stopping' ? `<div class="text-[11px] text-slate-400">Started ${rel(s.booted_at)} · ${esc(s.boot_by)}</div>` : ''}
+      <div class="text-[11px] text-slate-400">The first boot of a server also downloads the game (17 GB) onto its disk.</div>`;
+  } else {
+    const next = s.next_window ? `Next window ${when(s.next_window.start)} to ${clock(s.next_window.end)} (${rel(s.next_window.start)})` : 'No schedule';
+    const hold = s.hold_off_until && s.hold_off_until > F.now ? `<div class="text-[11px] text-amber-700">Shut down by hand: stays off until ${clock(s.hold_off_until)}</div>` : '';
+    body = `<div class="text-xs text-slate-500">${next}</div>${hold}`;
+  }
+  if (s.status === 'failed' && s.error) body += `<div class="text-[11px] text-rose-600 break-words">${esc(s.error)}</div>`;
+
+  const can = s.available && !s.busy;
+  const buttons = [];
+  if (['off', 'failed'].includes(s.status)) buttons.push(`<button onclick="act('${s.name}', 'boot', this)" ${can ? '' : 'disabled'} class="btn bg-emerald-600 text-white hover:bg-emerald-700"><svg class="w-3.5 h-3.5"><use href="#i-play"/></svg>Boot</button>`);
+  if (s.status === 'running') buttons.push(`<a href="/s/${s.name}/" class="btn bg-sky-50 text-sky-700 hover:bg-sky-100"><svg class="w-3.5 h-3.5"><use href="#i-panel"/></svg>Control panel</a>`);
+  if (s.status === 'running' && s.outdated) buttons.push(`<button onclick="act('${s.name}', 'update', this)" ${can ? '' : 'disabled'} title="Restarts the game server with ${esc(F.version.slice(0, 7))}: players get disconnected and can rejoin" class="btn bg-amber-50 text-amber-700 hover:bg-amber-100"><svg class="w-3.5 h-3.5"><use href="#i-up"/></svg>Update now</button>`);
+  if (['running', 'provisioning', 'booting', 'failed'].includes(s.status)) buttons.push(`<button onclick="act('${s.name}', 'shutdown', this)" ${s.available ? '' : 'disabled'} class="btn ml-auto bg-rose-50 text-rose-700 hover:bg-rose-100"><svg class="w-3.5 h-3.5"><use href="#i-power"/></svg>Shut down</button>`);
+
+  return `<section class="bg-white rounded-xl shadow-sm p-4 flex flex-col gap-2.5">
+    <div class="flex items-center gap-2">
+      <span class="w-2.5 h-2.5 rounded-full ${dot}"></span>
+      <h2 class="text-sm font-semibold text-slate-800">${esc(s.title)}</h2>
+      <span class="ml-auto text-[11px] px-2 py-0.5 rounded-full ${badge}">${label}</span>
+    </div>
+    <div class="text-[11px] text-slate-400">${esc(s.domain)} · ${esc(s.provider)} ${esc(s.region)} · ${esc(s.plan)}</div>
+    ${body}
+    <div class="flex flex-wrap gap-2 mt-auto pt-1">${buttons.join('')}</div>
+  </section>`;
+}
+
+function act(name, action, btn) {
+  const s = F.servers.find(x => x.name === name);
+  if (action === 'shutdown') {
+    const n = s.game ? s.game.players.length : 0;
+    if (!confirm(`Shut down ${s.title}?${n ? ` ${n} player${n > 1 ? 's are' : ' is'} on it.` : ''}${s.reason === 'scheduled' ? ' It stays off until its schedule window ends.' : ''}`)) return;
+  }
+  if (action === 'update' && !confirm(`Update ${s.title} now? The game server restarts: players get disconnected and can rejoin.`)) return;
+  return busy(btn, async () => {
+    await api(`/api/servers/${name}/${action}`, {});
+    toast({boot: `${s.title}: booting`, shutdown: `${s.title}: shutting down`, update: `${s.title}: updating`}[action]);
+    load();
+  });
+}
+
+// ---------- schedules ----------
+
+function renderSchedules() {
+  const title = n => (F.servers.find(s => s.name === n) || {title: n}).title;
+  $('schedules').innerHTML = F.schedules.length ? F.schedules.map(sc => `
+    <div class="py-2 flex flex-wrap items-center gap-2 text-xs ${sc.enabled ? '' : 'opacity-60'}">
+      <label class="flex items-center gap-1.5 cursor-pointer" title="On / off"><input type="checkbox" ${sc.enabled ? 'checked' : ''} onchange="toggle(${sc.id}, this.checked)" class="accent-sky-600"></label>
+      <span class="font-medium text-slate-700">${esc(sc.text)}</span>
+      ${sc.servers.map(n => `<span class="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[11px]">${esc(title(n))}</span>`).join('')}
+      ${sc.note ? `<span class="text-slate-400">${esc(sc.note)}</span>` : ''}
+      <span class="ml-auto flex gap-1.5">
+        <button onclick="edit(${sc.id})" class="btn bg-slate-100 hover:bg-slate-200">Edit</button>
+        <button onclick="remove(${sc.id}, this)" class="btn bg-rose-50 text-rose-700 hover:bg-rose-100">Delete</button>
+      </span>
+    </div>`).join('') : '<p class="text-xs text-slate-400 py-1">No schedules: servers only run when someone boots them.</p>';
+}
+
+function renderForm() {
+  $('fServers').innerHTML = F.servers.map(s => `<span class="chip ${form.servers.has(s.name) ? 'on' : ''}" onclick="flip('servers', '${s.name}')">${esc(s.title)}</span>`).join('');
+  $('fDays').innerHTML = DAYS.map((d, i) => `<span class="chip ${form.days.has(i) ? 'on' : ''}" onclick="flip('days', ${i})">${d}</span>`).join('');
+}
+function flip(kind, v) { form[kind].has(v) ? form[kind].delete(v) : form[kind].add(v); renderForm(); }
+function setDays(days) { form.days = new Set(days); renderForm(); }
+
+function fillZones() {
+  const mine = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const zones = [...new Set([...ZONES, mine])];
+  $('fTz').innerHTML = zones.map(z => `<option ${z === 'Europe/Amsterdam' ? 'selected' : ''}>${esc(z)}</option>`).join('');
+}
+
+function resetForm() {
+  editing = null;
+  form = {servers: new Set(), days: new Set()};
+  $('fStart').value = '20:00'; $('fEnd').value = '23:30'; $('fNote').value = ''; $('fEnabled').checked = true;
+  $('fTz').value = 'Europe/Amsterdam';
+  $('formTitle').textContent = 'New schedule'; $('fSave').textContent = 'Add schedule';
+  $('fCancel').style.display = 'none';
+  renderForm();
+}
+
+function edit(id) {
+  const sc = F.schedules.find(x => x.id === id);
+  editing = id;
+  form = {servers: new Set(sc.servers), days: new Set(sc.days)};
+  $('fStart').value = sc.start; $('fEnd').value = sc.end; $('fNote').value = sc.note; $('fEnabled').checked = sc.enabled;
+  if (![...$('fTz').options].some(o => o.value === sc.tz)) $('fTz').add(new Option(sc.tz, sc.tz));
+  $('fTz').value = sc.tz;
+  $('formTitle').textContent = `Edit schedule ${id}`; $('fSave').textContent = 'Save';
+  $('fCancel').style.display = '';
+  renderForm();
+  $('form').scrollIntoView({behavior: 'smooth', block: 'center'});
+}
+
+function body() {
+  return {servers: [...form.servers], days: [...form.days], start: $('fStart').value, end: $('fEnd').value,
+          tz: $('fTz').value, enabled: $('fEnabled').checked, note: $('fNote').value};
+}
+
+function saveSchedule(e) {
+  e.preventDefault();
+  return busy($('fSave'), async () => {
+    if (editing) await api(`/api/schedules/${editing}`, body(), 'PUT');
+    else await api('/api/schedules', body());
+    toast(editing ? 'schedule saved' : 'schedule added');
+    resetForm();
+    load();
+  });
+}
+
+function toggle(id, on) {
+  const sc = F.schedules.find(x => x.id === id);
+  return busy(null, async () => { await api(`/api/schedules/${id}`, {...sc, enabled: on}, 'PUT'); load(); });
+}
+
+function remove(id, btn) {
+  if (!confirm('Delete this schedule?')) return;
+  return busy(btn, async () => { await api(`/api/schedules/${id}`, undefined, 'DELETE'); if (editing === id) resetForm(); load(); });
+}
+
+// ---------- the page ----------
+
+function render() {
+  $('version').textContent = F.version ? `version ${F.version.slice(0, 7)}` : '';
+  $('servers').innerHTML = F.servers.map(card).join('');
+  $('rule').textContent = `A scheduled server boots ${F.lead_minutes} min before its window and runs until the end, players or not. `
+    + `Outside a window, a server shuts down once nobody has played for ${F.idle_minutes} min (counted from when it came up, so a boot nobody joins stops after ${F.idle_minutes} min). `
+    + `Shut down by hand during a window, it stays off until that window ends.`;
+  renderSchedules();
+  $('events').innerHTML = F.events.map(e => {
+    const title = e.server ? (F.servers.find(s => s.name === e.server) || {title: e.server}).title : '';
+    return `<div class="flex gap-2"><span class="text-slate-400 shrink-0 w-24">${when(e.at)}</span>${title ? `<span class="font-medium text-slate-600 shrink-0">${esc(title)}</span>` : ''}<span class="break-words min-w-0">${esc(e.text)}</span></div>`;
+  }).join('') || '<p class="text-slate-400">Nothing yet.</p>';
+}
+
+async function load() {
+  try {
+    const first = !F;
+    F = await api('/api/fleet');
+    $('conn').textContent = 'live'; $('conn').className = 'text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600';
+    if (first) resetForm();
+    render();
+  } catch (e) {
+    $('conn').textContent = 'reconnecting'; $('conn').className = 'text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-600';
+  }
+}
+
+async function logout() { await fetch('/api/auth/logout', {method: 'POST'}); location.href = '/login'; }
+
+fillZones();
+load();
+setInterval(() => { if (!document.hidden) load(); }, 3000);
+</script>
+</body>
+</html>

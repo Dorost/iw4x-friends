@@ -1,0 +1,57 @@
+# The bastion (deploy/fleet.toml): the control plane, the planner bot and Caddy. deploy/bastion/deploy.sh
+# writes .env here from the GitHub secrets and variables; the data is on the data disk at
+# /srv/iw4x, which outlives the VM.
+name: iw4x
+services:
+  # creates and destroys the game servers, the fleet page, the Telegram mini app (services/control)
+  control:
+    image: ghcr.io/dorost/iw4x-friends:control-${IMAGE_TAG:?IMAGE_TAG missing in .env}
+    network_mode: host # reaches the game servers over wg0; ufw keeps it off the internet
+    restart: unless-stopped
+    cap_add: [NET_ADMIN] # adds and removes the game servers' WireGuard peers
+    environment:
+      IMAGE_TAG: ${IMAGE_TAG} # the commit: game servers run the same one
+      CONTROL_DATA_DIR: /data
+      FLEET_FILE: /fleet.toml
+      UI_PASSWORD: ${UI_PASSWORD:?UI_PASSWORD missing in .env}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      VULTR_API_KEY: ${VULTR_API_KEY:-}
+      ZENLAYER_ACCESS_KEY_ID: ${ZENLAYER_ACCESS_KEY_ID:-}
+      ZENLAYER_ACCESS_KEY_PASSWORD: ${ZENLAYER_ACCESS_KEY_PASSWORD:-}
+      CLOUDFLARE_DNS_TOKEN: ${CLOUDFLARE_DNS_TOKEN:-}
+      MW_SETUP_PASSWORD: ${MW_SETUP_PASSWORD:-}
+      ADMIN_SSH_KEYS: ${ADMIN_SSH_KEYS:-}
+      IDLE_MINUTES: ${IDLE_MINUTES:-}
+      LEAD_MINUTES: ${LEAD_MINUTES:-}
+    volumes:
+      - /srv/iw4x/control:/data
+      - ../fleet.toml:/fleet.toml:ro
+
+  # the Tonight? planner bot (services/bot): the only program reading the bot's messages
+  bot:
+    image: ghcr.io/dorost/iw4x-friends:bot-${IMAGE_TAG:?IMAGE_TAG missing in .env}
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      TELEGRAM_APP_SERVERS: ${TELEGRAM_APP_SERVERS:-} # from fleet.toml (deploy.sh)
+      BOT_STATES_URL: http://127.0.0.1:8070/tg/api/states # who plays where, from the control plane
+      BOT_DEFAULT_TZ: ${BOT_DEFAULT_TZ:-Europe/Amsterdam}
+      BOT_MIN_PLAYERS: ${BOT_MIN_PLAYERS:-3}
+      BOT_PORT: 8090
+      BOT_HOST: 127.0.0.1 # only reachable through Caddy (/bot/)
+      BOT_DB_PATH: /data/bot.db
+    volumes:
+      - /srv/iw4x/bot:/data
+
+  caddy:
+    image: caddy:2.8.4
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN missing in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /srv/iw4x/caddy:/data

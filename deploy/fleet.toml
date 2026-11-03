@@ -1,0 +1,56 @@
+# The fleet: the bastion and the game servers it creates and destroys (deploy/README.md).
+# Nothing secret here: credentials are GitHub secrets of the "bastion" environment.
+#
+# Every game server gets a disk of its own that outlives the server (game files, server.cfg,
+# the web UI's presets), a WireGuard address the bastion reaches it on, and a domain players
+# connect to. The bastion points the domain at the server while it runs, at itself otherwise.
+
+repo = "https://github.com/Dorost/iw4x-friends.git"
+
+# Always on: the control plane (services/control), the planner bot and Caddy. Its own disk
+# keeps the schedules, the bot's database and the HTTPS certificates across rebuilds.
+[bastion]
+domain = "mw2.dorost.nl"
+provider = "vultr"
+region = "ams"            # Amsterdam
+plan = "vc2-1c-1gb"       # 1 CPU, 1 GB: no game runs here
+volume_gb = 40            # its own disk (HDD block storage): databases, certificates
+wg_ip = "10.66.0.1"
+wg_port = 51820
+
+[servers.nl]
+title = "NL"
+hostname = "Dorost NL"    # sv_hostname on the first boot; the web UI changes it after that
+provider = "vultr"
+region = "ams"
+plan = "vhf-2c-4gb"       # high frequency 2 CPU / 4 GB, as before
+domain = "mw2-nl.dorost.nl"
+wg_ip = "10.66.0.11"
+volume_gb = 40            # the game is 17 GB
+block_type = "storage_opt" # Vultr HDD block storage; "high_perf" is NVMe
+
+[servers.us]
+title = "US"
+hostname = "Dorost US"
+provider = "vultr"
+region = "ewr"            # New Jersey
+plan = "vhf-2c-4gb"
+domain = "mw2-us.dorost.nl"
+wg_ip = "10.66.0.12"
+volume_gb = 40
+
+# On demand only (no schedule needed). Shows up once the Zenlayer keys are set.
+[servers.ist]
+title = "Istanbul"
+hostname = "Dorost Istanbul"
+provider = "zenlayer"
+region = "europe-east-1a" # Zenlayer Elastic Compute zone: Istanbul
+plan = "z2a.cpu.2"        # check with: task fleet:zenlayer-types
+domain = "mw2-ist.dorost.nl"
+wg_ip = "10.66.0.13"
+volume_gb = 40
+system_disk_gb = 60       # the game download is unpacked from here onto the disk
+bandwidth_mbps = 50       # public outbound cap, players need well under 1 Mbps each
+network_line = "PremiumBGP"
+internet_charge = "ByBandwidth"
+subnet_cidr = "172.30.1.0/24" # the bastion makes this subnet (and its VPC) the first time

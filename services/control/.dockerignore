@@ -1,0 +1,5 @@
+.venv
+tests
+*.db
+dev-data
+**/__pycache__

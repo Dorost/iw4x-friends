@@ -1,0 +1,64 @@
+name: bastion
+
+# Creates the bastion from scratch when it isn't there (its disk, the VM, its domain), then
+# deploys main to it. With "rebuild" it replaces the VM: the disk, and with it the schedules,
+# the bot's database and the HTTPS certificates, stays. deploy/README.md has the first setup.
+# Runs on main; it waits for the ci workflow of the commit to push its images.
+
+on:
+  workflow_dispatch:
+    inputs:
+      rebuild:
+        description: Replace the bastion's VM with a new one (its disk stays)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  up:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: bastion
+    concurrency: deploy-bastion
+    outputs:
+      created: ${{ steps.up.outputs.created }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.2
+        with:
+          enable-cache: false
+
+      # the deploy pulls them; right after a merge, ci may still be building them
+      - name: Wait for the commit's images
+        run: |
+          for (( i = 0; i < 80; i++ )); do
+            missing=""
+            for tag in "$GITHUB_SHA" "control-$GITHUB_SHA" "bot-$GITHUB_SHA"; do
+              docker manifest inspect "ghcr.io/dorost/iw4x-friends:$tag" >/dev/null 2>&1 || missing="$missing $tag"
+            done
+            [ -z "$missing" ] && exit 0
+            echo "waiting for the ci workflow to push:$missing"
+            sleep 30
+          done
+          echo "::error::no images for ${GITHUB_SHA:0:7} after 40 minutes: did the ci workflow of this commit pass?"
+          exit 1
+
+      - name: Bastion up
+        id: up
+        working-directory: services/control
+        env:
+          VULTR_API_KEY: ${{ secrets.VULTR_API_KEY }}
+          CLOUDFLARE_DNS_TOKEN: ${{ secrets.CLOUDFLARE_DNS_TOKEN }}
+          BASTION_SSH_HOST_KEY: ${{ secrets.BASTION_SSH_HOST_KEY }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          ADMIN_SSH_KEYS: ${{ vars.ADMIN_SSH_KEYS }}
+        run: uv run python -m control.infra bastion-up ${{ inputs.rebuild && '--rebuild' || '' }}
+
+  deploy:
+    needs: up
+    uses: ./.github/workflows/deploy.yml
+    with:
+      new-bastion: ${{ needs.up.outputs.created == 'true' }}
+    secrets: inherit

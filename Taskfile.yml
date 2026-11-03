@@ -41,6 +41,32 @@ tasks:
         BOT_DEV_USER_ID="${BOT_DEV_USER_ID:-}" \
           uv run python -m bot
 
+  control:dev:
+    desc: "The bastion's fleet page on http://localhost:8070 (password dev), with pretend clouds and game servers: nothing is created, nothing posted to Telegram"
+    dir: services/control
+    cmds:
+      - CONTROL_FAKE_CLOUD=1 UI_PASSWORD=dev CONTROL_DATA_DIR=dev-data TELEGRAM_BOT_TOKEN= TELEGRAM_CHAT_ID= VULTR_API_KEY= CLOUDFLARE_DNS_TOKEN= IMAGE_TAG=0000000000000000000000000000000000000000 uv run python -m control
+
+  control:test:
+    desc: Test and lint the bastion's control plane (pytest, black, ruff)
+    dir: services/control
+    cmds:
+      - uv run pytest -q
+      - uv run black --check .
+      - uv run ruff check .
+
+  fleet:keys:
+    desc: "Once: make the bastion's deploy key and SSH host key and put them in the GitHub secrets (bastion environment)"
+    dir: services/control
+    cmds:
+      - uv run python -m control.infra keys {{.CLI_ARGS}}
+
+  fleet:zenlayer-types:
+    desc: The Zenlayer instance types in the Istanbul zone, for plan in deploy/fleet.toml (ZENLAYER_ACCESS_KEY_ID, ZENLAYER_ACCESS_KEY_PASSWORD)
+    dir: services/control
+    cmds:
+      - uv run python -m control.infra zenlayer-types
+
   server:
     desc: Start the dedicated server in the foreground (console in terminal)
     cmds:

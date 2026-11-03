@@ -958,7 +958,16 @@ def in_group(user_id: int) -> bool:
 
 def telegram_user(request: Request) -> dict:
     """The Telegram user who opened the mini app, from the initData Telegram signed for this
-    bot (header Authorization: tma <initData>), if they are in the group."""
+    bot (header Authorization: tma <initData>), if they are in the group.
+    On a server of the fleet (deploy/fleet.toml) the bastion serves the mini app: it checks the
+    Telegram login itself and calls here with this server's web UI password, naming the user in
+    X-Telegram-User (for the log). Such a server has no bot token."""
+    if UI_PASSWORD and basic_auth_ok(request):
+        try:
+            user = json.loads(request.headers.get("x-telegram-user") or "{}")
+        except ValueError:
+            user = {}
+        return user if isinstance(user, dict) else {}
     if not TELEGRAM_ON:
         raise HTTPException(503, "Telegram is not set up on this server")
     header = request.headers.get("authorization", "")
