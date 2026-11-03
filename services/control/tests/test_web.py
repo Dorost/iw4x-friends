@@ -189,3 +189,17 @@ def test_game_servers_report_over_wireguard_only(tmp_path, web):
     config = inside.get("/node/config?has_game=0", headers=auth).json()
     assert config["setup_password"] == "setup" and config["join_host"] == "mw2-nl.dorost.nl"
     assert inside.get("/node/config?has_game=1", headers=auth).json()["setup_password"] == ""
+
+
+def test_open_to_everyone_from_the_page_and_the_mini_app(web):
+    client, orch, _, _ = web
+    assert client.post("/api/servers/nl/public").status_code == 401
+    login(client)
+    assert client.post("/api/servers/nl/public").status_code == 200
+    nl = client.get("/api/fleet").json()["servers"][0]
+    assert nl["public"] and nl["lockable"]
+    assert (
+        client.post("/tg/api/servers/nl/protect", headers=tma(STRANGER), json={}).status_code == 403
+    )
+    assert client.post("/tg/api/servers/nl/protect", headers=tma(AMIN), json={}).status_code == 200
+    assert not orch.row("nl").join_public

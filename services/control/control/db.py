@@ -47,6 +47,8 @@ class Server(Base):
     hold_off_until: Mapped[int | None] = mapped_column(Integer)  # shut down by hand in a window
     attempts: Mapped[int] = mapped_column(Integer, default=0)  # failed boots in a row
     changed_at: Mapped[int] = mapped_column(Integer, default=0)
+    # open to everyone instead of GAME_JOIN_PASSWORD (fleet page, mini app); kept between runs
+    join_public: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class Schedule(Base):

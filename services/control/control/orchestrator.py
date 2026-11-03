@@ -296,6 +296,33 @@ class Orchestrator:
                 await self.tasks[name]
         self.start(name, "stop", self._stop(name, f"by {by}"))
 
+    async def set_public(self, name: str, public: bool, by: str) -> None:
+        """Open a server to everyone, or back to GAME_JOIN_PASSWORD. Kept for its next boots; a
+        running server takes it right away for new joins (nobody playing is kicked)."""
+        spec = self.s.servers.get(name)
+        if not spec:
+            raise KeyError(name)
+        if not self.s.game_password:
+            raise Busy("there's no join password to switch to: set GAME_JOIN_PASSWORD first")
+        self.update(name, join_public=public)
+        row = self.row(name)
+        now = ""
+        if row.status == RUNNING and row.token:
+            password = "" if public else self.s.game_password
+            r = await self.nodes.request(
+                spec.wg_ip, row.token, "POST", "/api/join-password", {"password": password}
+            )
+            if r.status_code == 404:  # a server on an older version: it takes it when it updates
+                now = " (from its next update)"
+            elif r.status_code >= 400:
+                raise Busy(f"{spec.title} didn't take it ({r.status_code})")
+        elif row.status != RUNNING:
+            now = " (from its next boot)"
+        what = "opened <b>{t}</b> to everyone" if public else "password protected <b>{t}</b>"
+        self.event(name, f"{'open to everyone' if public else 'password protected'}{now} ({by})")
+        icon = "🌐" if public else "🔒"
+        self.tg.post(f"{icon} <b>{esc(who(by))}</b> {what.format(t=esc(spec.title))}{esc(now)}")
+
     async def update_now(self, name: str) -> None:
         row = self.row(name)
         if row.status != RUNNING:
@@ -332,7 +359,12 @@ class Orchestrator:
             "ui_host": spec.wg_ip,
             "hostname": spec.hostname,
             "setup_password": self.s.setup_password if need_game else "",
-            "game_password": self.s.game_password,
+            # None: no fleet password, the server keeps its own; "": open to everyone
+            "game_password": (
+                ("" if self.row(name).join_public else self.s.game_password)
+                if self.s.game_password
+                else None
+            ),
         }
 
     # ---------- the tasks ----------

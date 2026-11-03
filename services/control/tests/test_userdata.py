@@ -161,8 +161,8 @@ JOIN = 'set g_password "s3cr"'
     [
         ("s3cr", [EMPTY, NAME], [NAME, JOIN]),
         ("s3cr", [NAME], [NAME, JOIN]),
-        ("", [OWN], [OWN]),  # no fleet password: the server's own stays
-        ("null", [OWN], [OWN]),  # how jq prints a missing field
+        ("", [OWN], ['set g_password ""']),  # the server is open to everyone
+        ("null", [OWN], [OWN]),  # no fleet password (jq prints null): the server's own stays
     ],
 )
 def test_the_join_password_goes_into_server_cfg(tmp_path, password, before, after):

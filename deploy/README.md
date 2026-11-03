@@ -53,7 +53,7 @@ All in the GitHub environment **`bastion`** (Settings → Environments). The dep
 | `VULTR_API_KEY` | creates and destroys the bastion and the NL, US and Milan servers (Vultr: Account → API) |
 | `CLOUDFLARE_DNS_TOKEN` | points the domains at the VMs (Cloudflare: API Tokens → "Edit zone DNS" for `dorost.nl`) |
 | `MW_SETUP_PASSWORD` | the setup password: a server's first boot decrypts the game's download links with it |
-| `GAME_JOIN_PASSWORD` | the password players type to join (`password <password>`), set on every server at every boot. Without it, each server keeps the one set in its own control page |
+| `GAME_JOIN_PASSWORD` | the password players type to join (`password <password>`), set on every server at every boot. A server can be opened to everyone instead (🔒/🌐 on the fleet page and in the mini app); that choice is kept for its next boots. Without the secret, each server keeps the one set in its own control page |
 | `ZENLAYER_ACCESS_KEY_ID`, `ZENLAYER_ACCESS_KEY_PASSWORD` | Istanbul (Zenlayer console: Access Keys). Without them, Istanbul doesn't show up |
 | `DEPLOY_SSH_KEY` | the SSH key GitHub deploys with; the bastion lets it run `bastion/deploy.sh` and nothing else |
 | `BASTION_SSH_HOST_KEY` | the bastion's own SSH host key. Every new bastion gets it, so the deploy can check it's talking to the bastion |

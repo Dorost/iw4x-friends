@@ -162,6 +162,8 @@ def routes(app: FastAPI, orch: Orchestrator, proxy_http: httpx.AsyncClient | Non
             "reason": d.reason,
             "stops_at": d.stops_at if row.status == RUNNING else None,
             "next_window": nxt and {"start": nxt.start, "end": nxt.end},
+            "public": row.join_public,  # open to everyone instead of GAME_JOIN_PASSWORD
+            "lockable": bool(s.game_password),  # there is a join password to switch to
             "game": state,
         }
 
@@ -218,6 +220,8 @@ def routes(app: FastAPI, orch: Orchestrator, proxy_http: httpx.AsyncClient | Non
                 await orch.shutdown_now(name, by)
             elif action == "update":
                 await orch.update_now(name)
+            elif action in ("public", "protect"):
+                await orch.set_public(name, action == "public", by)
             else:
                 raise HTTPException(404, "no such action")
         except Busy as e:
@@ -377,7 +381,7 @@ def routes(app: FastAPI, orch: Orchestrator, proxy_http: httpx.AsyncClient | Non
     async def tg_action(name: str, action: str, request: Request):
         user = await tg_user(request)
         who = user.get("first_name") or str(user["id"])
-        if action in ("boot", "shutdown"):
+        if action in ("boot", "shutdown", "public", "protect"):
             return await act(name, action, f"{who} in Telegram")
         if action not in ("play", "bots"):
             raise HTTPException(404, "no such action")

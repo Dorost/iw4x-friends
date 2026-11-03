@@ -1053,6 +1053,25 @@ class Bots(BaseModel):
     skill: str
 
 
+class JoinPassword(BaseModel):
+    password: str
+
+
+@app.post("/api/join-password")
+def set_join_password(j: JoinPassword):
+    """The join password ("" = open to everyone), saved to server.cfg (the next match reads it
+    again) and set right away for new joins; nobody playing gets kicked. The fleet's bastion
+    calls it (deploy/README.md: GAME_JOIN_PASSWORD)."""
+    v = read_cfg()
+    v["g_password"] = clean(j.password)
+    save_cfg(v)
+    if server_pids():
+        rcon(f'set g_password "{v["g_password"]}"')
+    changed()
+    print(f"join password {'set' if v['g_password'] else 'removed: open to everyone'}", flush=True)
+    return {"ok": True}
+
+
 @app.post("/tg/api/bots")
 def tg_bots(b: Bots, request: Request):
     """The web UI's bot settings: saved to server.cfg, and set right away on a running

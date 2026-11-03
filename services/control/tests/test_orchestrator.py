@@ -370,3 +370,28 @@ async def test_no_idle_warning_in_a_schedule_window(fleet):
     booted, is_up = posts(orch)
     assert booted.startswith("🚀 <b>Someone on the fleet page</b> booted <b>NL</b>")
     assert "⏳" not in booted and "⏳" not in is_up
+
+
+@pytest.mark.anyio
+async def test_open_to_everyone_and_back(fleet):
+    orch, _, _ = fleet
+    assert orch.node_config("nl", need_game=False)["game_password"] == "join"
+    await orch.set_public("nl", True, "Yashar in Telegram")  # off: from its next boot
+    assert orch.row("nl").join_public and orch.node_config("nl", False)["game_password"] == ""
+    assert posts(orch) == ["🌐 <b>Yashar</b> opened <b>NL</b> to everyone (from its next boot)"]
+    await up(orch)
+    posts(orch)
+    orch.nodes.requests.clear()
+    await orch.set_public("nl", False, "the web UI")  # running: right away
+    assert orch.nodes.requests == [(NL, "POST", "/api/join-password")]
+    assert orch.nodes.bodies[-1] == {"password": "join"}
+    assert posts(orch) == ["🔒 <b>Someone on the fleet page</b> password protected <b>NL</b>"]
+    assert orch.node_config("nl", need_game=False)["game_password"] == "join"
+
+
+@pytest.mark.anyio
+async def test_no_switch_without_a_fleet_password(tmp_path):
+    orch, _, _ = make(tmp_path, NOW, game_password="")
+    with pytest.raises(Busy):
+        await orch.set_public("nl", True, "test")
+    assert orch.node_config("nl", need_game=False)["game_password"] is None

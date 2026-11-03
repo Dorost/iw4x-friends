@@ -178,6 +178,7 @@ function card(s) {
   if (['off', 'failed'].includes(s.status)) buttons.push(`<button onclick="act('${s.name}', 'boot', this)" ${can ? '' : 'disabled'} class="btn bg-emerald-600 text-white hover:bg-emerald-700"><svg class="w-3.5 h-3.5"><use href="#i-play"/></svg>Boot</button>`);
   if (s.status === 'running') buttons.push(`<a href="/s/${s.name}/" class="btn bg-sky-50 text-sky-700 hover:bg-sky-100"><svg class="w-3.5 h-3.5"><use href="#i-panel"/></svg>Control panel</a>`);
   if (s.status === 'running' && s.outdated) buttons.push(`<button onclick="act('${s.name}', 'update', this)" ${can ? '' : 'disabled'} title="Restarts the game server with ${esc(F.version.slice(0, 7))}: players get disconnected and can rejoin" class="btn bg-amber-50 text-amber-700 hover:bg-amber-100"><svg class="w-3.5 h-3.5"><use href="#i-up"/></svg>Update now</button>`);
+  if (s.available && s.lockable) buttons.push(`<button onclick="toggleLock('${s.name}', this)" class="btn bg-slate-100 text-slate-600 hover:bg-slate-200" title="${s.public ? 'New players need the join password again' : 'Anyone can join without the join password'}">${s.public ? '🔒 Password protect' : '🌐 Open to everyone'}</button>`);
   if (['running', 'provisioning', 'booting', 'failed'].includes(s.status)) buttons.push(`<button onclick="act('${s.name}', 'shutdown', this)" ${s.available ? '' : 'disabled'} class="btn ml-auto bg-rose-50 text-rose-700 hover:bg-rose-100"><svg class="w-3.5 h-3.5"><use href="#i-power"/></svg>Shut down</button>`);
 
   return `<section class="bg-white rounded-xl shadow-sm p-4 flex flex-col gap-2.5">
@@ -186,7 +187,7 @@ function card(s) {
       <h2 class="text-sm font-semibold text-slate-800">${esc(s.title)}</h2>
       <span class="ml-auto text-[11px] px-2 py-0.5 rounded-full ${badge}">${label}</span>
     </div>
-    <div class="text-[11px] text-slate-400">${esc(s.domain)} · ${esc(s.provider)} ${esc(s.region)} · ${esc(s.plan)}</div>
+    <div class="text-[11px] text-slate-400">${esc(s.domain)} · ${esc(s.provider)} ${esc(s.region)} · ${esc(s.plan)}${s.lockable ? ` · ${s.public ? '🌐 open to everyone' : '🔒 password'}` : ''}</div>
     ${body}
     <div class="flex flex-wrap gap-2 mt-auto pt-1">${buttons.join('')}</div>
   </section>`;
@@ -202,6 +203,19 @@ function act(name, action, btn) {
   return busy(btn, async () => {
     await api(`/api/servers/${name}/${action}`, {});
     toast({boot: `${s.title}: booting`, shutdown: `${s.title}: shutting down`, update: `${s.title}: updating`}[action]);
+    load();
+  });
+}
+
+// open to everyone, or back to GAME_JOIN_PASSWORD: kept for the server's next boots too
+function toggleLock(name, btn) {
+  const s = F.servers.find(x => x.name === name), open = !s.public;
+  const text = open ? `Open ${s.title} to everyone? Anyone can join without the password.`
+    : `Password protect ${s.title}? New players need the password.`;
+  if (!confirm(text + (s.status === 'running' ? ' Nobody playing is kicked.' : ' It applies from its next boot.'))) return;
+  return busy(btn, async () => {
+    await api(`/api/servers/${name}/${open ? 'public' : 'protect'}`, {});
+    toast(`${s.title}: ${open ? 'open to everyone' : 'password protected'}`);
     load();
   });
 }
