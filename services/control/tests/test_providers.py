@@ -3,7 +3,9 @@ import json
 
 import httpx
 import pytest
+from fakes import FLEET
 
+from control.config import load_fleet
 from control.providers import ACTIVE, GONE, PENDING, CloudError, Instance, Machine
 from control.providers.vultr import Vultr
 from control.providers.zenlayer import Zenlayer, sign
@@ -181,6 +183,19 @@ async def test_vultr_disk_is_found_by_label_and_region_or_made():
     }
     assert await v.ensure_volume(MACHINE) == "b-new"
     assert len([1 for m, p, _ in fake.calls if m == "POST" and p == "/blocks"]) == 1
+
+
+@pytest.mark.anyio
+async def test_vultr_disk_type_comes_from_the_fleet():
+    fake = VultrFake()
+    nvme = Machine("iw4x-fleet-nl", "ams", "vhf-2c-4gb", 40, {"block_type": "high_perf"})
+    await vultr(fake).ensure_volume(nvme)
+    created = [b for m, p, b in fake.calls if m == "POST" and p == "/blocks"][0]
+    assert created["block_type"] == "high_perf"
+    fleet = load_fleet(FLEET)
+    assert {
+        s.options.get("block_type") for s in fleet.servers.values() if s.provider == "vultr"
+    } == {"high_perf"}
 
 
 def test_vultr_polls_every_two_seconds():

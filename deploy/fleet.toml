@@ -27,7 +27,7 @@ plan = "vhf-2c-4gb"       # high frequency 2 CPU / 4 GB, as before
 domain = "mw2-nl.dorost.nl"
 wg_ip = "10.66.0.11"
 volume_gb = 40            # the game is 17 GB
-block_type = "storage_opt" # Vultr HDD block storage; "high_perf" is NVMe
+block_type = "high_perf"  # Vultr NVMe block storage ("storage_opt" is HDD): a faster first boot
 
 [servers.us]
 title = "US"
@@ -38,6 +38,7 @@ plan = "vhf-2c-4gb"
 domain = "mw2-us.dorost.nl"
 wg_ip = "10.66.0.12"
 volume_gb = 40
+block_type = "high_perf"
 
 # On demand only (no schedule needed). Shows up once the Zenlayer keys are set.
 [servers.ist]
