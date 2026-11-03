@@ -17,6 +17,12 @@
 #   --maps-url <link>  same for the custom maps + bots pack (MW_MAPS_URL)
 #   --zip <path>   use this mw.zip (otherwise it looks for mw.zip in the repo and ~)
 #   --keep-zip     keep mw.zip after installing (default: delete it if this script downloaded it)
+#   --game-only    only the game, maps and server.cfg: no Docker, .env or firewall (the fleet's
+#                  game servers, deploy/node/bootstrap.sh, do those themselves)
+# Environment, for running it unattended:
+#   MW_SETUP_PASSWORD  the setup password, instead of asking for it
+#   IW4X_GAME_DIR      the game folder (default: game/ in the repo)
+#   IW4X_DOWNLOAD_DIR  where mw.zip is downloaded to (default: the repo)
 
 set -euo pipefail
 
@@ -24,15 +30,16 @@ GAME_REL="drive_c/Program Files (x86)/Call of Duty Modern Warfare 2"
 
 cd "$(dirname "$0")/../.."
 REPO="$PWD"
-GAME="$REPO/game"
-DOWNLOAD_ZIP="$REPO/mw.zip"
+GAME="${IW4X_GAME_DIR:-$REPO/game}"
+DOWNLOAD_ZIP="${IW4X_DOWNLOAD_DIR:-$REPO}/mw.zip"
 # download links, encrypted with the setup password (written by `task links`)
 LINKS_ENC="U2FsdGVkX18BSFqqHMCQ++5w+wJL5cdh3asQpzzejdBx2HWUrjeVW3q15pMGc31tolezaREbLw7dPLBzNarkDGagqk5k81ChbyM7uVo97si+Qc/A/GDQ+Y1Gkje41pLweL2l2zWtdoyWSKS33+xtZ92FbDNb5kYs4B9rHU3DfkJFIP0naKFFciIY7ikspmyrxsHNiTtW8zGg5eFIJbcxXe/vVJiCjUDQyPGbkry3TdA="
 
-KEEP_ZIP=0 ZIP="" GAME_LINK="${MW_GAME_URL:-}" MAPS_LINK="${MW_MAPS_URL:-}"
+KEEP_ZIP=0 ZIP="" GAME_ONLY=0 GAME_LINK="${MW_GAME_URL:-}" MAPS_LINK="${MW_MAPS_URL:-}"
 while (( $# )); do
   case "$1" in
     --keep-zip) KEEP_ZIP=1 ;;
+    --game-only) GAME_ONLY=1 ;;
     --zip) ZIP="$2"; KEEP_ZIP=1; shift ;;
     --game-url) GAME_LINK="$2"; shift ;;
     --maps-url) MAPS_LINK="$2"; shift ;;
@@ -97,6 +104,12 @@ parts_size() {
 unlock_links() {
   [[ -n "$LINKS_ENC" ]] && command -v openssl >/dev/null || return 1
   local pass plain try
+  if [[ -n "${MW_SETUP_PASSWORD:-}" ]]; then   # unattended: the password from the environment
+    plain=$(echo "$LINKS_ENC" | PASS="$MW_SETUP_PASSWORD" openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 -a -A -pass env:PASS 2>/dev/null | tr -d '\0') || plain=""
+    [[ "$plain" == game=http* ]] && { echo "$plain"; return 0; }
+    printf '    ! MW_SETUP_PASSWORD is wrong\n' >&2
+    return 1
+  fi
   for try in 1 2 3; do
     read -rsp "    Setup password (or Enter to paste a link instead): " pass < /dev/tty || return 1
     echo > /dev/tty
@@ -118,7 +131,9 @@ step "Checking this machine"
 [[ "$(uname)" == "Linux" ]] || die "this script is for Linux"
 [[ "$(uname -m)" == "x86_64" ]] || die "needs an x86_64 machine (Wine runs the 32-bit Windows server)"
 
-if command -v docker >/dev/null && docker compose version >/dev/null 2>&1; then
+if (( GAME_ONLY )); then
+  ok "game only (--game-only): not checking Docker"
+elif command -v docker >/dev/null && docker compose version >/dev/null 2>&1; then
   ok "Docker installed"
 else
   warn "installing Docker (official get.docker.com script)"
@@ -150,12 +165,13 @@ else
       fi
     done
   fi
-  # ask only when needed and there's a terminal to ask on; a file path works too
-  if [[ -z "$ZIP" && -z "$GAME_LINK" ]] && { : < /dev/tty; } 2>/dev/null; then
+  # ask only when needed and there's a terminal to ask on (or the password is given); a file
+  # path works too
+  if [[ -z "$ZIP" && -z "$GAME_LINK" ]] && { [[ -n "${MW_SETUP_PASSWORD:-}" ]] || { : < /dev/tty; } 2>/dev/null; }; then
     if links=$(unlock_links); then
       GAME_LINK=$(sed -n 's/^game=//p' <<< "$links")
       [[ -n "$MAPS_LINK" ]] || MAPS_LINK=$(sed -n 's/^maps=//p' <<< "$links")
-    else
+    elif [[ -z "${MW_SETUP_PASSWORD:-}" ]]; then
       read -rp "    Paste the game download link, or the path to mw.zip: " GAME_LINK < /dev/tty || true
     fi
   fi
@@ -183,8 +199,14 @@ else
     # a partial file that is really an HTML error page can't be resumed
     [[ -f "$ZIP" ]] && [[ "$(head -c 1 "$ZIP")" == "<" ]] && rm -f "$ZIP"
     have=$(( $(size_of "$ZIP") + $(parts_size "$ZIP") ))
-    need_gb=$(( (remote_size - have) / 1024 / 1024 / 1024 + 18 ))   # rest of download + game folder
-    (( $(free_gb "$REPO") >= need_gb )) || die "need about ${need_gb} GB free disk space, only $(free_gb "$REPO") GB available"
+    need_gb=$(( (remote_size - have) / 1024 / 1024 / 1024 + 1 ))   # rest of the download
+    mkdir -p "$(dirname "$ZIP")" "$(dirname "$GAME")"
+    if [[ "$(df -P "$(dirname "$ZIP")" | awk 'NR==2 {print $1}')" == "$(df -P "$(dirname "$GAME")" | awk 'NR==2 {print $1}')" ]]; then
+      need_gb=$(( need_gb + 18 ))   # and the game folder on the same disk
+    else
+      (( $(free_gb "$(dirname "$GAME")") >= 18 )) || die "need about 18 GB free for the game in $(dirname "$GAME"), only $(free_gb "$(dirname "$GAME")") GB available"
+    fi
+    (( $(free_gb "$(dirname "$ZIP")") >= need_gb )) || die "need about ${need_gb} GB free disk space in $(dirname "$ZIP"), only $(free_gb "$(dirname "$ZIP")") GB available"
     (( have > 0 )) && echo "    Resuming download ($(( have / 1024 / 1024 )) MB of $(( remote_size / 1024 / 1024 )) MB done)" \
                    || echo "    Downloading to $ZIP"
     echo "    (if it stops, just re-run the script and it continues)"
@@ -200,7 +222,7 @@ else
   # The zip holds a whole CrossOver bottle; only the MW2 folder inside it is needed.
   # Extract next to the target, then rename: game/ only appears once it's complete.
   echo "    Extracting the game folder (takes a few minutes)..."
-  tmp="$REPO/.setup-tmp"
+  tmp="$(dirname "$GAME")/.setup-tmp"
   rm -rf "$tmp"
   trap 'rm -rf "$tmp"' EXIT
   unzip -q "$ZIP" "*/$GAME_REL/*" -x "__MACOSX/*" -d "$tmp" || die "zip does not contain the MW2 game folder"
@@ -234,6 +256,12 @@ else
       -e "s|^set rcon_password .*|set rcon_password \"$(random 20)\"|" \
       server.cfg.example > "$cfg"
   ok "installed $cfg (public, random rcon password)"
+fi
+
+if (( GAME_ONLY )); then
+  step "Done"
+  echo "    Game in $GAME"
+  exit 0
 fi
 
 # ---------------------------------------------------------------- .env
