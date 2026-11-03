@@ -1031,6 +1031,9 @@ def tg_state(request: Request):
         "players": sorted((p["name"] for p in humans), key=str.lower),
         # guid -> name: the fleet's bastion tells joins and leaves apart by guid, not by name
         "humans": {p["guid"]: p["name"] for p in humans},
+        # the players for the mini app's list, to kick from (no addresses)
+        "roster": sorted(({k: p[k] for k in ("num", "guid", "name", "score", "ping")} for p in humans),
+                         key=lambda p: p["name"].lower()),
         "bots": sum(p["bot"] for p in players),
         "lobby_count": live["lobby_count"] if status == "lobby" else 0,
         "maps": [{k: m[k] for k in ("id", "name", "stock")} for m in (st["maps"] if st else [])],
@@ -1070,6 +1073,27 @@ def set_join_password(j: JoinPassword):
     changed()
     print(f"join password {'set' if v['g_password'] else 'removed: open to everyone'}", flush=True)
     return {"ok": True}
+
+
+class TgKick(BaseModel):
+    num: int
+    guid: str  # who the kick is for: the slot may have changed hands since the list was shown
+
+
+@app.post("/tg/api/kick")
+def tg_kick(k: TgKick, request: Request):
+    """Kicks a player from the mini app's list, if that slot still holds them."""
+    user = telegram_user(request)
+    live = live_status()
+    if not live or not live["in_game"]:
+        raise HTTPException(409, "no match running")
+    player = next((p for p in live["players"] if p["num"] == k.num and p["guid"] == k.guid), None)
+    if not player:
+        raise HTTPException(409, "they already left")
+    rcon(f"clientkick {k.num}")
+    changed()
+    print(f"telegram app: {user.get('id')} {user.get('first_name')!r}: kicked {player['name']!r}", flush=True)
+    return {"ok": True, "name": player["name"]}
 
 
 @app.post("/tg/api/bots")

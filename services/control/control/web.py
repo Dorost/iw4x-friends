@@ -33,7 +33,7 @@ from control.db import Schedule as ScheduleRow
 from control.nodes import NodeError, auth_header
 from control.orchestrator import Busy, Orchestrator
 from control.schedule import BadSchedule, describe, next_window, weekly
-from control.telegram import BadInitData, TelegramError, verify_init_data
+from control.telegram import BadInitData, TelegramError, esc, verify_init_data
 
 STATIC = Path(__file__).with_name("static")
 SESSION_COOKIE = "iw4x_fleet"
@@ -383,7 +383,7 @@ def routes(app: FastAPI, orch: Orchestrator, proxy_http: httpx.AsyncClient | Non
         who = user.get("first_name") or str(user["id"])
         if action in ("boot", "shutdown", "public", "protect"):
             return await act(name, action, f"{who} in Telegram")
-        if action not in ("play", "bots", "restart"):
+        if action not in ("play", "bots", "restart", "kick"):
             raise HTTPException(404, "no such action")
         spec, row = running(name)
         try:
@@ -398,6 +398,10 @@ def routes(app: FastAPI, orch: Orchestrator, proxy_http: httpx.AsyncClient | Non
             data = {}
         if r.status_code >= 400:
             raise HTTPException(r.status_code, data.get("detail") or "the server said no")
+        if action == "kick":  # the group sees who kicked whom
+            kicked = data.get("name") or "a player"
+            orch.event(name, f"{kicked} kicked by {who} in Telegram")
+            orch.tg.post(f"👢 <b>{esc(who)}</b> kicked <b>{esc(kicked)}</b> from {esc(spec.title)}")
         return data
 
     @app.get("/tg/thumb/{name}/{map_id}.jpg")

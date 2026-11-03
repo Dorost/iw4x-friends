@@ -215,3 +215,24 @@ def test_mini_app_fast_restart_goes_to_the_server(web):
     )
     assert client.post("/tg/api/servers/nl/restart", headers=tma(AMIN), json={}).status_code == 200
     assert orch.nodes.requests == [("10.66.0.11", "POST", "/tg/api/restart")]
+
+
+def test_mini_app_kick_goes_to_the_server_and_the_group_hears_it(web):
+    client, orch, _, _ = web
+    kick = {"num": 3, "guid": "abc123"}
+    assert client.post("/tg/api/servers/nl/kick", headers=tma(AMIN), json=kick).status_code == 409
+    running(orch)
+    sent = []
+
+    async def request(ip, token, method, path, body=None, user=None):
+        sent.append((ip, method, path, body, user["first_name"]))
+        return httpx.Response(200, json={"ok": True, "name": "XerS"})
+
+    orch.nodes.request = request
+    assert (
+        client.post("/tg/api/servers/nl/kick", headers=tma(STRANGER), json=kick).status_code == 403
+    )
+    assert client.post("/tg/api/servers/nl/kick", headers=tma(AMIN), json=kick).status_code == 200
+    assert sent == [("10.66.0.11", "POST", "/tg/api/kick", kick, "Amin")]
+    message = orch.tg.outbox.get_nowait()[0]
+    assert message == "👢 <b>Amin</b> kicked <b>XerS</b> from NL"
