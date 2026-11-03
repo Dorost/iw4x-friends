@@ -44,6 +44,7 @@
   <header class="bg-white rounded-xl shadow-sm p-4 flex flex-wrap items-center gap-3">
     <div class="flex items-center gap-2">
       <span id="dot" class="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
+      <a id="fleetLink" href="/" class="hidden text-xs text-sky-700 hover:underline mr-1">← All servers</a>
       <h1 class="text-base font-semibold text-slate-800">IW4x Server</h1>
       <span id="statusText" class="text-xs text-slate-400">checking...</span>
     </div>
@@ -177,6 +178,8 @@
 
 <script>
 let S = null, logLines = [], rconOut = [], pending = null;
+// behind the bastion (services/control) this page is at /s/<server>/: API calls are relative to it
+const FLEET = location.pathname.startsWith('/s/');
 const LIMITS = ['scorelimit', 'timelimit', 'roundlimit', 'winlimit', 'roundswitch', 'numlives'];
 const $ = id => document.getElementById(id);
 const api = async (path, body) => {
@@ -250,7 +253,7 @@ function modeChanged() {
 // the picked map and mode become the next match, announced in game
 async function showPick() {
   if (!S.live) return;
-  await busy(null, async () => { await api('/api/select', {map: $('liveMap').value, gametype: $('gametype').value}); toast(`next up: ${mapName($('liveMap').value)}`); });
+  await busy(null, async () => { await api('api/select', {map: $('liveMap').value, gametype: $('gametype').value}); toast(`next up: ${mapName($('liveMap').value)}`); });
 }
 
 function render() {
@@ -296,7 +299,7 @@ function renderLog() {
 
 // ---------- live updates (server-sent events) ----------
 function connect() {
-  const es = new EventSource('/api/events');
+  const es = new EventSource('api/events');
   const conn = (text, cls) => { $('conn').textContent = text; $('conn').className = 'text-[10px] px-1.5 py-0.5 rounded ' + cls; };
   es.onopen = () => conn('live', 'bg-emerald-50 text-emerald-600');
   es.onerror = () => conn('reconnecting', 'bg-amber-50 text-amber-600');  // EventSource retries by itself
@@ -315,7 +318,7 @@ function act(a, btn) {
   if (n && a !== 'start' && !confirm(`${a} disconnects all ${n} player(s). Continue?`)) return;
   const label = {start: 'starting', stop: 'stopping', restart: 'restarting'}[a];
   return busy(btn, async () => {
-    await api('/api/server/' + a, {});
+    await api('api/server/' + a, {});
     expect(label, a === 'stop' ? s => !s.running : s => !!s.live);
     toast(label + '...');
   });
@@ -329,7 +332,7 @@ function save(btn) {
     bots_fill: +$('bots_fill').value, bots_fill_mode: $('bots_fill_mode').value, bots_skill: $('bots_skill').value,
     fun: funFieldValues(),
   };
-  return busy(btn, async () => { await api('/api/config', body); Object.assign(S.config, body); render(); toast('saved'); });
+  return busy(btn, async () => { await api('api/config', body); Object.assign(S.config, body); render(); toast('saved'); });
 }
 
 // Fun fields: a dropdown for on/off style settings, a number box for the rest
@@ -381,7 +384,7 @@ function savePreset(btn) {
   if (!name) { toast('give the preset a name', true); return; }
   if (name in S.fun_presets.Custom && !confirm(`Overwrite preset ${name}?`)) return;
   return busy(btn, async () => {
-    S.fun_presets.Custom = (await api('/api/presets', {name, fun: funFieldValues()})).presets;
+    S.fun_presets.Custom = (await api('api/presets', {name, fun: funFieldValues()})).presets;
     renderPresets(); $('presetName').value = name;
     toast(`preset ${name} saved`);
   });
@@ -390,7 +393,7 @@ function savePreset(btn) {
 async function deletePreset(name) {
   if (!confirm(`Delete preset ${name}?`)) return;
   await busy(null, async () => {
-    const r = await fetch('/api/presets/' + encodeURIComponent(name), {method: 'DELETE'});
+    const r = await fetch('api/presets/' + encodeURIComponent(name), {method: 'DELETE'});
     if (!r.ok) throw new Error(r.statusText);
     S.fun_presets.Custom = (await r.json()).presets;
     renderPresets(); toast(`preset ${name} deleted`);
@@ -409,7 +412,7 @@ const ACTION_DONE = {launch: 'launched', up: 'teleported up', kill: 'killed', gi
 function playerAct(num, action, el, weapon = '') {
   if (action === 'give' && !weapon) return;
   const p = S.live && S.live.players.find(p => p.num === num), who = p ? p.name : '#' + num;
-  return busy(el.tagName === 'BUTTON' ? el : null, async () => { await api('/api/player', {num, action, weapon}); toast(`${who}: ${ACTION_DONE[action]}`); });
+  return busy(el.tagName === 'BUTTON' ? el : null, async () => { await api('api/player', {num, action, weapon}); toast(`${who}: ${ACTION_DONE[action]}`); });
 }
 
 // ---------- login ----------
@@ -421,13 +424,13 @@ async function logout() {
 function kick(num, btn) {
   const p = S.live && S.live.players.find(p => p.num === num);
   if (!confirm(`Kick ${p ? p.name : '#' + num}?`)) return;
-  return busy(btn, async () => { await api('/api/kick', {num}); toast('kicked ' + (p ? p.name : '#' + num)); });
+  return busy(btn, async () => { await api('api/kick', {num}); toast('kicked ' + (p ? p.name : '#' + num)); });
 }
 
 function startGame(btn) {
   const body = {map: $('liveMap').value, gametype: $('gametype').value, ...Object.fromEntries(LIMITS.map(k => [k, $(k).value]))};
   return busy(btn, async () => {
-    await api('/api/game', body);
+    await api('api/game', body);
     Object.assign(S.config, body);
     expect(`loading ${mapName(body.map)}`, s => s.live && s.live.in_game && s.live.map === body.map && s.live.gametype === body.gametype);
     toast(`starting ${mapName(body.map)}...`);
@@ -436,7 +439,7 @@ function startGame(btn) {
 
 function toLobby(btn) {
   return busy(btn, async () => {
-    await api('/api/lobby', {});
+    await api('api/lobby', {});
     toast('ending the match, the next map loads after the scoreboard...');
   });
 }
@@ -444,20 +447,21 @@ function toLobby(btn) {
 function matchAct(action, btn) {
   const label = action === 'fast_restart' ? 'Fast restart' : 'Map restart';
   if (!confirm(`${label}: the match starts over and scores reset. Continue?`)) return;
-  return busy(btn, async () => { await api(`/api/match/${action}`, Object.fromEntries(LIMITS.map(k => [k, $(k).value]))); toast(`${label.toLowerCase()}...`); });
+  return busy(btn, async () => { await api(`api/match/${action}`, Object.fromEntries(LIMITS.map(k => [k, $(k).value]))); toast(`${label.toLowerCase()}...`); });
 }
 
 function sendRcon(e) {
   e.preventDefault();
   const cmd = $('cmd').value.trim(); if (!cmd) return;
   return busy($('btnSend'), async () => {
-    const {output} = await api('/api/rcon', {cmd});
+    const {output} = await api('api/rcon', {cmd});
     rconOut.push('> ' + cmd, output.trim() || '(no output)');
     $('cmd').value = '';
     renderLog(); $('log').scrollTop = $('log').scrollHeight;
   });
 }
 
+if (FLEET) $('fleetLink').classList.remove('hidden');
 connect();
 setInterval(() => S && pending && render(), 2000);  // lets a stuck action time out
 </script>
