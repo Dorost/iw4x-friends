@@ -35,7 +35,7 @@ blank_disk() {
 }
 
 dev=""
-for (( i = 0; i < 120; i++ )); do
+for (( i = 0; i < 600; i++ )); do  # every second: the disk is used the moment it shows up
   udevadm settle 2>/dev/null || true
   if [[ -e "/dev/disk/by-label/$LABEL" ]]; then
     dev=$(readlink -f "/dev/disk/by-label/$LABEL")
@@ -47,7 +47,7 @@ for (( i = 0; i < 120; i++ )); do
     mkfs.ext4 -q -m 0 -L "$LABEL" "$dev"
     break
   fi
-  sleep 5
+  sleep 1
 done
 [[ -n "$dev" ]] || { echo "    no data disk showed up in 10 minutes" >&2; exit 1; }
 

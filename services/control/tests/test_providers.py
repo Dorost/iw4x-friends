@@ -183,6 +183,10 @@ async def test_vultr_disk_is_found_by_label_and_region_or_made():
     assert len([1 for m, p, _ in fake.calls if m == "POST" and p == "/blocks"]) == 1
 
 
+def test_vultr_polls_every_two_seconds():
+    assert Vultr("key").poll == 2
+
+
 @pytest.mark.anyio
 async def test_vultr_create_get_destroy():
     fake = VultrFake()

@@ -69,7 +69,7 @@ class Orchestrator:
         nodes,
         tg: Telegram,
         now: Callable[[], float] = time.time,
-        poll: float = 5,
+        poll: float = 2,
     ):
         self.s, self.db, self.providers = s, db, providers
         self.dns, self.wg, self.nodes, self.tg = dns, wg, nodes, tg
@@ -157,7 +157,7 @@ class Orchestrator:
             except Exception:
                 log.exception("loop")
             tick += 1
-            await asyncio.sleep(5)
+            await asyncio.sleep(2)
 
     async def reconcile(self) -> None:
         """Starts what the rules ask for: boots, shutdowns, retries, updates."""
