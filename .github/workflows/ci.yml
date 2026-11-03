@@ -3,13 +3,7 @@ name: ci
 on:
   push:
   pull_request:
-  workflow_dispatch:
-    inputs:
-      servers:
-        description: Servers to deploy this branch to (NL goes first)
-        type: choice
-        options: [both, nl, us]
-        default: both
+  workflow_dispatch: # deploys the branch it runs on to the bastion (deploy/README.md)
 
 # Pushes to main wait for each other: a newer one replaces one still waiting, a running
 # deploy is never cancelled. On other branches a new push cancels the old run. Run
@@ -46,15 +40,26 @@ jobs:
           uv run black --check .
           uv run ruff check .
 
+      - name: Control plane tests and lint
+        working-directory: services/control
+        run: |
+          uv run pytest -q
+          uv run black --check .
+          uv run ruff check .
+
       - name: Shell scripts parse
         run: |
           sudo apt-get install -y -qq zsh
-          for f in scripts/*/*.sh scripts/*.sh; do
+          for f in scripts/*/*.sh scripts/*.sh deploy/*/*.sh; do
             if head -1 "$f" | grep -q bash; then bash -n "$f"; else zsh -n "$f"; fi && echo "ok $f"
           done
 
-      - name: Docker compose config valid
-        run: DOMAIN=example.com UI_PASSWORD=x docker compose --profile bot config -q
+      - name: Docker compose configs valid
+        run: |
+          DOMAIN=example.com UI_PASSWORD=x docker compose --profile bot config -q
+          IMAGE_TAG=x UI_PASSWORD=x DOMAIN=example.com docker compose -f deploy/bastion/docker-compose.yml config -q
+          IMAGE_TAG=x UI_PASSWORD=x UI_HOST=10.66.0.11 JOIN_HOST=example.com \
+            docker compose -f deploy/node/docker-compose.yml config -q
 
       - name: PowerShell scripts parse
         shell: pwsh
@@ -123,51 +128,74 @@ jobs:
           cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
           cache-to: ${{ github.ref == 'refs/heads/main' && format('type=registry,ref={0}:buildcache,mode=max', env.IMAGE) || '' }}
 
-  # One job per server, each with its own environment (and deploy key), NL first: US
-  # waits for it and is skipped when it fails. Every push to main deploys main to both.
-  # Run workflow deploys the branch it runs on, e.g. a PR's, to the servers picked; the
-  # next push to main puts main back. scripts/deploy/deploy.sh on the server pulls the
-  # image and restarts the game server only when services/ui changed.
-  deploy-nl:
+  # The bastion's images (deploy/bastion/docker-compose.yml): the control plane and the planner
+  # bot, as tags of the same public package (control-<commit>, bot-<commit>). Built and tried on
+  # every push, pushed from main and from Run workflow
+  bastion-images:
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        service: [control, bot]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4.4.1
+
+      - name: Build
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: services/${{ matrix.service }}
+          load: true
+          tags: iw4x-${{ matrix.service }}:test
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,scope=${{ matrix.service }},mode=max
+
+      - name: Control plane starts in the image
+        if: matrix.service == 'control'
+        run: |
+          docker run -d --name control -p 8070:8070 -e UI_PASSWORD=ci -e CONTROL_FAKE_CLOUD=1 \
+            -e IMAGE_TAG="$GITHUB_SHA" -e FLEET_FILE=/fleet.toml -v "$PWD/deploy/fleet.toml:/fleet.toml:ro" \
+            iw4x-control:test
+          for _ in $(seq 30); do curl -fso /dev/null localhost:8070/healthz && break; sleep 2; done
+          curl -fsS localhost:8070/healthz | jq -e --arg v "$GITHUB_SHA" '.version == $v' >/dev/null
+          [ "$(curl -so /dev/null -w '%{http_code}' localhost:8070/api/fleet)" = 401 ]   # login required
+          docker exec control sh -c 'command -v wg && command -v ssh'
+      - name: Control plane log
+        if: failure() && matrix.service == 'control'
+        run: docker logs control
+
+      - name: Bot loads in the image
+        if: matrix.service == 'bot'
+        run: docker run --rm iw4x-bot:test python -c "import bot.core, bot.web"
+
+      - name: Log in to GHCR
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+        uses: docker/login-action@v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: services/${{ matrix.service }}
+          push: true
+          tags: ${{ env.IMAGE }}:${{ matrix.service }}-${{ github.sha }}
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+
+  # Every push to main deploys main to the bastion; Run workflow deploys the branch it runs on,
+  # e.g. a PR's (the next push to main puts main back). The game servers follow by themselves:
+  # a running one moves to the new commit once nobody plays on it, the next boot starts on it.
+  deploy:
     if: >-
       github.event_name == 'push' && github.ref == 'refs/heads/main' ||
-      github.event_name == 'workflow_dispatch' && inputs.servers != 'us'
-    needs: image
-    runs-on: ubuntu-latest
-    environment:
-      name: nl
-      url: https://mw2-nl.dorost.nl
-    concurrency: deploy-nl # one deploy at a time; a newer one replaces one still waiting
-    env:
-      HOST: mw2-nl.dorost.nl
-    steps: &deploy
-      - uses: actions/checkout@v7
-        with:
-          sparse-checkout: scripts/deploy
-
-      - name: Deploy
-        env:
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-        run: |
-          eval "$(ssh-agent -s)" >/dev/null
-          trap 'ssh-agent -k >/dev/null' EXIT
-          ssh-add -q - <<< "$DEPLOY_SSH_KEY"
-          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=scripts/deploy/known_hosts \
-              -o ConnectTimeout=20 -o ServerAliveInterval=15 "root@$HOST" deploy "$GITHUB_SHA"
-          echo "$HOST: \`${GITHUB_SHA:0:7}\` from $GITHUB_REF_NAME" >> "$GITHUB_STEP_SUMMARY"
-
-  deploy-us:
-    if: >-
-      !cancelled() && needs.image.result == 'success' &&
-      (needs.deploy-nl.result == 'success' || needs.deploy-nl.result == 'skipped') && (
-        github.event_name == 'push' && github.ref == 'refs/heads/main' ||
-        github.event_name == 'workflow_dispatch' && inputs.servers != 'nl')
-    needs: [image, deploy-nl]
-    runs-on: ubuntu-latest
-    environment:
-      name: us
-      url: https://mw2.dorost.nl
-    concurrency: deploy-us
-    env:
-      HOST: mw2.dorost.nl
-    steps: *deploy
+      github.event_name == 'workflow_dispatch'
+    needs: [image, bastion-images]
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit

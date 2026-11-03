@@ -1,0 +1,23 @@
+# A game server of the fleet (deploy/fleet.toml): the VM the bastion creates. deploy/node/bootstrap.sh
+# writes .env here; the game and the web UI's data are on the data disk at /srv/iw4x, which
+# outlives the VM. The web UI listens on the WireGuard address only: the bastion is its proxy.
+name: iw4x
+services:
+  server:
+    image: ghcr.io/dorost/iw4x-friends:${IMAGE_TAG:?IMAGE_TAG missing in .env}
+    network_mode: host # no Docker NAT on the game's UDP traffic
+    restart: unless-stopped
+    init: true # reaps exited Wine processes
+    environment:
+      IW4X_SERVER_DIR: /game
+      IW4X_PORT: 28960
+      UI_PORT: 8080
+      UI_HOST: ${UI_HOST:?UI_HOST missing in .env} # the WireGuard address
+      UI_PASSWORD: ${UI_PASSWORD:?UI_PASSWORD missing in .env} # the bastion's token for this run
+      JOIN_HOST: ${JOIN_HOST:?JOIN_HOST missing in .env} # the domain players connect to
+      UI_DATA_DIR: /data
+      AUTOSTART: "1"
+      # no TELEGRAM_*: the bastion posts the joins and leaves and serves the mini app
+    volumes:
+      - /srv/iw4x/game:/game
+      - /srv/iw4x/ui-data:/data

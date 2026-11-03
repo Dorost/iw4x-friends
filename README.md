@@ -147,7 +147,7 @@ The bot's messages in the group then get a **🎮 Servers** button that opens it
 
 ### Tonight? planner bot
 
-The same Telegram bot also plans the nights, for friends in NL and California. It runs on one server only (NL), as the `bot` service of `docker-compose.yml`, and is the only program that reads the bot's messages (`services/bot`).
+The same Telegram bot also plans the nights, for friends in NL and California. On our servers it runs on the bastion ([`deploy/README.md`](deploy/README.md)); on a single server of your own, as the `bot` service of `docker-compose.yml`. It is the only program that reads the bot's messages (`services/bot`).
 
 - 📣 `/play sat 20:00` (or `tomorrow 9pm`, `tonight`, `in 2h`, `21:30 pt`, `21:30 et`) posts a card with the time in each zone, **Sat 20:00 NL · 14:00 ET · 11:00 PT**, and **✅ In / 🤔 Maybe / ❌ Out** buttons. Once `BOT_MIN_PLAYERS` (3) are in it posts **🔥 Match on!** as a reply to the card. It never pins, so the group's pinned message stays
 - ⏰ 30 and 5 minutes before, everyone who is in gets a DM with `connect mw2-nl.dorost.nl`; who never started the bot in private is mentioned in the group instead
@@ -157,7 +157,7 @@ The same Telegram bot also plans the nights, for friends in NL and California. I
 - 🔔 `/link <in-game name>` ties you to your name in the game, `/watch <name>` (or `@username` of someone who did `/link`) DMs you when they join a server, `/unwatch` stops it
 - 🕹 `/servers` answers with the mini app buttons
 
-The bot asks each server in `TELEGRAM_APP_SERVERS` who is playing (`/tg/api/state`) every 20 seconds, signed like the mini app as the bot itself, which is in the group: nothing to change on the game servers. Caddy sends `https://<domain>/bot/` to the bot, which serves the Plan page; the servers' mini app opens it.
+The bot asks each server in `TELEGRAM_APP_SERVERS` who is playing (`/tg/api/state`) every 20 seconds, signed like the mini app as the bot itself, which is in the group: nothing to change on the game servers. On the bastion it asks the control plane for all servers at once instead (`BOT_STATES_URL`). Caddy sends `https://<domain>/bot/` to the bot, which serves the Plan page; the servers' mini app opens it.
 
 To run it on a server, add to its `.env` (the `TELEGRAM_*` lines are already there):
 
@@ -180,38 +180,20 @@ A second bot from @BotFather (`/newbot`) and a test group, so the real group and
 
 `task bot:test` runs the tests (time parsing over summer time in both zones, cards and RSVPs, overlaps, reminders, access checks, a dry run against a fake Telegram), black and ruff.
 
-### Updates from GitHub
+### Our servers: the fleet
 
-The servers behind `mw2.dorost.nl` and `mw2-nl.dorost.nl` get their updates from GitHub. Every push builds the server image and starts its web UI as a test; on `main` the image goes to `ghcr.io/dorost/iw4x-friends:<commit>` and is deployed to the NL server, then the US one: [`scripts/deploy/deploy.sh`](scripts/deploy/deploy.sh) checks out the commit and, when `services/ui` changed, restarts the game server with the new image (players get disconnected and can rejoin right away). If the web UI or the game doesn't answer after that, it goes back to the previous version and leaves the US server alone. A file changed by hand on a server (`scp`, `vps:sync-ui`) stops the deploy: put the change in `main` instead.
+The servers behind `mw2-nl.dorost.nl`, `mw2-us.dorost.nl` and `mw2-ist.dorost.nl` (Istanbul) run only when wanted: a bastion at `https://mw2.dorost.nl` creates each one by a schedule, or when someone boots it from the fleet page or the Telegram mini app. It destroys the server again once nobody plays. Every push to `main` deploys to the bastion, and the servers follow. How it works, its secrets and setting it up from scratch: [`deploy/README.md`](deploy/README.md).
 
-To try a PR on a server before merging it: **Actions → ci → Run workflow**, pick the PR's branch and the server (`nl`, `us` or `both`). It builds that commit's image and deploys it like above; the server keeps it until the next push to `main` (or Run workflow on `main`) puts `main` back. The branch has to be in this repo (push a fork's PR to a branch here first) and have this workflow (merge `main` into it if it's older).
-
-To set a server up for it, once, as root on the server:
-
-```sh
-cd ~/iw4x
-git init -q && git remote add origin https://github.com/Dorost/iw4x-friends.git
-git fetch -q origin main && git checkout -qf --detach origin/main
-# the image running now, to go back to if the first deploy fails
-docker tag "$(docker inspect -f '{{.Image}}' iw4x-server-1)" ghcr.io/dorost/iw4x-friends:pre-ci
-echo IMAGE_TAG=pre-ci >> .env
-```
-
-Then add the server's deploy key (the public half of the `DEPLOY_SSH_KEY` secret of its environment in the repo settings, `nl` or `us`) to `~/.ssh/authorized_keys`, limited to the deploy script:
-
-```
-restrict,command="bash /root/iw4x/scripts/deploy/deploy.sh" ssh-ed25519 AAAA... iw4x deploy
-```
-
-A new server also gets an environment with its own `DEPLOY_SSH_KEY`, a deploy job in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (a copy of `deploy-us`) and its host key (`/etc/ssh/ssh_host_ed25519_key.pub`) in [`scripts/deploy/known_hosts`](scripts/deploy/known_hosts).
+On the fleet, the bastion does the Telegram parts above itself: the mini app is `https://mw2.dorost.nl/tg/`, and it posts the joins and leaves. The game servers don't get the bot token.
 
 ## Repo layout
 
 - `scripts/windows/`, `scripts/mac/`, `scripts/linux/`: setup and helper scripts per system
 - `scripts/tools/`: maintenance (`task sync-config`, `task links`, `task telegram`)
-- `scripts/deploy/`: deploys from GitHub Actions to the servers (see [Updates from GitHub](#updates-from-github))
+- `deploy/`: the fleet: the bastion, the game servers it creates, their scripts and `fleet.toml` (see [Our servers: the fleet](#our-servers-the-fleet))
 - `config/`: shared game settings and classes, copied into the setup scripts by `task sync-config`
 - `services/ui/`: the server's web control page
+- `services/control/`: the bastion's control plane: boots and shuts down the game servers, the fleet page, the fleet's Telegram mini app
 - `services/bot/`: the Tonight? planner bot (see [Tonight? planner bot](#tonight-planner-bot))
 - `services/caddy/`: Caddy's config: HTTPS, the web UI and `/bot/`
 
