@@ -78,3 +78,23 @@ def test_the_server_brings_up_wireguard_before_it_needs_the_bastion():
     up = script.index("systemctl enable -q --now wg-quick@wg0")
     assert script.index("apt-get -o DPkg::Lock::Timeout=600 install -yq wireguard-tools") < up
     assert up < script.index('"$CONTROL_URL/healthz"')
+
+
+def test_the_heartbeat_keeps_reporting_before_the_game_download(tmp_path):
+    """Until the download starts there is no mw.zip to measure: the heartbeat must outlive
+    that, or a long step leaves the bastion without word and it fails the boot (it did)."""
+    script = (FLEET.parent / "node" / "bootstrap.sh").read_text()
+    block = script[script.index("# a sign of life") : script.index("heartbeat=$!")]
+    block = block.replace("sleep 60", "sleep 0.1").replace("/var/tmp/iw4x", f"{tmp_path}/none")
+    (tmp_path / "step").write_text("installing Docker\n")
+    (tmp_path / "reports").touch()
+    harness = f"""set -euo pipefail
+STEP_FILE='{tmp_path}/step'
+report() {{ echo "$1" >> '{tmp_path}/reports'; }}
+{block}
+sleep 1
+kill $! 2>/dev/null || true
+"""
+    subprocess.run(["bash", "-c", harness], check=True, timeout=10)
+    reports = (tmp_path / "reports").read_text().splitlines()
+    assert len(reports) > 1 and set(reports) == {"installing Docker"}
