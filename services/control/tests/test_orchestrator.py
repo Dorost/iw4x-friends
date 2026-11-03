@@ -252,6 +252,9 @@ async def test_new_commit_reaches_a_running_server_once_it_is_empty(fleet):
     await settle(orch)
     assert (NL, f"bash /opt/iw4x/deploy/node/update.sh {'c' * 40}") in orch.nodes.ssh_calls
     assert orch.row("nl").version == "c" * 40
+    # the update doesn't set the join password like a boot does: the bastion does it after
+    assert (NL, "POST", "/api/join-password") in orch.nodes.requests
+    assert orch.nodes.bodies[-1] == {"password": "join"}
 
 
 @pytest.mark.anyio
