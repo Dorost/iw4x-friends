@@ -390,6 +390,20 @@ async def test_open_to_everyone_and_back(fleet):
 
 
 @pytest.mark.anyio
+async def test_open_to_everyone_lasts_until_the_server_shuts_down(fleet):
+    orch, _, _ = fleet
+    await up(orch)
+    await orch.set_public("nl", True, "Yashar in Telegram")
+    posts(orch)
+    await orch.shutdown_now("nl", "test")
+    await settle(orch)
+    assert not orch.row("nl").join_public
+    assert orch.node_config("nl", need_game=False)["game_password"] == "join"
+    [off] = posts(orch)
+    assert off.endswith("🔒 the password is back for its next boot")
+
+
+@pytest.mark.anyio
 async def test_no_switch_without_a_fleet_password(tmp_path):
     orch, _, _ = make(tmp_path, NOW, game_password="")
     with pytest.raises(Busy):

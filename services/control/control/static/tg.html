@@ -232,7 +232,7 @@ function lockChip(s) {
 
 async function toggleLock(name) {
   const s = server(name), open = !s.public;
-  const text = open ? `Open ${s.title} to everyone? Anyone can join without the password.`
+  const text = open ? `Open ${s.title} to everyone until it shuts down? Anyone can join without the password.`
     : `Password protect ${s.title}? New players need the password.`;
   const when = s.status === "running" ? " Nobody playing is kicked." : " It applies from its next boot.";
   if (!await confirmed(text + when)) return;

@@ -297,8 +297,9 @@ class Orchestrator:
         self.start(name, "stop", self._stop(name, f"by {by}"))
 
     async def set_public(self, name: str, public: bool, by: str) -> None:
-        """Open a server to everyone, or back to GAME_JOIN_PASSWORD. Kept for its next boots; a
-        running server takes it right away for new joins (nobody playing is kicked)."""
+        """Open a server to everyone, or back to GAME_JOIN_PASSWORD. A running server takes it
+        right away for new joins (nobody playing is kicked), one that is off from its next boot.
+        Open to everyone lasts until the server shuts down: password protected is the default."""
         spec = self.s.servers.get(name)
         if not spec:
             raise KeyError(name)
@@ -527,6 +528,7 @@ class Orchestrator:
                 wg_public=None,
                 version=None,
                 ready_at=None,
+                join_public=False,  # open to everyone lasts one run: the next boot has the password
             )
             await self.sync_peers()
             self.states.pop(name, None)
@@ -544,7 +546,10 @@ class Orchestrator:
             return
         self.event(name, "off")
         if was_running:
-            self.tg.post(f"⚪ <b>{esc(spec.title)}</b> shut down ({esc(reason)})", silent=True)
+            back = " · 🔒 the password is back for its next boot" if row.join_public else ""
+            self.tg.post(
+                f"⚪ <b>{esc(spec.title)}</b> shut down ({esc(reason)}){back}", silent=True
+            )
 
     async def _update(self, name: str) -> None:
         spec = self.s.servers[name]

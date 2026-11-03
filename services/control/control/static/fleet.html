@@ -210,7 +210,7 @@ function act(name, action, btn) {
 // open to everyone, or back to GAME_JOIN_PASSWORD: kept for the server's next boots too
 function toggleLock(name, btn) {
   const s = F.servers.find(x => x.name === name), open = !s.public;
-  const text = open ? `Open ${s.title} to everyone? Anyone can join without the password.`
+  const text = open ? `Open ${s.title} to everyone until it shuts down? Anyone can join without the password.`
     : `Password protect ${s.title}? New players need the password.`;
   if (!confirm(text + (s.status === 'running' ? ' Nobody playing is kicked.' : ' It applies from its next boot.'))) return;
   return busy(btn, async () => {
