@@ -1091,6 +1091,20 @@ def tg_bots(b: Bots, request: Request):
     return {"ok": True}
 
 
+@app.post("/tg/api/restart")
+def tg_restart(request: Request):
+    """Fast restart of the running match: same map and mode, scores reset, everyone stays. Unlike
+    the web UI's Fast restart, it leaves the mode's limits as they are."""
+    user = telegram_user(request)
+    live = live_status()
+    if not live or not live["in_game"]:
+        raise HTTPException(409, "no match running")
+    rcon("fast_restart")
+    changed()
+    print(f"telegram app: {user.get('id')} {user.get('first_name')!r}: fast restart on {live['map']}", flush=True)
+    return {"ok": True}
+
+
 class Play(BaseModel):
     map: str
     mode: str

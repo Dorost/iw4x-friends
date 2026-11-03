@@ -203,3 +203,15 @@ def test_open_to_everyone_from_the_page_and_the_mini_app(web):
     )
     assert client.post("/tg/api/servers/nl/protect", headers=tma(AMIN), json={}).status_code == 200
     assert not orch.row("nl").join_public
+
+
+def test_mini_app_fast_restart_goes_to_the_server(web):
+    client, orch, _, _ = web
+    assert client.post("/tg/api/servers/nl/restart", headers=tma(AMIN), json={}).status_code == 409
+    running(orch)
+    orch.nodes.requests.clear()
+    assert (
+        client.post("/tg/api/servers/nl/restart", headers=tma(STRANGER), json={}).status_code == 403
+    )
+    assert client.post("/tg/api/servers/nl/restart", headers=tma(AMIN), json={}).status_code == 200
+    assert orch.nodes.requests == [("10.66.0.11", "POST", "/tg/api/restart")]
