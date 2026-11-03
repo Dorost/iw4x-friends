@@ -383,7 +383,7 @@ def routes(app: FastAPI, orch: Orchestrator, proxy_http: httpx.AsyncClient | Non
         who = user.get("first_name") or str(user["id"])
         if action in ("boot", "shutdown", "public", "protect"):
             return await act(name, action, f"{who} in Telegram")
-        if action not in ("play", "bots"):
+        if action not in ("play", "bots", "restart"):
             raise HTTPException(404, "no such action")
         spec, row = running(name)
         try:

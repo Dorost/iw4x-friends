@@ -114,6 +114,7 @@ let fleet = null;   // /tg/api/fleet: every server, off or on
 let view = null;    // the open screen: {kind: "map", name, mode, map} or {kind: "bots", name, fill, add, skill}
 let busy = false;
 const BOT_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="4" y="8" width="16" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 8V4M9 13h.01M15 13h.01M2 13v2M22 13v2" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>';
+const RESTART_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const POWER_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 3v8M6.3 6.3a8 8 0 1 0 11.4 0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>';
 
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"})[c]);
@@ -263,6 +264,7 @@ function card(s) {
       <div class="row" style="margin-top: 12px">
         <button class="primary" onclick="openPicker('${s.name}')" ${g ? "" : "disabled"}>Change map or mode</button>
         <button class="secondary icon" onclick="openBots('${s.name}')" ${g ? "" : "disabled"} aria-label="Bots" title="Bots">${BOT_ICON}</button>
+        <button class="secondary icon" onclick="restart('${s.name}')" ${match ? "" : "disabled"} aria-label="Restart the match" title="Restart the match">${RESTART_ICON}</button>
         <button class="secondary icon power" onclick="shutdown('${s.name}')" aria-label="Shut down" title="Shut down">${POWER_ICON}</button>
       </div>`;
   } else if (s.status === "provisioning" || s.status === "booting") {
@@ -301,6 +303,18 @@ async function boot(name) {
     await api(`/tg/api/servers/${name}/boot`, {});
     haptic("success");
     toast(`${s.title}: booting, the group gets a message when it's up`);
+  } catch (e) { haptic("error"); toast(e.message, true); }
+  refresh();
+}
+
+// fast restart: the same map and mode from the start, scores reset, nobody gets disconnected
+async function restart(name) {
+  const s = server(name), g = s.game;
+  if (!await confirmed(`Restart the match on ${g.map_name} (${g.mode_name})? Scores reset; everyone stays on the server.`)) return;
+  try {
+    await api(`/tg/api/servers/${name}/restart`, {});
+    haptic("success");
+    toast(`${s.title}: match restarted`);
   } catch (e) { haptic("error"); toast(e.message, true); }
   refresh();
 }
