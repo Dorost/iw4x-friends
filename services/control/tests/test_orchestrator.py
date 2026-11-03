@@ -333,8 +333,39 @@ async def test_one_player_is_one_join_and_one_leave(fleet):
         clock.advance(0.2)
         orch.presence["nl"].last -= 10
         await orch.poll_servers()
-    texts = posts(orch)[1:]  # after "is up"
+    texts = [t for t in posts(orch) if " joined " in t or " left " in t]
     assert texts == [
         "🟢 <b>XerS</b> joined Dorost NL\nPlaying (1): XerS",
         "🔴 <b>XerS2</b> left Dorost NL\nNobody playing now",
     ]
+
+
+@pytest.mark.anyio
+async def test_the_group_hears_who_booted_and_the_idle_rule(fleet):
+    orch, _, _ = fleet
+    await up(orch, ip=NL)
+    await orch.shutdown_now("nl", "test")
+    await settle(orch)
+    posts(orch)
+    orch.nodes.up.add(NL)
+    await orch.boot_now("nl", "Yashar in Telegram")
+    await settle(orch)
+    booted, is_up = posts(orch)
+    assert booted == (
+        "🚀 <b>Yashar</b> booted <b>NL</b>, up in about 5 minutes\n"
+        "🎯 <code>connect mw2-nl.dorost.nl</code>\n"
+        "⏳ It goes offline 15 min after it's up if nobody joins"
+    )
+    assert is_up.endswith("⏳ Goes offline in 15 min if nobody joins")
+
+
+@pytest.mark.anyio
+async def test_no_idle_warning_in_a_schedule_window(fleet):
+    orch, _, _ = fleet
+    schedule(orch, start="19:00")
+    orch.nodes.up.add(NL)
+    await orch.boot_now("nl", "the web UI")
+    await settle(orch)
+    booted, is_up = posts(orch)
+    assert booted.startswith("🚀 <b>Someone on the fleet page</b> booted <b>NL</b>")
+    assert "⏳" not in booted and "⏳" not in is_up

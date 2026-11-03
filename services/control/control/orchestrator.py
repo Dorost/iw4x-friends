@@ -54,6 +54,13 @@ class Busy(Exception):
     """The server is in the middle of something else."""
 
 
+def who(by: str) -> str:
+    """Who booted a server, for the group: the Telegram name, or the fleet page."""
+    if by.endswith(" in Telegram"):
+        return by.removesuffix(" in Telegram")
+    return "Someone on the fleet page" if by == "the web UI" else by
+
+
 def machine(spec: ServerSpec) -> Machine:
     return Machine(spec.label, spec.region, spec.plan, spec.volume_gb, spec.options)
 
@@ -260,6 +267,19 @@ class Orchestrator:
             return
         self.update(name, attempts=0)
         self.start(name, "boot", self._boot(name, by))
+        lines = [
+            f"🚀 <b>{esc(who(by))}</b> booted <b>{esc(spec.title)}</b>, up in about 5 minutes",
+            f"🎯 <code>connect {esc(spec.domain)}</code>",
+        ]
+        if line := self.idle_line(name, "It goes offline {m} min after it's up if nobody joins"):
+            lines.append(line)
+        self.tg.post("\n".join(lines))
+
+    def idle_line(self, name: str, text: str) -> str:
+        """The idle rule's warning for the group, or "" in a schedule window (no idle rule then)."""
+        if active_window(self.schedules(), name, self.now(), self.s.lead_minutes * 60):
+            return ""
+        return "⏳ " + text.format(m=self.s.idle_minutes)
 
     async def shutdown_now(self, name: str, by: str) -> None:
         spec = self.s.servers.get(name)
@@ -419,9 +439,13 @@ class Orchestrator:
         )
         row = self.row(name)
         self.event(name, f"up at {row.ip}")
-        self.tg.post(
-            f"🟢 <b>{esc(spec.title)}</b> is up\n🎯 <code>connect {esc(spec.domain)}</code>"
-        )
+        lines = [
+            f"🟢 <b>{esc(spec.title)}</b> is up",
+            f"🎯 <code>connect {esc(spec.domain)}</code>",
+        ]
+        if line := self.idle_line(name, "Goes offline in {m} min if nobody joins"):
+            lines.append(line)
+        self.tg.post("\n".join(lines))
 
     async def _failed(self, name: str, e: Exception) -> None:
         spec = self.s.servers[name]
