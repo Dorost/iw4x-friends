@@ -198,7 +198,7 @@ class Orchestrator:
             return False
         if self.update_failed.get(row.name) == self.s.version:
             return False
-        empty = humans_of(self.states.get(row.name)) == set()
+        empty = humans_of(self.states.get(row.name)) == {}
         return empty and (not row.last_human_at or now - row.last_human_at >= UPDATE_WHEN_EMPTY)
 
     def start(self, name: str, kind: str, coro) -> None:
@@ -231,7 +231,7 @@ class Orchestrator:
             )
             if joined or left:
                 server = (state or {}).get("name") or spec.title
-                text = presence_text(server, joined, left, self.presence[name].players)
+                text = presence_text(server, joined, left, self.presence[name].players.values())
                 self.tg.post(text, silent=not joined)  # only leaves: no notification sound
 
     async def sync_peers(self) -> None:

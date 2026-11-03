@@ -1018,6 +1018,8 @@ def tg_state(request: Request):
                    else read_cfg().get("sv_funweapons", "0"))  # until the poll loop sees the new match
         mode, mode_name = tg_mode(live["gametype"], weapons)
     players = live["players"] if status == "match" else []
+    # people, not bots; not a slot that is leaving (ZMBI) or one without a name yet
+    humans = [p for p in players if not p["bot"] and p["ping"] != "ZMBI" and p["name"].strip()]
     return {
         "name": (live and live["hostname"]) or server_name or JOIN_HOST or "IW4x",
         "address": st["address"] if st else "",
@@ -1026,7 +1028,9 @@ def tg_state(request: Request):
         "map_name": MAP_NAMES.get(live["map"], live["map"]) if status == "match" else "",
         "mode": mode,
         "mode_name": mode_name,
-        "players": sorted((p["name"] for p in players if not p["bot"]), key=str.lower),
+        "players": sorted((p["name"] for p in humans), key=str.lower),
+        # guid -> name: the fleet's bastion tells joins and leaves apart by guid, not by name
+        "humans": {p["guid"]: p["name"] for p in humans},
         "bots": sum(p["bot"] for p in players),
         "lobby_count": live["lobby_count"] if status == "lobby" else 0,
         "maps": [{k: m[k] for k in ("id", "name", "stock")} for m in (st["maps"] if st else [])],

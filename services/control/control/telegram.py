@@ -162,55 +162,58 @@ class Telegram:
 LEAVE_SECONDS = 60
 
 
-def humans_of(state: dict | None) -> set[str] | None:
-    """Names of the players (not bots) on a server, from its /tg/api/state. None when that isn't
-    known: no answer, or a lobby with people in it (IW4x can't list them)."""
+def humans_of(state: dict | None) -> dict[str, str] | None:
+    """The players (not bots) on a server, id -> name, from its /tg/api/state: by guid when the
+    server sends them (humans), else by name. None when that isn't known: no answer, or a lobby
+    with people in it (IW4x can't list them). Slots without a name don't count."""
     if state is None:
         return None
     status = state.get("status")
     if status == "offline":
-        return set()
+        return {}
     if status == "match":
-        return set(state.get("players") or [])
+        if isinstance(state.get("humans"), dict):
+            return {g: n for g, n in state["humans"].items() if str(n).strip()}
+        return {n: n for n in state.get("players") or [] if str(n).strip()}
     if status == "lobby" and not state.get("lobby_count"):
-        return set()
+        return {}
     return None
 
 
 class Presence:
     def __init__(self) -> None:
-        self.players: set[str] = set()
+        self.players: dict[str, str] = {}  # id -> name: joined and not left yet
         self.away: dict[str, float] = {}
         self.known = False  # the first list after a (re)start is taken as is
         self.last = 0.0
 
-    def update(self, humans: set[str] | None, now: float) -> tuple[list[str], list[str]]:
+    def update(self, humans: dict[str, str] | None, now: float) -> tuple[list[str], list[str]]:
         """Names that joined and that left since the last call (now: time.monotonic())."""
         dt = min(now - self.last, 10.0) if self.last else 0.0
         self.last = now
         if humans is None:
             return [], []
         if not self.known:
-            self.players, self.known = set(humans), True
+            self.players, self.known = dict(humans), True
             return [], []
-        joined = sorted(humans - self.players, key=str.lower)
+        joined = sorted((n for i, n in humans.items() if i not in self.players), key=str.lower)
         left = []
-        for name in self.players - humans:
-            self.away[name] = self.away.get(name, 0.0) + dt
-            if self.away[name] >= LEAVE_SECONDS:
-                del self.away[name]
-                left.append(name)
-        for name in humans:
-            self.away.pop(name, None)
-        self.players = (self.players - set(left)) | humans
+        for i in [i for i in self.players if i not in humans]:
+            self.away[i] = self.away.get(i, 0.0) + dt
+            if self.away[i] >= LEAVE_SECONDS:
+                del self.away[i]
+                left.append(self.players.pop(i))
+        for i in humans:
+            self.away.pop(i, None)
+        self.players.update(humans)  # also takes new names
         return joined, sorted(left, key=str.lower)
 
     def reset(self) -> None:
         """The server went away: the next one starts with nobody known."""
-        self.players, self.away, self.known, self.last = set(), {}, False, 0.0
+        self.players, self.away, self.known, self.last = {}, {}, False, 0.0
 
 
-def presence_text(server: str, joined: list[str], left: list[str], playing: set[str]) -> str:
+def presence_text(server: str, joined: list[str], left: list[str], playing) -> str:
     def bold(names: list[str]) -> str:
         return ", ".join(f"<b>{esc(n)}</b>" for n in names)
 

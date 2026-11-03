@@ -302,3 +302,28 @@ async def test_shutdown_while_the_cloud_makes_the_vm_leaves_no_vm(fleet):
     await stopping
     await settle(orch)
     assert orch.row("nl").status == OFF and cloud.running() == []
+
+
+@pytest.mark.anyio
+async def test_one_player_is_one_join_and_one_leave(fleet):
+    """Players go by guid: a slot without a name (connecting) or a new name is no new player."""
+    orch, _, clock = fleet
+    await up(orch)
+    states = []
+
+    async def state(ip, token):
+        return {"status": "match", "name": "Dorost NL", "players": [], **states[-1]}
+
+    orch.nodes.state = state
+    for humans in ({}, {"g1": "XerS"}, {"g1": "XerS", "g2": " "}, {"g1": "XerS2"}, {}):
+        states.append({"humans": humans})
+        await orch.poll_servers()
+    for _ in range(7):  # gone for longer than a map change
+        clock.advance(0.2)
+        orch.presence["nl"].last -= 10
+        await orch.poll_servers()
+    texts = posts(orch)[1:]  # after "is up"
+    assert texts == [
+        "🟢 <b>XerS</b> joined Dorost NL\nPlaying (1): XerS",
+        "🔴 <b>XerS2</b> left Dorost NL\nNobody playing now",
+    ]
