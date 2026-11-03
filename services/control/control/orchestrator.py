@@ -296,6 +296,34 @@ class Orchestrator:
                 await self.tasks[name]
         self.start(name, "stop", self._stop(name, f"by {by}"))
 
+    async def set_public(self, name: str, public: bool, by: str) -> None:
+        """Open a server to everyone, or back to GAME_JOIN_PASSWORD. A running server takes it
+        right away for new joins (nobody playing is kicked), one that is off from its next boot.
+        Open to everyone lasts until the server shuts down: password protected is the default."""
+        spec = self.s.servers.get(name)
+        if not spec:
+            raise KeyError(name)
+        if not self.s.game_password:
+            raise Busy("there's no join password to switch to: set GAME_JOIN_PASSWORD first")
+        self.update(name, join_public=public)
+        row = self.row(name)
+        now = ""
+        if row.status == RUNNING and row.token:
+            password = "" if public else self.s.game_password
+            r = await self.nodes.request(
+                spec.wg_ip, row.token, "POST", "/api/join-password", {"password": password}
+            )
+            if r.status_code == 404:  # a server on an older version: it takes it when it updates
+                now = " (from its next update)"
+            elif r.status_code >= 400:
+                raise Busy(f"{spec.title} didn't take it ({r.status_code})")
+        elif row.status != RUNNING:
+            now = " (from its next boot)"
+        what = "opened <b>{t}</b> to everyone" if public else "password protected <b>{t}</b>"
+        self.event(name, f"{'open to everyone' if public else 'password protected'}{now} ({by})")
+        icon = "🌐" if public else "🔒"
+        self.tg.post(f"{icon} <b>{esc(who(by))}</b> {what.format(t=esc(spec.title))}{esc(now)}")
+
     async def update_now(self, name: str) -> None:
         row = self.row(name)
         if row.status != RUNNING:
@@ -332,6 +360,12 @@ class Orchestrator:
             "ui_host": spec.wg_ip,
             "hostname": spec.hostname,
             "setup_password": self.s.setup_password if need_game else "",
+            # None: no fleet password, the server keeps its own; "": open to everyone
+            "game_password": (
+                ("" if self.row(name).join_public else self.s.game_password)
+                if self.s.game_password
+                else None
+            ),
         }
 
     # ---------- the tasks ----------
@@ -494,6 +528,7 @@ class Orchestrator:
                 wg_public=None,
                 version=None,
                 ready_at=None,
+                join_public=False,  # open to everyone lasts one run: the next boot has the password
             )
             await self.sync_peers()
             self.states.pop(name, None)
@@ -511,7 +546,10 @@ class Orchestrator:
             return
         self.event(name, "off")
         if was_running:
-            self.tg.post(f"⚪ <b>{esc(spec.title)}</b> shut down ({esc(reason)})", silent=True)
+            back = " · 🔒 the password is back for its next boot" if row.join_public else ""
+            self.tg.post(
+                f"⚪ <b>{esc(spec.title)}</b> shut down ({esc(reason)}){back}", silent=True
+            )
 
     async def _update(self, name: str) -> None:
         spec = self.s.servers[name]

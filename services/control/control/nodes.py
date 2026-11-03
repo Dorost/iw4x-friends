@@ -99,6 +99,7 @@ class FakeNodes:
         self.players: dict[str, list[str]] = {}
         self.ssh_calls: list[tuple[str, str]] = []
         self.requests: list[tuple[str, str, str]] = []
+        self.bodies: list = []
 
     async def state(self, ip: str, token: str) -> dict | None:
         if ip not in self.up:
@@ -123,6 +124,7 @@ class FakeNodes:
 
     async def request(self, ip, token, method, path, body=None, user=None) -> httpx.Response:
         self.requests.append((ip, method, path))
+        self.bodies.append(body)
         return httpx.Response(200, json={"ok": True})
 
     async def ssh(self, ip: str, command: str, timeout: float = 600) -> tuple[int, str]:

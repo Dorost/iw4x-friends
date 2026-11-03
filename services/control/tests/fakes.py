@@ -44,7 +44,7 @@ def make(tmp: Path, now: datetime, **settings) -> tuple[Orchestrator, FakeCloud,
         cloudflare_token="c",
         setup_password="setup",
         version=SHA,
-        **settings,
+        **{"game_password": "join", **settings},
     )
     cloud = FakeCloud("vultr", boot_polls=1)
     clock = Clock(now)

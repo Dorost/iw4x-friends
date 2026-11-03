@@ -99,6 +99,7 @@
   .note-line { font-size: 13px; color: var(--hint); margin: 2px 0 12px; }
   .note-line.bad { color: var(--danger); }
   .working { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .lock { display: inline-flex; align-items: center; gap: 5px; margin: 0 0 10px; padding: 4px 11px; border-radius: 99px; font-size: 13px; font-weight: 500; background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
 </style>
 </head>
 <body>
@@ -223,6 +224,26 @@ function openPlan(replace) {
   location[replace ? "replace" : "assign"](`${PLAN}#${params}`);
 }
 
+// open to everyone or password protected: a small chip on the card that flips it
+function lockChip(s) {
+  if (!s.lockable) return "";
+  return `<button class="lock" onclick="toggleLock('${s.name}')">${s.public ? "🌐 Open to everyone" : "🔒 Password"}</button>`;
+}
+
+async function toggleLock(name) {
+  const s = server(name), open = !s.public;
+  const text = open ? `Open ${s.title} to everyone until it shuts down? Anyone can join without the password.`
+    : `Password protect ${s.title}? New players need the password.`;
+  const when = s.status === "running" ? " Nobody playing is kicked." : " It applies from its next boot.";
+  if (!await confirmed(text + when)) return;
+  try {
+    await api(`/tg/api/servers/${name}/${open ? "public" : "protect"}`, {});
+    haptic("success");
+    toast(`${s.title}: ${open ? "open to everyone" : "password protected"}`);
+  } catch (e) { haptic("error"); toast(e.message, true); }
+  refresh();
+}
+
 function card(s) {
   const g = s.status === "running" ? s.game : null;
   const match = g && g.status === "match";
@@ -237,7 +258,7 @@ function card(s) {
     const bots = g && g.bots ? `<span class="hint"> · ${g.bots} bot${g.bots > 1 ? "s" : ""}</span>` : "";
     const until = s.reason === "scheduled" ? `Scheduled until ${clock(s.stops_at)}`
       : s.reason === "idle" && s.stops_at ? `Shuts down at ${clock(s.stops_at)} unless someone joins` : "";
-    body = `<div class="players">${people}${bots}</div>
+    body = `${lockChip(s)}<div class="players">${people}${bots}</div>
       <div class="hint">connect ${esc(s.domain)}${until ? " · " + until : ""}</div>
       <div class="row" style="margin-top: 12px">
         <button class="primary" onclick="openPicker('${s.name}')" ${g ? "" : "disabled"}>Change map or mode</button>
@@ -262,6 +283,7 @@ function card(s) {
     const hold = s.hold_off_until && s.hold_off_until > fleet.now ? ` · shut down until ${clock(s.hold_off_until)}` : "";
     body = `${s.status === "failed" && s.error ? `<div class="note-line bad">${esc(s.error)}</div>` : ""}
       <div class="note-line">${next}${hold}</div>
+      ${lockChip(s)}
       <button class="primary" onclick="boot('${s.name}')" ${s.busy ? "disabled" : ""}>Boot ${esc(s.title)}</button>`;
   }
   const banner = match ? ` style="background-image: url('${thumb(s.name, g.map)}')"` : "";

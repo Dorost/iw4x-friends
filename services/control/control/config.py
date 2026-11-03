@@ -96,6 +96,7 @@ class Settings:
     zenlayer_key_password: str = ""
     cloudflare_token: str = ""
     setup_password: str = ""  # decrypts the game download links in the setup scripts
+    game_password: str = ""  # the join password of every game server; empty: each keeps its own
     admin_ssh_keys: list[str] = field(default_factory=list)
     version: str = ""  # the commit deployed here: game servers run the same one
     idle_minutes: int = 15  # outside a schedule window, a server with nobody on stops after this
@@ -139,6 +140,7 @@ def load() -> Settings:
         zenlayer_key_password=env("ZENLAYER_ACCESS_KEY_PASSWORD", "").strip(),
         cloudflare_token=env("CLOUDFLARE_DNS_TOKEN", "").strip(),
         setup_password=env("MW_SETUP_PASSWORD", ""),
+        game_password=env("GAME_JOIN_PASSWORD", ""),
         admin_ssh_keys=_list(env("ADMIN_SSH_KEYS", "")),
         version=env("IMAGE_TAG", "").strip(),
         idle_minutes=int(env("IDLE_MINUTES", "") or 15),
