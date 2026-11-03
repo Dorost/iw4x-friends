@@ -100,6 +100,13 @@
   .note-line.bad { color: var(--danger); }
   .working { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
   .lock { display: inline-flex; align-items: center; gap: 5px; margin: 0 0 10px; padding: 4px 11px; border-radius: 99px; font-size: 13px; font-weight: 500; background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+  .players.tap { cursor: pointer; }
+  .players.tap .go { color: var(--hint); margin-left: 4px; }
+  .roster { display: flex; flex-direction: column; gap: 8px; }
+  .prow { display: flex; align-items: center; gap: 10px; background: var(--card); border-radius: 12px; padding: 10px 12px; }
+  .prow .who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+  .prow .kick { padding: 7px 13px; border-radius: 10px; font-weight: 600; color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+  .prow .kick:disabled { opacity: .45; }
 </style>
 </head>
 <body>
@@ -169,6 +176,7 @@ async function refresh() {
     return;
   }
   if (!view) renderList();
+  else if (view.kind === "players") renderPlayers();
 }
 
 // a screen over the list (map picker, bots), with Telegram's back button
@@ -259,7 +267,7 @@ function card(s) {
     const bots = g && g.bots ? `<span class="hint"> · ${g.bots} bot${g.bots > 1 ? "s" : ""}</span>` : "";
     const until = s.reason === "scheduled" ? `Scheduled until ${clock(s.stops_at)}`
       : s.reason === "idle" && s.stops_at ? `Shuts down at ${clock(s.stops_at)} unless someone joins` : "";
-    body = `${lockChip(s)}<div class="players">${people}${bots}</div>
+    body = `${lockChip(s)}<div class="players${match ? " tap" : ""}" ${match ? `onclick="openPlayers('${s.name}')"` : ""}>${people}${bots}${match ? '<span class="go">›</span>' : ""}</div>
       <div class="hint">connect ${esc(s.domain)}${until ? " · " + until : ""}</div>
       <div class="row" style="margin-top: 12px">
         <button class="primary" onclick="openPicker('${s.name}')" ${g ? "" : "disabled"}>Change map or mode</button>
@@ -380,6 +388,47 @@ async function play(now) {
     now ? `${s.title}: now ${what}` : `${s.title}: next match ${what}`);
 }
 
+// ---------- players: who is on, kick (the list follows the server live) ----------
+
+function openPlayers(name) {
+  openView({kind: "players", name, kicking: null}, `
+    <header><h1>Players</h1><div class="hint" id="where"></div></header>
+    <div class="roster" id="roster"></div>
+    <div class="hint note" id="rosterNote"></div>`);
+  renderPlayers();
+}
+
+function renderPlayers() {
+  const s = server(view.name), g = s && s.status === "running" ? s.game : null;
+  const roster = document.getElementById("roster");
+  if (!roster) return;
+  document.getElementById("where").textContent = g && g.status === "match"
+    ? `${s.title} · ${g.map_name} · ${g.mode_name}` : `${s ? s.title : view.name} · no match running`;
+  if (!g || g.status !== "match") { roster.innerHTML = ""; return; }
+  const list = g.roster || g.players.map(name => ({name}));  // roster: from servers that can kick
+  roster.innerHTML = list.length ? list.map(p => `<div class="prow">
+      <span class="who">${esc(p.name)}</span>
+      ${p.score !== undefined ? `<span class="hint">${esc(p.score)} pts · ${esc(p.ping)} ms</span>` : ""}
+      ${p.guid ? `<button class="kick" onclick="kick(${Number(p.num)}, '${esc(p.guid)}', this)" ${view.kicking === p.guid ? "disabled" : ""}>Kick</button>` : ""}
+    </div>`).join("") : `<div class="hint">Nobody playing</div>`;
+  document.getElementById("rosterNote").textContent = (g.bots ? `${g.bots} bot${g.bots > 1 ? "s" : ""} too (the bots button sets them). ` : "")
+    + (g.roster ? "" : "Kicking works once this server has updated.");
+}
+
+async function kick(num, guid, btn) {
+  const s = server(view.name), p = (s.game.roster || []).find(x => x.guid === guid);
+  if (!p || !await confirmed(`Kick ${p.name} from ${s.title}?`)) return;
+  view.kicking = guid;
+  btn.disabled = true;
+  try {
+    await api(`/tg/api/servers/${view.name}/kick`, {num, guid});
+    haptic("success");
+    toast(`${p.name} kicked`);
+  } catch (e) { haptic("error"); toast(e.message, true); }
+  view.kicking = null;
+  refresh();
+}
+
 // ---------- bots ----------
 
 function openBots(name) {
@@ -436,7 +485,13 @@ if (!INIT) {
   if (nativeBack()) tg.BackButton.onClick(closeView);
   if (tg.initDataUnsafe.start_param === "plan") openPlan(true);  // t.me/<bot>?startapp=plan
   else refresh();
-  setInterval(() => { if (!view && !document.hidden) refresh(); }, 5000);
+  // the list every 6 s; the players screen every 2 s, so a kick or a join shows right away
+  let ticks = 0;
+  setInterval(() => {
+    if (document.hidden) return;
+    if (view && view.kind === "players") refresh();
+    else if (!view && ++ticks % 3 === 0) refresh();
+  }, 2000);
 }
 </script>
 </body>
