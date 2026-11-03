@@ -6,12 +6,12 @@ Our servers don't run all the time. A small always-on VM, the **bastion** (`http
                           players: connect mw2-nl.dorost.nl (UDP 28960)
                                          │
  Telegram ── mini app, messages ──┐      ▼
- browser ─── fleet page ──────────┤   ┌──────────────┐   ┌──────────────┐   ┌───────────────────┐
- GitHub Actions ── deploy (SSH) ──┤   │ NL  (Vultr)  │   │ US  (Vultr)  │   │ Istanbul (Zenlayer)│
-                                  ▼   │ game server  │   │ game server  │   │ game server        │
-                ┌──────────────────┐  │ its own disk │   │ its own disk │   │ its own disk       │
-                │ bastion (Vultr)  │  └──────┬───────┘   └──────┬───────┘   └─────────┬─────────┘
-                │ control plane    │◄────────┴──── WireGuard ───┴─────────────────────┘
+ browser ─── fleet page ──────────┤   ┌──────────────┐   ┌──────────────┐   ┌───────────────────┐   ┌──────────────┐
+ GitHub Actions ── deploy (SSH) ──┤   │ NL  (Vultr)  │   │ US  (Vultr)  │   │ Istanbul (Zenlayer)│   │ Milan (Vultr)│
+                                  ▼   │ game server  │   │ game server  │   │ game server        │   │ game server  │
+                ┌──────────────────┐  │ its own disk │   │ its own disk │   │ its own disk       │   │ its own disk │
+                │ bastion (Vultr)  │  └──────┬───────┘   └──────┬───────┘   └─────────┬─────────┘   └──────┬───────┘
+                │ control plane    │◄────────┴──── WireGuard ───┴─────────────────────┴─────────────────────┘
                 │ planner bot      │   (each server's web UI and SSH: only through here)
                 │ Caddy (HTTPS)    │
                 └──────────────────┘
@@ -20,7 +20,7 @@ Our servers don't run all the time. A small always-on VM, the **bastion** (`http
 - **The bastion** runs the control plane ([`services/control`](../services/control)), the planner bot ([`services/bot`](../services/bot)) and Caddy, from [`bastion/docker-compose.yml`](bastion/docker-compose.yml). Its own disk keeps the schedules, the bot's database and the HTTPS certificates, so a rebuilt bastion carries on where the old one was.
 - **A game server** is a VM made from plain Ubuntu at every boot, the same way each time ([`node/bootstrap.sh`](node/bootstrap.sh)). What has to last is on the server's own disk, which outlives the VM: the game files (17 GB, downloaded on its first boot only), `server.cfg` and the web UI's presets. Shutting down destroys the VM and keeps the disk, so nothing is billed for the VM while it's off.
 - **WireGuard** connects the bastion with the servers. A server's web UI and SSH listen only on it; to the internet a server only opens the game port.
-- **Domains:** players connect to `mw2-nl.dorost.nl`, `mw2-us.dorost.nl` and `mw2-ist.dorost.nl`. While a server runs, its domain points at its VM, otherwise at the bastion.
+- **Domains:** players connect to `mw2-nl.dorost.nl`, `mw2-us.dorost.nl`, `mw2-ist.dorost.nl` and `mw2-milan.dorost.nl`. While a server runs, its domain points at its VM, otherwise at the bastion.
 - **Telegram:** the mini app (`https://mw2.dorost.nl/tg/`) shows every server, boots and shuts them down, and changes map, mode and bots. The bastion posts joins and leaves, and when a server is up or shut down. The game servers never get the bot token.
 - **Fleet page** (`https://mw2.dorost.nl`, `UI_PASSWORD`): every server with boot and shut down, the schedules, what happened, and each running server's own control page at `/s/<server>/`.
 
@@ -50,7 +50,7 @@ All in the GitHub environment **`bastion`** (Settings → Environments). The dep
 | --- | --- |
 | `UI_PASSWORD` | the fleet page's password |
 | `TELEGRAM_BOT_TOKEN` | the bot (@BotFather) |
-| `VULTR_API_KEY` | creates and destroys the bastion and the NL and US servers (Vultr: Account → API) |
+| `VULTR_API_KEY` | creates and destroys the bastion and the NL, US and Milan servers (Vultr: Account → API) |
 | `CLOUDFLARE_DNS_TOKEN` | points the domains at the VMs (Cloudflare: API Tokens → "Edit zone DNS" for `dorost.nl`) |
 | `MW_SETUP_PASSWORD` | the setup password: a server's first boot decrypts the game's download links with it |
 | `ZENLAYER_ACCESS_KEY_ID`, `ZENLAYER_ACCESS_KEY_PASSWORD` | Istanbul (Zenlayer console: Access Keys). Without them, Istanbul doesn't show up |
@@ -89,7 +89,7 @@ The always-on VPSes from before (Vultr labels `iw4x` and `iw4x-nl`) can be destr
 
 ## Running it
 
-- **SSH:** `ssh root@mw2.dorost.nl` for the bastion, `ssh -J root@mw2.dorost.nl root@10.66.0.11` for a running server (`.12` US, `.13` Istanbul), with a key from `ADMIN_SSH_KEYS`.
+- **SSH:** `ssh root@mw2.dorost.nl` for the bastion, `ssh -J root@mw2.dorost.nl root@10.66.0.11` for a running server (`.12` US, `.13` Istanbul, `.14` Milan), with a key from `ADMIN_SSH_KEYS`.
 - **Logs:** on the bastion, `cd /opt/iw4x && docker compose -f deploy/bastion/docker-compose.yml logs control` (or `bot`, `caddy`). On a server, `/var/log/iw4x-bootstrap.log` for its setup and `cd /opt/iw4x && docker compose -f deploy/node/docker-compose.yml logs` for the game server. A failed boot keeps its VM for 10 minutes, so there's time to look.
 - **Trying the control plane:** `task control:dev` runs the fleet page on `http://localhost:8070` (password `dev`) with pretend clouds and servers. Nothing is created and nothing goes to Telegram. `task control:test` runs its tests.
-- **Costs:** the bastion is Vultr's `vc2-1c-1gb` ($5/month). A game server is `vhf-2c-4gb`, $0.033 per hour while it runs. Each disk is billed every month, running or not (Vultr NVMe block storage for the game servers, HDD for the bastion; Zenlayer's data disk for Istanbul). A disk made before the switch to NVMe stays HDD: the bastion finds it by its label and keeps using it.
+- **Costs:** the bastion is Vultr's `vc2-1c-1gb` ($5/month). A game server is `vhf-2c-4gb`, $0.033 per hour while it runs; Milan has no such plan and is `voc-c-2c-4gb-50s-amd`, $0.055 per hour. Each disk is billed every month, running or not (Vultr NVMe block storage for the game servers, HDD for the bastion; Zenlayer's data disk for Istanbul). A disk made before the switch to NVMe stays HDD: the bastion finds it by its label and keeps using it.
