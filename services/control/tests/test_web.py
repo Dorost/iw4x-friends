@@ -76,7 +76,7 @@ def test_the_fleet_page_needs_the_password(web):
     assert client.post("/api/auth/login", json={"password": "nope"}).status_code == 401
     login(client)
     fleet = client.get("/api/fleet").json()
-    assert [s["name"] for s in fleet["servers"]] == ["nl", "us", "ist"]
+    assert [s["name"] for s in fleet["servers"]] == ["nl", "us", "ist", "milan"]
     ist = fleet["servers"][2]
     assert not ist["available"] and ist["provider"] == "zenlayer"  # no Zenlayer key here
     assert client.get("/").status_code == 200
@@ -139,7 +139,7 @@ def test_mini_app_needs_telegram_and_the_group(web):
     assert client.get("/tg/api/fleet", headers=tma(AMIN, age=2 * 86400)).status_code == 401
     assert client.get("/tg/api/fleet", headers=tma(STRANGER)).status_code == 403
     fleet = client.get("/tg/api/fleet", headers=tma(AMIN)).json()
-    assert [s["name"] for s in fleet["servers"]] == ["nl", "us"]  # Istanbul has no key here
+    assert [s["name"] for s in fleet["servers"]] == ["nl", "us", "milan"]  # no Istanbul: no key
     assert client.post("/tg/api/servers/nl/boot", headers=tma(AMIN), json={}).status_code == 200
     assert calls == [("boot", "nl", "Amin in Telegram")]
     play = {"map": "mp_rust", "mode": "war", "now": True}
