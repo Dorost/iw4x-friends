@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # First boot of a game server of the fleet (deploy/fleet.toml). The user-data the bastion wrote
-# (services/control/control/userdata.py) set up WireGuard and /etc/iw4x/node.env, cloned the
-# repo at the bastion's commit and runs this. Each step is reported to the bastion, which counts
-# the server as up once its web UI answers.
+# (services/control/control/userdata.py) wrote the WireGuard config and /etc/iw4x/node.env,
+# cloned the repo at the bastion's commit and runs this. Each step is reported to the bastion,
+# which counts the server as up once its web UI answers.
+#   0. WireGuard up: the reports and the settings come through it
 #   1. Docker; the data disk at /srv/iw4x (formatted the first time)
 #   2. the settings from the bastion: the commit's image, the domain, and the setup password
 #      when the game isn't on the disk yet
@@ -45,6 +46,11 @@ trap 'report "$(cat "$STEP_FILE" 2>/dev/null) (bootstrap.sh line $LINENO)" 1' ER
 ) &
 heartbeat=$!
 trap 'kill $heartbeat 2>/dev/null || true' EXIT
+
+# the tunnel to the bastion first: until it's up, nothing reaches the bastion (not even a report)
+echo "connecting to the bastion" > "$STEP_FILE"
+apt-get -o DPkg::Lock::Timeout=600 install -yq wireguard-tools >/dev/null
+systemctl enable -q --now wg-quick@wg0
 
 step "waiting for the bastion over WireGuard"
 for (( i = 0; i < 60; i++ )); do

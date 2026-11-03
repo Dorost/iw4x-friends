@@ -68,3 +68,12 @@ def test_keys(tmp_path):
     assert (tmp_path / "ssh" / "id").stat().st_mode & 0o777 == 0o600
     pem = (tmp_path / "ssh" / "id").read_text()
     assert keys.public_of(pem, "c").split()[:2] == line.split()[:2]
+
+
+def test_the_server_brings_up_wireguard_before_it_needs_the_bastion():
+    """The user-data only writes the WireGuard config: deploy/node/bootstrap.sh installs and
+    starts it, before its first call to the bastion (a first real boot failed on this)."""
+    script = (FLEET.parent / "node" / "bootstrap.sh").read_text()
+    up = script.index("systemctl enable -q --now wg-quick@wg0")
+    assert script.index("apt-get -o DPkg::Lock::Timeout=600 install -yq wireguard-tools") < up
+    assert up < script.index('"$CONTROL_URL/healthz"')
