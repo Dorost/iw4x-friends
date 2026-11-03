@@ -59,37 +59,45 @@ free_gb() { echo $(( $(df -Pk "$1" | awk 'NR==2 {print $4}') / 1024 / 1024 )); }
 random() { LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "$1" || true; }   # tr gets SIGPIPE when head is done
 
 # Download $1 ($2 bytes) to $3 over $PARTS connections at once: S3 serves each one at only
-# ~13 MB/s. Parts are kept in $3.parts/ so a re-run resumes them, then joined into $3.
+# ~13 MB/s. Parts are kept in $3.parts/ so a re-run resumes them, then joined into $3. Each part
+# tries again on its own when its connection drops or stalls (up to PART_TRIES times), so one
+# slow connection doesn't hold up the others (on a weak network, many drop: Istanbul).
 PARTS=16
+PART_TRIES=30
+fetch_part() {  # fetch_part <url> <part file> <first byte> <last byte>
+  local url=$1 file=$2 start=$3 last=$4 have try
+  for (( try = 1; try <= PART_TRIES; try++ )); do
+    have=$(size_of "$file")
+    (( start + have <= last )) || return 0
+    # a stalled connection gives up after 30s, and this part goes on where it stopped
+    curl -sfL --speed-limit 1000 --speed-time 30 -r $(( start + have ))-"$last" "$url" >> "$file" ||
+      sleep $(( try < 5 ? try * 2 : 10 ))
+  done
+  have=$(size_of "$file")
+  (( start + have > last ))
+}
 fetch_parallel() {
-  local url=$1 size=$2 out=$3 n=$PARTS chunk i start last have round p alive
-  local -a pids
+  local url=$1 size=$2 out=$3 n=$PARTS chunk i start last p alive
+  local -a pids=()
   chunk=$(( (size + n - 1) / n ))
   # parts cut for another count of connections (an older run) don't fit these: start over
   [[ "$(cat "$out.parts/count" 2>/dev/null)" == "$n" ]] || rm -rf "$out.parts"
   mkdir -p "$out.parts"
   echo "$n" > "$out.parts/count"
-  for round in 1 2 3 4 5; do
-    pids=()
-    for (( i = 0; i < n; i++ )); do
-      start=$(( i * chunk )) last=$(( (i + 1) * chunk - 1 ))
-      (( last < size )) || last=$(( size - 1 ))
-      have=$(size_of "$out.parts/$i")
-      (( start + have <= last )) || continue
-      # a stalled connection gives up after 30s, the next round picks up where it stopped
-      curl -sfL --speed-limit 1000 --speed-time 30 -r $(( start + have ))-$last "$url" >> "$out.parts/$i" &
-      pids+=($!)
-    done
-    (( ${#pids[@]} )) || break
-    alive=1
-    while (( alive )); do
-      sleep 2
-      alive=0; for p in "${pids[@]}"; do kill -0 "$p" 2>/dev/null && alive=1; done
-      printf '\r    %d of %d MB' $(( $(parts_size "$out") / 1048576 )) $(( size / 1048576 ))
-    done
-    wait "${pids[@]}" || true
-    echo
+  for (( i = 0; i < n; i++ )); do
+    start=$(( i * chunk )) last=$(( (i + 1) * chunk - 1 ))
+    (( last < size )) || last=$(( size - 1 ))
+    fetch_part "$url" "$out.parts/$i" "$start" "$last" &
+    pids+=($!)
   done
+  alive=1
+  while (( alive )); do
+    sleep 2
+    alive=0; for p in "${pids[@]}"; do kill -0 "$p" 2>/dev/null && alive=1; done
+    printf '\r    %d of %d MB' $(( $(parts_size "$out") / 1048576 )) $(( size / 1048576 ))
+  done
+  wait "${pids[@]}" || true
+  echo
   (( $(parts_size "$out") == size )) || return 1
   rm -f "$out"
   for (( i = 0; i < n; i++ )); do cat "$out.parts/$i" >> "$out"; rm "$out.parts/$i"; done
