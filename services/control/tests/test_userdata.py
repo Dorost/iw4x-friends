@@ -150,3 +150,32 @@ kill $! 2>/dev/null || true
     subprocess.run(["bash", "-c", harness], check=True, timeout=10)
     reports = (tmp_path / "reports").read_text().splitlines()
     assert len(reports) > 1 and set(reports) == {"installing Docker"}
+
+
+NAME, EMPTY, OWN = 'set sv_hostname "NL"', 'set g_password ""', 'set g_password "own"'
+JOIN = 'set g_password "s3cr"'
+
+
+@pytest.mark.parametrize(
+    "password, before, after",
+    [
+        ("s3cr", [EMPTY, NAME], [NAME, JOIN]),
+        ("s3cr", [NAME], [NAME, JOIN]),
+        ("", [OWN], [OWN]),  # no fleet password: the server's own stays
+        ("null", [OWN], [OWN]),  # how jq prints a missing field
+    ],
+)
+def test_the_join_password_goes_into_server_cfg(tmp_path, password, before, after):
+    """bootstrap.sh's own lines, run on a server.cfg: GAME_JOIN_PASSWORD replaces g_password."""
+    script = (FLEET.parent / "node" / "bootstrap.sh").read_text()
+    start = script.index("# the fleet's join password")
+    block = script[start : script.index("\nPY\n", start) + 4]
+    cfg = tmp_path / "game" / "main" / "server.cfg"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text("\n".join(before) + "\n")
+    harness = f"""set -euo pipefail
+DATA='{tmp_path}'
+value() {{ echo '{password}'; }}
+{block}"""
+    subprocess.run(["bash", "-c", harness], check=True, timeout=10)
+    assert cfg.read_text().splitlines() == after

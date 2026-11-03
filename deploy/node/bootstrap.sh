@@ -8,7 +8,8 @@
 #   1. the data disk at /srv/iw4x (formatted the first time)
 #   2. the settings from the bastion: the commit's image, the domain, and the setup password
 #      when the game isn't on the disk yet
-#   3. the game onto the disk, the first time only (scripts/linux/setup.sh --game-only)
+#   3. the game onto the disk, the first time only (scripts/linux/setup.sh --game-only); the
+#      fleet's join password (GAME_JOIN_PASSWORD) into server.cfg, every time
 #   4. the firewall: the game port open to all, the rest only over WireGuard
 #   5. the game server's container (deploy/node/docker-compose.yml), once the pull is done
 # The log is in /var/log/iw4x-bootstrap.log; each step there and in its report says how many
@@ -106,6 +107,18 @@ open(path, "w").write("\n".join(lines) + "\n")
 PY
   fi
 fi
+
+# the fleet's join password (GAME_JOIN_PASSWORD), on every boot, so a changed one reaches every
+# server. Without one, the server keeps the password set in its own control page
+GAME_JOIN_PASSWORD=$(value game_password) python3 - "$DATA/game/main/server.cfg" <<'PY'
+import os, sys
+password = os.environ["GAME_JOIN_PASSWORD"].replace('"', "")
+if password and password != "null":  # jq -r prints null for a missing field
+    path = sys.argv[1]
+    line = f'set g_password "{password}"'
+    lines = [l for l in open(path).read().splitlines() if not l.startswith("set g_password ")]
+    open(path, "w").write("\n".join([*lines, line]) + "\n")
+PY
 
 step "opening the firewall"
 ufw --force reset >/dev/null

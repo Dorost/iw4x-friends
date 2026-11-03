@@ -37,6 +37,7 @@ jobs:
           ZENLAYER_ACCESS_KEY_PASSWORD: ${{ secrets.ZENLAYER_ACCESS_KEY_PASSWORD }}
           CLOUDFLARE_DNS_TOKEN: ${{ secrets.CLOUDFLARE_DNS_TOKEN }}
           MW_SETUP_PASSWORD: ${{ secrets.MW_SETUP_PASSWORD }}
+          GAME_JOIN_PASSWORD: ${{ secrets.GAME_JOIN_PASSWORD }}
           ADMIN_SSH_KEYS: ${{ vars.ADMIN_SSH_KEYS }}
           BOT_DEFAULT_TZ: ${{ vars.BOT_DEFAULT_TZ }}
           BOT_MIN_PLAYERS: ${{ vars.BOT_MIN_PLAYERS }}
@@ -69,7 +70,7 @@ jobs:
           import os, sys
           keys = ["UI_PASSWORD", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "VULTR_API_KEY",
                   "ZENLAYER_ACCESS_KEY_ID", "ZENLAYER_ACCESS_KEY_PASSWORD", "CLOUDFLARE_DNS_TOKEN",
-                  "MW_SETUP_PASSWORD", "ADMIN_SSH_KEYS", "BOT_DEFAULT_TZ", "BOT_MIN_PLAYERS",
+                  "MW_SETUP_PASSWORD", "GAME_JOIN_PASSWORD", "ADMIN_SSH_KEYS", "BOT_DEFAULT_TZ", "BOT_MIN_PLAYERS",
                   "IDLE_MINUTES", "LEAD_MINUTES"]
           if not os.environ.get("UI_PASSWORD"):
               sys.exit("the UI_PASSWORD secret is missing")

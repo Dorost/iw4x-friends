@@ -258,6 +258,7 @@ async def test_new_commit_reaches_a_running_server_once_it_is_empty(fleet):
 async def test_node_config_gives_the_password_only_for_the_download(fleet):
     orch, _, _ = fleet
     assert orch.node_config("nl", need_game=True)["setup_password"] == "setup"
+    assert orch.node_config("nl", need_game=False)["game_password"] == "join"
     config = orch.node_config("nl", need_game=False)
     assert config["setup_password"] == "" and config["join_host"] == "mw2-nl.dorost.nl"
     assert config["ui_host"] == NL and config["image_tag"] == SHA

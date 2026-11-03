@@ -332,6 +332,7 @@ class Orchestrator:
             "ui_host": spec.wg_ip,
             "hostname": spec.hostname,
             "setup_password": self.s.setup_password if need_game else "",
+            "game_password": self.s.game_password,
         }
 
     # ---------- the tasks ----------

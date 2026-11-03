@@ -43,6 +43,7 @@ def make(tmp: Path, now: datetime, **settings) -> tuple[Orchestrator, FakeCloud,
         vultr_api_key="v",
         cloudflare_token="c",
         setup_password="setup",
+        game_password="join",
         version=SHA,
         **settings,
     )
