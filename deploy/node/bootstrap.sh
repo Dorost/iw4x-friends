@@ -38,9 +38,10 @@ trap 'report "$(cat "$STEP_FILE" 2>/dev/null) (bootstrap.sh line $LINENO)" 1' ER
 
 # a sign of life every minute while a long step runs: the bastion gives up on a silent server
 (
+  set +e  # nothing here may end it: du fails until the download starts
   while sleep 60; do
     text=$(cat "$STEP_FILE" 2>/dev/null || true)
-    got=$(du -scb /var/tmp/iw4x/mw.zip* 2>/dev/null | awk 'END {print $1}')
+    got=$(du -scb /var/tmp/iw4x/mw.zip* 2>/dev/null | awk 'END {print $1}') || got=0
     [[ "$text" == downloading* && "${got:-0}" -gt 0 ]] && text="$text: $(( got / 1024 ** 3 )) GB so far"
     report "$text"
   done
