@@ -622,14 +622,15 @@ def lobby_label(mode: str) -> str | None:
 
 
 def start_server() -> None:
-    global last_alive
+    global last_alive, rcon_gap
     if server_pids():
         return
     last_alive = time.monotonic()
     install_lobby_gsc()
     if CFG.exists() and "scr_sd_winlimit" not in (v := read_cfg()):
         save_cfg(v)  # a server.cfg from before the S&D Win limit default gets it
-    args = ["-dedicated", "+set", "net_port", str(PORT), "+exec", "server.cfg"]
+    args = ["-dedicated", "+set", "net_port", str(PORT), "+set", "rcon_timeout", str(RCON_TIMEOUT_MS),
+            "+exec", "server.cfg"]
     args += LOBBY_ARGS
     if install_lobby_playlist():
         # sv_lobby_playlists "war:10,dom:3,...": vote.gsc switches the playlist itself
@@ -649,6 +650,7 @@ def start_server() -> None:
         detach = {"start_new_session": True}
     subprocess.Popen(cmd, cwd=GAME_DIR, stdout=LOG.open("w"), stderr=subprocess.STDOUT,
                      stdin=subprocess.DEVNULL, **detach)
+    rcon_gap = FAST_RCON_GAP  # it runs with RCON_TIMEOUT_MS
 
 
 def stop_server() -> None:
@@ -675,7 +677,7 @@ def udp(msg: str, timeout: float = 1.0) -> str:
         while True:
             data = s.recv(65535)[4:].decode(errors="replace")
             parts.append(data.split("\n", 1)[1] if "\n" in data else "")
-            s.settimeout(0.3)
+            s.settimeout(0.1)  # the rest of a long answer follows right away
     except OSError:
         pass
     finally:
@@ -683,7 +685,14 @@ def udp(msg: str, timeout: float = 1.0) -> str:
     return "".join(parts)
 
 
-# IW4x drops rcon requests that arrive within rcon_timeout (500 ms) of the previous one
+# IW4x drops rcon requests from an address that arrive within rcon_timeout of the previous one:
+# 500 ms by default, so a mode change (~20 requests) took ~15 s more than it needs to.
+# start_server runs the game with 100 ms; a game server the app didn't start keeps the slow pace.
+# The server takes packets once a frame (50 ms), so requests 0.25 s apart can look 0.2 s apart
+# to it, or less while it's busy (a map load): 0.15 s of margin
+RCON_TIMEOUT_MS = 100
+FAST_RCON_GAP = 0.25
+rcon_gap = 0.6
 rcon_lock = threading.Lock()
 last_rcon = 0.0
 
@@ -691,7 +700,7 @@ last_rcon = 0.0
 def rcon(cmd: str) -> str:
     global last_rcon
     with rcon_lock:
-        time.sleep(max(0.0, last_rcon + 0.6 - time.monotonic()))
+        time.sleep(max(0.0, last_rcon + rcon_gap - time.monotonic()))
         try:
             return udp(f'rcon {read_cfg().get("rcon_password", "")} {cmd}')
         finally:
