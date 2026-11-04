@@ -262,6 +262,11 @@ SD_GSC = Path(__file__).resolve().parent / "sdfun.gsc"
 # in-game game type and map picks for everyone (!gt, !map, !menu); reads VOTE_LIST
 VOTE_GSC = Path(__file__).resolve().parent / "vote.gsc"
 VOTE_LIST = "scriptdata/vote.txt"  # in userraw, where IW4x's FileRead looks
+# Bot names, one "name,clan tag" per line (no comments: every line is a name). IW4x's own files
+# bring a bots.txt (main/iw4x/x86/iw4x_00.iwd) that starts with eight joke names like /dev/full,
+# and bots take names from the top; this one in userraw wins over it. IW4x reads it once, when
+# the first bot joins, so a change applies from the next server start.
+BOTS_TXT = Path(__file__).resolve().parent / "bots.txt"
 PLAYER_ACTIONS = {"kill", "launch", "up", "give"}
 # weapons the Players table can give: name -> weapon id
 GIVE_WEAPONS = {
@@ -519,6 +524,7 @@ def install_lobby_gsc() -> None:
         dest = GAME_DIR / "userraw" / VOTE_LIST
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(("\n".join(lines) + "\n").encode())
+        (GAME_DIR / "userraw" / "bots.txt").write_bytes(BOTS_TXT.read_bytes())
 
 
 # A joining client asks for the lobby playlist, and the server answers with this file (zlib) in
