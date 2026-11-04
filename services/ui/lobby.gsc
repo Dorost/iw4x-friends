@@ -1,5 +1,6 @@
 // Ends the match when the web UI sets sv_tolobby 1 (End match): the scoreboard shows, then
-// vote.gsc loads the next map, everyone stays connected.
+// vote.gsc loads the next map, everyone stays connected. sv_tolobby 2 goes straight to the
+// lobby instead (no scoreboard), where the web UI starts a match in a new mode.
 // It also applies the cheat protected Fun dvars (fall damage), which the server ignores
 // from server.cfg and rcon: the web UI saves a copy as sv_fun_<name>.
 init()
@@ -16,8 +17,12 @@ watchToLobby()
 	while ( !getDvarInt( "sv_tolobby" ) )
 		wait 0.25;
 
+	how = getDvarInt( "sv_tolobby" );
 	setDvar( "sv_tolobby", 0 );
-	maps\mp\gametypes\_gamelogic::forceEnd();
+	if ( how == 2 )
+		exitLevel( false );
+	else
+		maps\mp\gametypes\_gamelogic::forceEnd();
 }
 
 // re-checked every second: Save in the web UI changes them mid-match
