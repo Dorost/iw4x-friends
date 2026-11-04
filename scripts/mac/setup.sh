@@ -436,7 +436,7 @@ CLASSES_CFG=$(cat <<'CFG'
 // Ten custom classes: agile SMGs and light rifles (no LMGs), two M16 classes,
 // a quickscope sniper (5) and a stealth class for Search & Destroy (10).
 // Most use Bling (two attachments, Pro also on the secondary) to stack FMJ with
-// a silencer or red dot; Lightweight and Commando keep them fast.
+// a silencer or red dot, Lightweight and Commando keep them fast.
 // Load them at the main menu: press ~ and type  exec classes.cfg  (or F9 during a match).
 // Run unlockstats first so every weapon, attachment and perk is unlocked.
 // They replace your custom class slots 1 to 10. inUse makes a slot show up in the
@@ -455,7 +455,7 @@ setPlayerData customClasses 0 perks 0 semtex_mp
 setPlayerData customClasses 0 perks 1 specialty_bling
 setPlayerData customClasses 0 perks 2 specialty_lightweight
 setPlayerData customClasses 0 perks 3 specialty_extendedmelee
-setPlayerData customClasses 0 perks 4 specialty_painkiller
+setPlayerData customClasses 0 perks 4 specialty_combathigh
 setPlayerData customClasses 0 specialGrenade flash_grenade
 
 // 2. Vector Ghost: invisible to UAV and thermal, silent footsteps
@@ -487,7 +487,7 @@ setPlayerData customClasses 2 perks 0 semtex_mp
 setPlayerData customClasses 2 perks 1 specialty_bling
 setPlayerData customClasses 2 perks 2 specialty_lightweight
 setPlayerData customClasses 2 perks 3 specialty_extendedmelee
-setPlayerData customClasses 2 perks 4 specialty_painkiller
+setPlayerData customClasses 2 perks 4 specialty_combathigh
 setPlayerData customClasses 2 specialGrenade flash_grenade
 
 // 4. FAMAS Burst: one-burst kills with a clear red dot
@@ -503,7 +503,7 @@ setPlayerData customClasses 3 perks 0 throwingknife_mp
 setPlayerData customClasses 3 perks 1 specialty_bling
 setPlayerData customClasses 3 perks 2 specialty_lightweight
 setPlayerData customClasses 3 perks 3 specialty_extendedmelee
-setPlayerData customClasses 3 perks 4 specialty_painkiller
+setPlayerData customClasses 3 perks 4 specialty_combathigh
 setPlayerData customClasses 3 specialGrenade flash_grenade
 
 // 5. Quickscope: the classic Intervention quickscope setup
@@ -519,7 +519,7 @@ setPlayerData customClasses 4 perks 0 throwingknife_mp
 setPlayerData customClasses 4 perks 1 specialty_fastreload
 setPlayerData customClasses 4 perks 2 specialty_lightweight
 setPlayerData customClasses 4 perks 3 specialty_bulletaccuracy
-setPlayerData customClasses 4 perks 4 specialty_painkiller
+setPlayerData customClasses 4 perks 4 specialty_combathigh
 setPlayerData customClasses 4 specialGrenade flash_grenade
 
 // 6. Shotgun Blitz: close range: rapid MP5K, akimbo 1887s as backup
@@ -535,7 +535,7 @@ setPlayerData customClasses 5 perks 0 semtex_mp
 setPlayerData customClasses 5 perks 1 specialty_bling
 setPlayerData customClasses 5 perks 2 specialty_lightweight
 setPlayerData customClasses 5 perks 3 specialty_extendedmelee
-setPlayerData customClasses 5 perks 4 specialty_painkiller
+setPlayerData customClasses 5 perks 4 specialty_combathigh
 setPlayerData customClasses 5 specialGrenade flash_grenade
 
 // 7. P90 Ninja: huge magazine, silent, killstreaks one kill earlier
@@ -567,7 +567,7 @@ setPlayerData customClasses 7 perks 0 throwingknife_mp
 setPlayerData customClasses 7 perks 1 specialty_bling
 setPlayerData customClasses 7 perks 2 specialty_coldblooded
 setPlayerData customClasses 7 perks 3 specialty_heartbreaker
-setPlayerData customClasses 7 perks 4 specialty_painkiller
+setPlayerData customClasses 7 perks 4 specialty_combathigh
 setPlayerData customClasses 7 specialGrenade flash_grenade
 
 // 9. M16 Power: M16 with Stopping Power: one-burst kills at range
@@ -583,7 +583,7 @@ setPlayerData customClasses 8 perks 0 frag_grenade_mp
 setPlayerData customClasses 8 perks 1 specialty_bling
 setPlayerData customClasses 8 perks 2 specialty_bulletdamage
 setPlayerData customClasses 8 perks 3 specialty_extendedmelee
-setPlayerData customClasses 8 perks 4 specialty_painkiller
+setPlayerData customClasses 8 perks 4 specialty_combathigh
 setPlayerData customClasses 8 specialGrenade flash_grenade
 
 // 10. S&D Stealth: one life, so stay off the radar: claymore guards the bomb, smoke covers plant/defuse
