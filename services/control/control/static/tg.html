@@ -110,14 +110,11 @@
 
   /* costs */
   .total { font-size: 36px; font-weight: 700; line-height: 1.15; font-variant-numeric: tabular-nums; margin: 2px 0 4px; }
-  .cg { background: var(--card); border-radius: 14px; padding: 12px 14px 6px; margin-bottom: 10px; }
-  .cg-head { display: flex; align-items: baseline; gap: 8px; font-weight: 600; }
-  .cg-head .amt { margin-left: auto; }
-  .cg .hint { margin-top: 1px; }
-  .crow { display: flex; align-items: baseline; gap: 8px; padding: 8px 0; border-top: 1px solid var(--sep); font-size: 14px; }
-  .cg-head + .crow, .cg-head + .hint + .crow { margin-top: 8px; }
-  .crow .what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .crow .amt, .cg-head .amt { margin-left: auto; font-variant-numeric: tabular-nums; }
+  .cg { background: var(--card); border-radius: 14px; padding: 0 14px; margin-bottom: 10px; }
+  .crow { display: flex; align-items: center; gap: 8px; padding: 11px 0; border-top: 1px solid var(--sep); }
+  .crow:first-child { border-top: 0; }
+  .crow .what { min-width: 0; }
+  .crow .amt { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; }
   .warnbox { background: color-mix(in srgb, #ffb300 18%, transparent); border-radius: 12px; padding: 10px 12px; font-size: 14px; margin-bottom: 10px; }
 </style>
 </head>
@@ -444,7 +441,7 @@ async function kick(num, guid, btn) {
   refresh();
 }
 
-// ---------- costs: per server and the bastion, from Vultr's and Zenlayer's billing ----------
+// ---------- costs: a total per server and the bastion, from Vultr's and Zenlayer's billing ----------
 
 const usd = n => "$" + Number(n || 0).toFixed(2);
 const monthName = m => new Date(m + "-01T12:00:00Z").toLocaleDateString([], {month: "long", year: "numeric"});
@@ -462,11 +459,12 @@ async function openCosts(month) {
   }
 }
 
-// "7 runs · 9 h" for a game server's VM, "310 h" for the bastion's
-function costDetail(g, i) {
-  if (i.kind !== "vm" || !i.hours) return "";
-  const h = `${i.hours < 10 ? i.hours.toFixed(1).replace(/\.0$/, "") : Math.round(i.hours)} h`;
-  return g.key === "bastion" ? h : `${i.runs} run${i.runs === 1 ? "" : "s"} · ${h}`;
+// "7 runs · 9 h" for a game server, "310 h" for the bastion: how long its VM ran that month
+function runs(g) {
+  const vm = g.items.find(i => i.kind === "vm");
+  if (!vm || !vm.hours) return "";
+  const h = `${vm.hours < 10 ? vm.hours.toFixed(1).replace(/\.0$/, "") : Math.round(vm.hours)} h`;
+  return g.key === "bastion" ? h : `${vm.runs} run${vm.runs === 1 ? "" : "s"} · ${h}`;
 }
 
 function renderCosts(c) {
@@ -476,16 +474,18 @@ function renderCosts(c) {
   const errors = c.providers.filter(p => p.error).map(p =>
     `<div class="warnbox">${esc(p.title)} didn't answer, these are its last figures: ${esc(p.error)}</div>`).join("");
   const split = c.providers.map(p => `${esc(p.title)} ${usd(p.total)}`).join(" · ");
-  const groups = c.groups.map(g => `<div class="cg">
-      <div class="cg-head"><span>${esc(g.title)}</span><span class="amt">${usd(g.total)}</span></div>
-      ${g.note ? `<div class="hint">${esc(g.note)}</div>` : ""}
-      ${g.items.length ? g.items.map(i => `<div class="crow"><span class="what">${esc(i.name)}</span>
-        <span class="hint">${esc(costDetail(g, i))}</span><span class="amt">${usd(i.amount)}</span></div>`).join("")
-        : `<div class="crow"><span class="hint">Nothing billed</span></div>`}
-    </div>`).join("");
+  // one total per server and the bastion, with how much its VM ran: the breakdown (VM, disk, IP,
+  // bandwidth) is on the fleet page
+  const rows = c.groups.map(g => {
+    const ran = runs(g);
+    return `<div class="crow">
+      <div class="what"><div>${esc(g.title)}${ran ? ` <span class="hint">${esc(ran)}</span>` : ""}</div>
+        ${g.note ? `<div class="hint">${esc(g.note)}</div>` : ""}</div>
+      <span class="amt">${usd(g.total)}</span></div>`;
+  }).join("");
   document.getElementById("costs").innerHTML = `${months}${errors}
     <div class="panel"><div class="total">${usd(c.total)}</div><div class="hint">${split}</div></div>
-    <div class="label">Per server</div>${groups}
+    <div class="label">Per server</div><div class="cg">${rows}</div>
     <div class="hint note">From Vultr's and Zenlayer's billing, in US dollars. A game server's VM is billed only while it runs, its disk all month. Zenlayer's figures lag up to an hour.</div>`;
 }
 
