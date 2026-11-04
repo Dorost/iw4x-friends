@@ -248,7 +248,7 @@ def test_costs_on_the_fleet_page_with_what_is_left_on_the_accounts(web):
     assert client.get("/costs").status_code == 200
     costs = client.get("/api/costs").json()
     assert costs["month"] == "2026-11" and costs["months"] == ["2026-11", "2026-10"]
-    assert [g["key"] for g in costs["groups"]] == ["nl", "us", "ist", "bastion", "other"]
+    assert [g["key"] for g in costs["groups"]] == ["nl", "us", "ist", "bastion"]  # no other project
     assert [b["label"] for b in costs["balances"]] == ["Credit left", "Prepaid balance"]
     assert client.get("/api/costs?month=2026-10").json()["month"] == "2026-10"
     assert client.get("/api/costs?month=2027-01").status_code == 400

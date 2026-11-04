@@ -1,6 +1,6 @@
-"""What the fleet costs, from the clouds' own billing: a month's charges per game server, for the
-bastion, and for anything else on the accounts. The fleet page (/costs) and the mini app show it;
-only the fleet page shows what is left on each account.
+"""What the fleet costs, from the clouds' own billing: a month's charges per game server and for the
+bastion. The fleet page (/costs) and the mini app show it; only the fleet page shows what is left on
+each account.
 
 Vultr     /v2/billing/pending-charges   this month so far: a line per VM run, disk or snapshot
           /v2/billing/invoices/<id>/items   an earlier month (its invoice comes on the 1st)
@@ -13,6 +13,7 @@ Zenlayer  zbc DescribeBillDetail        a month: a line per resource and order
 
 A charge goes to a server by the name of its VM or disk (iw4x-fleet-<server>, iw4x-bastion).
 Zenlayer names a VM's public IP on its own (EIP-<region>-1): it goes with the VM of its order.
+Everything else on the accounts (other projects, say) is left out, from the totals too.
 Both clouds bill in US dollars."""
 
 import asyncio
@@ -54,7 +55,6 @@ class Charge:
     kind: str  # a key of KINDS
     amount: float  # US dollars
     hours: float = 0  # how long a VM ran (vm only)
-    what: str = ""  # the cloud's own words, for a charge outside the fleet
 
 
 @dataclass(frozen=True)
@@ -121,7 +121,7 @@ def vultr_charge(line: dict) -> Charge:
     m = (VULTR_DISK_NAME if kind == "disk" else VULTR_NAME).search(what)
     label = m.group(1).strip() if m else ""
     hours = float(line.get("units") or 0) if line.get("unit_type") == "hours" else 0
-    return Charge(label, kind, float(line.get("total") or 0), hours if kind == "vm" else 0, what)
+    return Charge(label, kind, float(line.get("total") or 0), hours if kind == "vm" else 0)
 
 
 class VultrBilling:
@@ -211,17 +211,16 @@ def zenlayer_charges(lines: list[dict], deductions: list[dict]) -> list[Charge]:
         product = x.get("productSubitem") or ""
         amount = float(x.get("amount") or 0)
         hours = hours_between(x.get("startTime"), x.get("endTime"))
-        what = f"{product} {x.get('label') or ''}".strip()
         split = parts.get((x.get("orderSn"), product)) or {}
         whole = sum(split.values())
         if whole <= 0:  # no deductions to go by: the line as it is
             kind = ZENLAYER_PRODUCTS.get(product, "other")
-            out.append(Charge(label, kind, amount, hours if kind == "vm" else 0, what))
+            out.append(Charge(label, kind, amount, hours if kind == "vm" else 0))
             continue
         for part, dollars in split.items():
             kind = ZENLAYER_PARTS.get(part, "other")
             share = amount * dollars / whole
-            out.append(Charge(label, kind, share, hours if kind == "vm" else 0, what))
+            out.append(Charge(label, kind, share, hours if kind == "vm" else 0))
     return out
 
 
@@ -291,7 +290,7 @@ def fake_billings() -> list[FakeBilling]:
                 Charge("iw4x-fleet-nl", "disk", 0.46),
                 Charge("iw4x-fleet-us", "vm", 0.11, 3),
                 Charge("iw4x-fleet-us", "disk", 0.46),
-                Charge("iw4x", "vm", 2.43, 68, "144.202.3.91 (4096 MB) [iw4x]"),
+                Charge("other-project", "vm", 2.43, 68),  # not the fleet's: left out
             ],
             Balance("Credit left", 219.97),
         ),
@@ -396,9 +395,10 @@ class Costs:
 
 
 def assemble(fleet: Fleet, month: str, fetched: dict[str, Fetched]) -> dict:
-    """The charges per server (in the fleet's order), the bastion, servers no longer in the
-    fleet, and what isn't the fleet's ("other")."""
+    """The charges per server (in the fleet's order), the bastion, then servers no longer in the
+    fleet (iw4x-fleet-<name> still billed that month). Nothing else counts."""
     groups: dict[str, dict] = {}
+    totals = dict.fromkeys(fetched, 0.0)  # per cloud, of the fleet's charges
 
     def group(key: str, title: str, note: str = "") -> dict:
         return groups.setdefault(key, {"key": key, "title": title, "note": note, "items": {}})
@@ -408,22 +408,21 @@ def assemble(fleet: Fleet, month: str, fetched: dict[str, Fetched]) -> dict:
             group(name, spec.title)
     if fleet.bastion.provider in fetched:
         group("bastion", "Bastion", "the fleet page, mini app and bot: always on")
-    for f in fetched.values():
+    for cloud, f in fetched.items():
         for c in f.charges:
+            name = c.label.removeprefix(FLEET_PREFIX) if c.label.startswith(FLEET_PREFIX) else ""
             if c.label == BASTION_LABEL:
                 g = group("bastion", "Bastion", "the fleet page, mini app and bot: always on")
-            elif c.label.startswith(FLEET_PREFIX) and c.label[len(FLEET_PREFIX) :]:
-                name = c.label[len(FLEET_PREFIX) :]
+            elif name in fleet.servers:
+                g = group(name, fleet.servers[name].title)
+            elif name:
                 g = group(name, name.title(), "no longer in the fleet")
             else:
-                g = group("other", "Other", "on the accounts, but not the fleet's")
-            if g["key"] == "other":
-                key = (c.kind, c.label or c.what)
-                shown = f"{KINDS[c.kind]} {c.label}" if c.label else c.what or KINDS[c.kind]
-            else:
-                key, shown = (c.kind, ""), KINDS[c.kind]
+                continue  # not the fleet's
+            totals[cloud] += c.amount
             item = g["items"].setdefault(
-                key, {"kind": c.kind, "name": shown, "amount": 0.0, "hours": 0.0, "runs": 0}
+                c.kind,
+                {"kind": c.kind, "name": KINDS[c.kind], "amount": 0.0, "hours": 0.0, "runs": 0},
             )
             item["amount"] += c.amount
             if c.kind == "vm" and c.hours:
@@ -431,12 +430,9 @@ def assemble(fleet: Fleet, month: str, fetched: dict[str, Fetched]) -> dict:
                 item["runs"] += 1
     order = list(KINDS)
     out_groups = []
-    # the fleet's servers, the bastion, servers no longer in the fleet, other
+    # the fleet's servers, the bastion, servers no longer in the fleet
     rank = {name: i for i, name in enumerate([*fleet.servers, "bastion"])}
-    ranked = sorted(
-        groups.values(), key=lambda g: rank.get(g["key"], 99 if g["key"] == "other" else 50)
-    )
-    for g in ranked:
+    for g in sorted(groups.values(), key=lambda g: rank.get(g["key"], len(rank))):
         items = sorted(g["items"].values(), key=lambda i: (order.index(i["kind"]), -i["amount"]))
         for i in items:
             i["amount"] = round(i["amount"], 2)
@@ -448,7 +444,7 @@ def assemble(fleet: Fleet, month: str, fetched: dict[str, Fetched]) -> dict:
         {
             "name": name,
             "title": TITLES.get(name, name),
-            "total": round(sum(c.amount for c in f.charges), 2),
+            "total": round(totals[name], 2),
             "error": f.error,
         }
         for name, f in fetched.items()

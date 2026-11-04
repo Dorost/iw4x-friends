@@ -84,7 +84,7 @@ def vultr_billing(fake) -> VultrBilling:
 @pytest.mark.anyio
 async def test_vultr_this_month_comes_from_the_pending_charges():
     charges = await vultr_billing(VultrBillingFake()).charges("2026-11")
-    assert charges[0] == Charge("iw4x-bastion", "vm", 0.19, 25, PENDING[0]["description"])
+    assert charges[0] == Charge("iw4x-bastion", "vm", 0.19, 25)
     assert [(c.label, c.kind) for c in charges[1:4]] == [
         ("iw4x-bastion", "disk"),
         ("iw4x-fleet-nl", "disk"),
@@ -212,15 +212,16 @@ async def test_zenlayer_billing_asks_for_the_month_and_its_deductions():
 FLEET_TOML = load_fleet(FLEET)
 
 
-def test_charges_per_server_then_the_bastion_then_the_rest():
+def test_the_fleets_charges_per_server_then_the_bastion():
     vultr = [
         Charge("iw4x-bastion", "vm", 0.19, 25),
         Charge("iw4x-bastion", "disk", 0.04),
         Charge("iw4x-fleet-nl", "vm", 0.04, 1),
         Charge("iw4x-fleet-nl", "vm", 0.07, 2),
         Charge("iw4x-fleet-nl", "disk", 0.04),
-        Charge("iw4x", "vm", 2.43, 68, "144.202.3.91 (4096 MB) [iw4x]"),
-        Charge("", "snapshot", 0.12, 0, 'Snapshot "old" 24 GB'),
+        Charge("iw4x", "vm", 2.43, 68),  # not the fleet's (another project, say): left out
+        Charge("", "snapshot", 0.12),  # no name: left out
+        Charge("iw4x-fleet-", "disk", 0.5),  # left out
         Charge("iw4x-fleet-milan", "disk", 0.15),
     ]
     view = assemble(
@@ -230,8 +231,8 @@ def test_charges_per_server_then_the_bastion_then_the_rest():
             Charge("iw4x-fleet-ist", "bandwidth", 0.66), Charge("iw4x-fleet-ist", "vm", 0.14, 3.7),
         ], [])},
     )  # fmt: skip
-    assert [g["key"] for g in view["groups"]] == ["nl", "us", "ist", "bastion", "milan", "other"]
-    nl, us, ist, bastion, milan, other = view["groups"]
+    assert [g["key"] for g in view["groups"]] == ["nl", "us", "ist", "bastion", "milan"]
+    nl, us, ist, bastion, milan = view["groups"]
     assert nl["total"] == 0.15
     assert nl["items"] == [
         {"kind": "vm", "name": "VM", "amount": 0.11, "hours": 3.0, "runs": 2},
@@ -241,12 +242,11 @@ def test_charges_per_server_then_the_bastion_then_the_rest():
     assert [i["kind"] for i in ist["items"]] == ["vm", "bandwidth"]
     assert bastion["total"] == 0.23
     assert milan["title"] == "Milan" and milan["note"] == "no longer in the fleet"
-    assert [i["name"] for i in other["items"]] == ["VM iw4x", 'Snapshot "old" 24 GB']
     assert view["providers"] == [
-        {"name": "vultr", "title": "Vultr", "total": 3.08, "error": ""},
+        {"name": "vultr", "title": "Vultr", "total": 0.53, "error": ""},  # the fleet's only
         {"name": "zenlayer", "title": "Zenlayer", "total": 0.8, "error": ""},
     ]
-    assert view["total"] == 3.88
+    assert view["total"] == 1.33 == round(sum(g["total"] for g in view["groups"]), 2)
     assert view["updated_at"] == int(NOW - 60)
 
 
