@@ -18,7 +18,7 @@
 // Lists:    ! alone (or !?) shows the commands on screen for 6 s; an unknown command shows the
 //           ones that match it, an unknown or unclear !map / !gt name the maps or modes that do
 // No lobby between matches: when a match ends, the scoreboard shows "Next up: <map>, <mode>"
-//   and that match loads right away. Next up is also announced at the start of a match, in its
+//   and that match loads right away (a new mode passes through the lobby, see startMatch). Next up is also announced at the start of a match, in its
 //   last minute and whenever it changes. The map is the pick (!map, menu, web UI), else a
 //   random other original MW2 map; the mode is the !gt pick, else the one just played.
 // The web UI writes the installed maps and modes to userraw/scriptdata/vote.txt.
@@ -529,6 +529,20 @@ plainName( name )
 // same as the web UI's Start game from a running match: settings from server.cfg, then the map
 startMatch( map, mode )
 {
+	if ( mode != getDvar( "sv_party_mode" ) )
+	{
+		// the match runs the mode the lobby started it with (sv_party_mode, set by the web UI),
+		// the loading screen and the scoreboard name it, and only the lobby can change it: the
+		// web UI starts this match from there, right away. The lobby opens with the playlist
+		// it is switched to before
+		playlist = lobbyPlaylist( mode );
+		if ( playlist != "" )
+			Exec( "playlist " + playlist );
+		setDvar( "sv_lobby_next", map + " " + mode );
+		wait 0.5;  // Exec runs on a later server frame
+		exitLevel( false );
+		return;
+	}
 	cmds = [];
 	cmds[ cmds.size ] = "exec server.cfg";
 	cmds[ cmds.size ] = "set sv_vote_mode none";  // the picks are used up
@@ -540,6 +554,24 @@ startMatch( map, mode )
 	cmds[ cmds.size ] = "map " + map;
 	foreach ( cmd in cmds )
 		Exec( cmd );
+}
+
+// the lobby playlist of a mode (sv_lobby_playlists "war:10,dom:3,..." from the web UI), Team
+// Deathmatch's for a mode without one, "" when unknown
+lobbyPlaylist( mode )
+{
+	fallback = "";
+	foreach ( pair in strTok( getDvar( "sv_lobby_playlists" ), "," ) )
+	{
+		kv = strTok( pair, ":" );
+		if ( kv.size != 2 )
+			continue;
+		if ( kv[ 0 ] == mode )
+			return kv[ 1 ];
+		if ( kv[ 0 ] == "war" )
+			fallback = kv[ 1 ];
+	}
+	return fallback;
 }
 
 // ---------- map pick (!map) ----------
