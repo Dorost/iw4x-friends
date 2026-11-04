@@ -773,15 +773,17 @@ def dvar(name: str) -> str | None:
     return m[1] if m else None
 
 
-def set_playlist(mode: str) -> bool:
+def set_playlist(mode: str, settle: float = 1.0) -> bool:
     """Switches the lobby to the mode's playlist and reads it back: a match takes its mode from
-    the playlist, and a busy server (e.g. right after start) can drop the rcon command."""
+    the playlist, and a busy server (e.g. right after start) can drop the rcon command.
+    In the lobby, a switch re-picks the lobby map: it settles first; during a match (settle 0)
+    the switch only waits for the lobby."""
     index = lobby_playlist(mode)
     for _ in range(3):
         if dvar("playlist") == index:
             return True
         rcon(f"playlist {index}")
-        time.sleep(1)  # switching playlist re-picks the lobby map: let it settle
+        time.sleep(settle)
     return dvar("playlist") == index
 
 
@@ -1615,7 +1617,7 @@ def start_match(g: Game, v: dict[str, str], live: dict) -> dict:
         # a new mode: the loading screen and the scoreboard would still name the old one
         # (go_from_lobby), so the match ends straight into the lobby (lobby.gsc), no scoreboard,
         # which opens with the mode's playlist when it's switched before
-        if not set_playlist(g.gametype):
+        if not set_playlist(g.gametype, settle=0):
             raise HTTPException(503, "the server didn't switch to that mode, try again")
         rcon("set sv_tolobby 2")
         if not wait_for("lobby", 30):
