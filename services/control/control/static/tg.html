@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>MW2 servers</title>
 <!-- Telegram mini app of the fleet (services/control, /tg/): boot and shut down the servers, their map,
-     mode and bots. Made from the single server one in services/ui/tg.html -->
+     mode and bots, and what they cost. Made from the single server one in services/ui/tg.html -->
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root {
@@ -107,6 +107,18 @@
   .prow .who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
   .prow .kick { padding: 7px 13px; border-radius: 10px; font-weight: 600; color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
   .prow .kick:disabled { opacity: .45; }
+
+  /* costs */
+  .total { font-size: 36px; font-weight: 700; line-height: 1.15; font-variant-numeric: tabular-nums; margin: 2px 0 4px; }
+  .cg { background: var(--card); border-radius: 14px; padding: 12px 14px 6px; margin-bottom: 10px; }
+  .cg-head { display: flex; align-items: baseline; gap: 8px; font-weight: 600; }
+  .cg-head .amt { margin-left: auto; }
+  .cg .hint { margin-top: 1px; }
+  .crow { display: flex; align-items: baseline; gap: 8px; padding: 8px 0; border-top: 1px solid var(--sep); font-size: 14px; }
+  .cg-head + .crow, .cg-head + .hint + .crow { margin-top: 8px; }
+  .crow .what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .crow .amt, .cg-head .amt { margin-left: auto; font-variant-numeric: tabular-nums; }
+  .warnbox { background: color-mix(in srgb, #ffb300 18%, transparent); border-radius: 12px; padding: 10px 12px; font-size: 14px; margin-bottom: 10px; }
 </style>
 </head>
 <body>
@@ -223,7 +235,10 @@ function renderList() {
   const plan = `<button class="card plan" onclick="openPlan()"><span class="emoji">📅</span>
       <span><b>Plan</b><br><span class="hint">Your free hours and the best times for everyone</span></span><span class="go">›</span></button>`;
   const cards = fleet.servers.map(card).join("");
-  app.innerHTML = plan + (cards || `<div class="message"><div class="icon">🛰</div><h1>No servers yet</h1><p>The bastion has no cloud API key.</p></div>`);
+  const costs = `<button class="card plan" onclick="openCosts()"><span class="emoji">💰</span>
+      <span><b>Costs</b><br><span class="hint">What the servers and the bastion cost this month</span></span><span class="go">›</span></button>`;
+  app.innerHTML = plan + (cards || `<div class="message"><div class="icon">🛰</div><h1>No servers yet</h1><p>The bastion has no cloud API key.</p></div>`)
+    + (cards ? costs : "");
 }
 
 // the Plan page gets Telegram's launch data in its address, as Telegram does
@@ -427,6 +442,51 @@ async function kick(num, guid, btn) {
   } catch (e) { haptic("error"); toast(e.message, true); }
   view.kicking = null;
   refresh();
+}
+
+// ---------- costs: per server and the bastion, from Vultr's and Zenlayer's billing ----------
+
+const usd = n => "$" + Number(n || 0).toFixed(2);
+const monthName = m => new Date(m + "-01T12:00:00Z").toLocaleDateString([], {month: "long", year: "numeric"});
+
+async function openCosts(month) {
+  openView({kind: "costs", month: month || ""}, `
+    <header><h1>Costs</h1><div class="hint" id="costsWhen">Asking Vultr and Zenlayer…</div></header>
+    <div id="costs"><div class="message" style="padding-top: 8vh"><div class="spin" style="margin: 0 auto"></div></div></div>`);
+  try {
+    const c = await api("/tg/api/costs" + (month ? `?month=${encodeURIComponent(month)}` : ""));
+    if (view && view.kind === "costs") renderCosts(c);
+  } catch (e) {
+    const box = document.getElementById("costs");
+    if (box) box.innerHTML = `<div class="warnbox">${esc(e.message)}</div>`;
+  }
+}
+
+// "7 runs · 9 h" for a game server's VM, "310 h" for the bastion's
+function costDetail(g, i) {
+  if (i.kind !== "vm" || !i.hours) return "";
+  const h = `${i.hours < 10 ? i.hours.toFixed(1).replace(/\.0$/, "") : Math.round(i.hours)} h`;
+  return g.key === "bastion" || g.key === "other" ? h : `${i.runs} run${i.runs === 1 ? "" : "s"} · ${h}`;
+}
+
+function renderCosts(c) {
+  document.getElementById("costsWhen").textContent = `${monthName(c.month)}${c.current ? " so far" : ""}`;
+  const months = c.months.length > 1 ? `<div class="chips" style="margin-bottom: 12px">${c.months.map(m =>
+    `<button class="chip${m === c.month ? " on" : ""}" onclick="openCosts('${m}')">${esc(monthName(m))}</button>`).join("")}</div>` : "";
+  const errors = c.providers.filter(p => p.error).map(p =>
+    `<div class="warnbox">${esc(p.title)} didn't answer, these are its last figures: ${esc(p.error)}</div>`).join("");
+  const split = c.providers.map(p => `${esc(p.title)} ${usd(p.total)}`).join(" · ");
+  const groups = c.groups.map(g => `<div class="cg">
+      <div class="cg-head"><span>${esc(g.title)}</span><span class="amt">${usd(g.total)}</span></div>
+      ${g.note ? `<div class="hint">${esc(g.note)}</div>` : ""}
+      ${g.items.length ? g.items.map(i => `<div class="crow"><span class="what">${esc(i.name)}</span>
+        <span class="hint">${esc(costDetail(g, i))}</span><span class="amt">${usd(i.amount)}</span></div>`).join("")
+        : `<div class="crow"><span class="hint">Nothing billed</span></div>`}
+    </div>`).join("");
+  document.getElementById("costs").innerHTML = `${months}${errors}
+    <div class="panel"><div class="total">${usd(c.total)}</div><div class="hint">${split}</div></div>
+    <div class="label">Per server</div>${groups}
+    <div class="hint note">From Vultr's and Zenlayer's billing, in US dollars. A game server's VM is billed only while it runs, its disk all month. Zenlayer's figures lag up to an hour.</div>`;
 }
 
 // ---------- bots ----------

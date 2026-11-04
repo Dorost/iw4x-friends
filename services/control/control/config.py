@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 PROVIDERS = ("vultr", "zenlayer")
+BASTION_LABEL = "iw4x-bastion"  # the name of the bastion's VM and disk at Vultr
 
 
 @dataclass(frozen=True)

@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MW2 Servers</title>
-<!-- the bastion's fleet page (services/control): every game server, boot / shut down, schedules -->
+<!-- the bastion's fleet page (services/control): every game server, boot / shut down, schedules;
+     its costs are on their own page (costs.html) -->
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
   body { font-size: 13px; }
@@ -23,6 +24,7 @@
   <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 10h18M8 3v4M16 3v4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
   <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
   <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M11 12l9-9M17 6l3 3M14 9l2 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-coin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M14.8 9.2c-.5-.8-1.5-1.3-2.8-1.3-1.6 0-2.8.8-2.8 2s1.2 1.7 2.8 2.1 2.8.9 2.8 2.1-1.2 2-2.8 2c-1.3 0-2.4-.5-2.9-1.4M12 6v1.9M12 16.1V18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
   <symbol id="i-spin" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
 </svg>
 
@@ -32,7 +34,8 @@
     <h1 class="text-base font-semibold text-slate-800">MW2 Servers</h1>
     <span id="conn" class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-400">loading</span>
     <span id="version" class="text-[11px] text-slate-400"></span>
-    <button onclick="logout()" class="btn ml-auto bg-slate-100 text-slate-600 hover:bg-slate-200"><svg class="w-3.5 h-3.5"><use href="#i-key"/></svg>Log out</button>
+    <a href="/costs" class="btn ml-auto bg-slate-100 text-slate-600 hover:bg-slate-200"><svg class="w-3.5 h-3.5"><use href="#i-coin"/></svg>Costs</a>
+    <button onclick="logout()" class="btn bg-slate-100 text-slate-600 hover:bg-slate-200"><svg class="w-3.5 h-3.5"><use href="#i-key"/></svg>Log out</button>
   </header>
 
   <div id="servers" class="grid md:grid-cols-2 xl:grid-cols-3 gap-4"></div>

@@ -10,6 +10,7 @@ from fakes import TOKEN, at, make
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from control.costs import Costs, fake_billings
 from control.db import RUNNING
 from control.web import routes
 
@@ -60,7 +61,8 @@ def web(tmp_path):
     orch.boot_now, orch.shutdown_now, orch.tg.is_member = boot_now, shutdown_now, is_member
     upstream = Upstream()
     app = FastAPI()
-    routes(app, orch, httpx.AsyncClient(transport=httpx.MockTransport(upstream)))
+    costs = Costs(orch.s.fleet, fake_billings(), clock=NOW.timestamp)
+    routes(app, orch, httpx.AsyncClient(transport=httpx.MockTransport(upstream)), costs)
     return TestClient(app, follow_redirects=False), orch, calls, upstream
 
 
@@ -236,3 +238,25 @@ def test_mini_app_kick_goes_to_the_server_and_the_group_hears_it(web):
     assert sent == [("10.66.0.11", "POST", "/tg/api/kick", kick, "Amin")]
     message = orch.tg.outbox.get_nowait()[0]
     assert message == "👢 <b>Amin</b> kicked <b>XerS</b> from NL"
+
+
+def test_costs_on_the_fleet_page_with_what_is_left_on_the_accounts(web):
+    client, _, _, _ = web
+    assert client.get("/costs").headers["location"] == "/login"
+    assert client.get("/api/costs").status_code == 401
+    login(client)
+    assert client.get("/costs").status_code == 200
+    costs = client.get("/api/costs").json()
+    assert costs["month"] == "2026-11" and costs["months"] == ["2026-11", "2026-10"]
+    assert [g["key"] for g in costs["groups"]] == ["nl", "us", "ist", "bastion", "other"]
+    assert [b["label"] for b in costs["balances"]] == ["Credit left", "Prepaid balance"]
+    assert client.get("/api/costs?month=2026-10").json()["month"] == "2026-10"
+    assert client.get("/api/costs?month=2027-01").status_code == 400
+
+
+def test_costs_in_the_mini_app_without_the_accounts(web):
+    client, _, _, _ = web
+    assert client.get("/tg/api/costs").status_code == 401
+    assert client.get("/tg/api/costs", headers=tma(STRANGER)).status_code == 403
+    costs = client.get("/tg/api/costs", headers=tma(AMIN)).json()
+    assert costs["total"] > 0 and "balances" not in costs
