@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   bastion:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment:
       name: bastion
       url: https://mw2.dorost.nl
