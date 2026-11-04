@@ -764,6 +764,7 @@ lobby_since = 0.0  # when the server started reporting the lobby; 0 = it doesn't
 # a match start the lobby dropped: started again when the lobby lasts this long after it
 LOBBY_RETRY_SECONDS = 60
 lobby_start_at = 0.0
+lobby_start = threading.Lock()  # one start from the lobby at a time (poll loop, page polls)
 
 
 def dvar(name: str) -> str | None:
@@ -795,15 +796,15 @@ def go_from_lobby(mode: str) -> bool:
         return False
     rcon("exec server.cfg")
     rcon(f"set sv_party_mode {mode}")
-    # xpartygo before the lobby shows the new map and mode starts the old ones
-    label, name = lobby_label(mode), MAP_NAMES.get(read_cfg().get("ui_mapname", ""))
+    # xpartygo before the lobby shows the new mode starts the old one (the map is server.cfg's,
+    # whatever map the lobby shows)
+    label = lobby_label(mode)
     for _ in range(10):
-        shown = dvar("party_gametype"), dvar("party_mapname")
-        if (not label or shown[0] == label) and (not name or shown[1] == name):
+        if not label or (shown := dvar("party_gametype")) == label:
             break
         time.sleep(1)
     else:
-        print(f"the lobby still shows {shown[1]} {shown[0]}, not {name} {label}: starting anyway", flush=True)
+        print(f"the lobby still shows {shown}, not {label}: starting anyway", flush=True)
     output = rcon("xpartygo")
     if "StartMatch" not in output:  # the poll starts it again if the lobby stays
         print(f"xpartygo: no match start in the answer ({output.strip()[:80]!r})", flush=True)
@@ -1384,14 +1385,17 @@ def state():
         if lobby_started and time.monotonic() - lobby_start_at >= LOBBY_RETRY_SECONDS:
             print("still in the lobby after starting the match: starting it again", flush=True)
             lobby_started = False
-        if not lobby_started and not starting_match.is_set():
-            # vote.gsc's next match with a new mode starts right away: the lobby is no map load
-            nxt = lobby_next()
-            if nxt or time.monotonic() - lobby_since >= LOBBY_CONFIRM_SECONDS:
-                print(f"in the lobby for {time.monotonic() - lobby_since:.0f} s: starting the match"
-                      + (f" {nxt[0]} {nxt[1]} (vote)" if nxt else ""), flush=True)
-                lobby_started = start_from_lobby(nxt)  # not started: try again on the next poll
-                lobby_start_at = time.monotonic()
+        if not lobby_started and not starting_match.is_set() and lobby_start.acquire(blocking=False):
+            try:
+                # vote.gsc's next match with a new mode starts right away: the lobby is no map load
+                nxt = lobby_next()
+                if not lobby_started and (nxt or time.monotonic() - lobby_since >= LOBBY_CONFIRM_SECONDS):
+                    print(f"in the lobby for {time.monotonic() - lobby_since:.0f} s: starting the match"
+                          + (f" {nxt[0]} {nxt[1]} (vote)" if nxt else ""), flush=True)
+                    lobby_started, lobby_start_at = True, time.monotonic()  # before: it takes a while
+                    lobby_started = start_from_lobby(nxt)  # not started: try again on the next poll
+            finally:
+                lobby_start.release()
     elif not live or live["in_game"]:  # an unknown answer changes nothing
         lobby_started = False
     return {
