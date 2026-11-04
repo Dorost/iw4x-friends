@@ -142,6 +142,10 @@ if python3 -c 'import sys, tomllib; sys.exit(not tomllib.load(open(sys.argv[1], 
   else
     report "IW4x update failed, the game server starts with the IW4x it has" 0 1
   fi
+  # update-iw4x.sh puts it aside again, but not when the timeout killed it: the server needs it gone
+  if [[ -f "$DATA/game/zlib1.dll" ]]; then
+    mv -f "$DATA/game/zlib1.dll" "$DATA/game/zlib1.dll.x64"
+  fi
 fi
 
 step "opening the firewall"
