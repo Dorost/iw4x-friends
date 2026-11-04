@@ -687,9 +687,11 @@ def udp(msg: str, timeout: float = 1.0) -> str:
 
 # IW4x drops rcon requests from an address that arrive within rcon_timeout of the previous one:
 # 500 ms by default, so a mode change (~20 requests) took ~15 s more than it needs to.
-# start_server runs the game with 100 ms; a game server the app didn't start keeps the slow pace
+# start_server runs the game with 100 ms; a game server the app didn't start keeps the slow pace.
+# The server takes packets once a frame (50 ms), so requests 0.25 s apart can look 0.2 s apart
+# to it, or less while it's busy (a map load): 0.15 s of margin
 RCON_TIMEOUT_MS = 100
-FAST_RCON_GAP = RCON_TIMEOUT_MS / 1000 + 0.05
+FAST_RCON_GAP = 0.25
 rcon_gap = 0.6
 rcon_lock = threading.Lock()
 last_rcon = 0.0
