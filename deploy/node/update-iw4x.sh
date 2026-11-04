@@ -25,17 +25,25 @@ if [[ -n "$tag" && "$tag" != "$have" ]]; then
   echo "    launcher $tag (was ${have:-none})"
 fi
 
+# The 64-bit zlib1.dll of IW4x (mm) stops Wine from starting the 32-bit server, so it lives
+# aside as zlib1.dll.x64 (scripts/linux/setup.sh). It's back in place only while the launcher
+# runs: missing, the launcher would download the whole IW4x (mm) client again on every boot
+zlib_aside() {
+  if [[ -f "$GAME/zlib1.dll" ]]; then
+    mv -f "$GAME/zlib1.dll" "$GAME/zlib1.dll.x64"
+  fi
+}
+if [[ -f "$GAME/zlib1.dll.x64" && ! -e "$GAME/zlib1.dll" ]]; then
+  mv "$GAME/zlib1.dll.x64" "$GAME/zlib1.dll"
+fi
+trap zlib_aside EXIT
+
 # the client, rawfiles and DLC; no game start, no self-update (done above), no desktop
 # shortcuts or iw4x:// links on a server. The first time it checks every file (about 90 s on
 # NL, which downloaded 378 MB from r5154 to r5318), after that a few seconds
 "$LAUNCHER" --skip-launch --no-self-update --no-shortcuts --no-connect-protocol < /dev/null
 echo  # its progress display ends without a line break
-
-# the Windows launcher's 64-bit zlib1.dll stops Wine from starting the 32-bit server
-# (scripts/linux/setup.sh moved it aside the first time)
-if [[ -f "$GAME/zlib1.dll" ]]; then
-  mv -f "$GAME/zlib1.dll" "$GAME/zlib1.dll.x64"
-fi
+zlib_aside
 
 # what it installed, from the launcher's database (component 0: the client, 1: rawfiles)
 python3 - "$GAME/cache/iw4x.db" <<'PY'
