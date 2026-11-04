@@ -5,7 +5,7 @@ import pytest
 from fakes import SHA, at, make, posts
 from sqlalchemy import select
 
-from control.db import FAILED, OFF, RUNNING, Event
+from control.db import FAILED, OFF, RUNNING, Event, Server, connect
 from control.db import Schedule as ScheduleRow
 from control.orchestrator import FAILED_KEEP, Busy
 
@@ -412,3 +412,21 @@ async def test_no_switch_without_a_fleet_password(tmp_path):
     with pytest.raises(Busy):
         await orch.set_public("nl", True, "test")
     assert orch.node_config("nl", need_game=False)["game_password"] is None
+
+
+def test_a_server_taken_out_of_the_fleet_is_forgotten(tmp_path):
+    db = connect(tmp_path / "control.db")
+    with db.begin() as s:
+        s.add(Server(name="old", status=OFF, volume_id="disk-1"))  # off: forgotten
+        s.add(Server(name="busy", status=RUNNING, instance_id="vm-1"))  # still has a VM: kept
+        s.add(ScheduleRow(servers="nl,old", days="4", start="20:00", end="23:00", tz="UTC"))
+        s.add(ScheduleRow(servers="old", days="5", start="20:00", end="23:00", tz="UTC"))
+    orch, _, _ = make(tmp_path, NOW)
+    with orch.db.begin() as s:
+        assert {r.name for r in s.scalars(select(Server))} == {"nl", "us", "ist", "busy"}
+        assert [r.servers for r in s.scalars(select(ScheduleRow))] == ["nl"]
+        [event] = s.scalars(select(Event)).all()
+    assert event.text == "old removed from the fleet (schedule 2 deleted)"
+    make(tmp_path, NOW)  # nothing more to forget the next time
+    with orch.db.begin() as s:
+        assert len(s.scalars(select(Event)).all()) == 1
