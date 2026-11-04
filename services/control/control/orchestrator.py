@@ -93,6 +93,42 @@ class Orchestrator:
             for name in s.fleet.servers:
                 if not db.get(Server, name):
                     db.add(Server(name=name, status=OFF, changed_at=int(self.now())))
+        self.forget_removed()
+
+    def forget_removed(self) -> None:
+        """A server taken out of deploy/fleet.toml: its row goes, and its schedules drop it (a
+        schedule left with no server goes too). One that still has a VM stays until that is
+        destroyed by hand. Its disk and DNS record stay at the cloud: deleting them is a person's
+        call."""
+        catalog = self.s.fleet.servers
+        gone, kept = [], []
+        with self.db.begin() as db:
+            for row in db.scalars(select(Server)):
+                if row.name in catalog:
+                    continue
+                if row.instance_id:
+                    kept.append(row.name)
+                    continue
+                db.delete(row)
+                gone.append(row.name)
+        for name in kept:
+            log.warning("%s is not in fleet.toml but still has a VM: destroy it by hand", name)
+        if not gone:
+            return
+        dropped = []
+        with self.db.begin() as db:
+            for sc in db.scalars(select(ScheduleRow)):
+                names = [n for n in sc.servers.split(",") if n]
+                left = [n for n in names if n in catalog]
+                if left == names:
+                    continue
+                if left:
+                    sc.servers = ",".join(left)
+                else:
+                    db.delete(sc)
+                    dropped.append(str(sc.id))
+        text = f"{', '.join(gone)} removed from the fleet"
+        self.event("", text + (f" (schedule {', '.join(dropped)} deleted)" if dropped else ""))
 
     def now(self) -> int:
         return int(self.clock())

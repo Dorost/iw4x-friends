@@ -55,15 +55,3 @@ bandwidth_mbps = 50       # public outbound cap, players need well under 1 Mbps 
 network_line = "PremiumBGP"
 internet_charge = "ByBandwidth"
 subnet_cidr = "172.30.1.0/24" # the bastion makes this subnet (and its VPC) the first time
-
-# On demand only, like Istanbul.
-[servers.milan]
-title = "Milan"
-hostname = "Dorost Milan"
-provider = "vultr"
-region = "mxp"            # Milan
-plan = "voc-c-2c-4gb-50s-amd" # CPU optimized 2 CPU / 4 GB: Milan has no vhf plans
-domain = "mw2-milan.dorost.nl"
-wg_ip = "10.66.0.14"
-volume_gb = 40
-block_type = "high_perf"  # the only block storage Milan has
