@@ -1,6 +1,6 @@
 """What the fleet costs, from the clouds' own billing: a month's charges per game server, for the
-bastion, and for anything else on the accounts. The fleet page (/costs) and the mini app show it;
-only the fleet page shows what is left on each account.
+bastion, and for anything else on the accounts. The fleet page (/costs) shows all of it and what
+is left on each account; the mini app only the fleet's servers and the bastion.
 
 Vultr     /v2/billing/pending-charges   this month so far: a line per VM run, disk or snapshot
           /v2/billing/invoices/<id>/items   an earlier month (its invoice comes on the 1st)
@@ -371,12 +371,13 @@ class Costs:
         self.balances[b.name] = got
         return got[1], got[2]
 
-    async def view(self, month: str = "", balances: bool = False) -> dict:
+    async def view(self, month: str = "", balances: bool = False, fleet_only: bool = False) -> dict:
+        """balances: what is left on each account. fleet_only: only the fleet's servers and the
+        bastion, nothing else on the accounts (in the totals neither)."""
         month = self.month(month)
         fetched = await asyncio.gather(*(self.fetch(b, month) for b in self.billings))
-        out = assemble(
-            self.fleet, month, {b.name: f for b, f in zip(self.billings, fetched, strict=True)}
-        )
+        by_cloud = {b.name: f for b, f in zip(self.billings, fetched, strict=True)}
+        out = assemble(self.fleet, month, by_cloud, fleet_only)
         months = {this_month(self.clock())} | {m for f in fetched for m in f.months}
         out["months"] = sorted(months, reverse=True)[:MONTHS_SHOWN]
         out["current"] = month == this_month(self.clock())
@@ -395,10 +396,13 @@ class Costs:
         return out
 
 
-def assemble(fleet: Fleet, month: str, fetched: dict[str, Fetched]) -> dict:
+def assemble(
+    fleet: Fleet, month: str, fetched: dict[str, Fetched], fleet_only: bool = False
+) -> dict:
     """The charges per server (in the fleet's order), the bastion, servers no longer in the
-    fleet, and what isn't the fleet's ("other")."""
+    fleet, and what isn't the fleet's ("other"). fleet_only: the servers and the bastion only."""
     groups: dict[str, dict] = {}
+    totals = dict.fromkeys(fetched, 0.0)  # per cloud, of the charges shown
 
     def group(key: str, title: str, note: str = "") -> dict:
         return groups.setdefault(key, {"key": key, "title": title, "note": note, "items": {}})
@@ -408,15 +412,20 @@ def assemble(fleet: Fleet, month: str, fetched: dict[str, Fetched]) -> dict:
             group(name, spec.title)
     if fleet.bastion.provider in fetched:
         group("bastion", "Bastion", "the fleet page, mini app and bot: always on")
-    for f in fetched.values():
+    for cloud, f in fetched.items():
         for c in f.charges:
+            name = c.label.removeprefix(FLEET_PREFIX) if c.label.startswith(FLEET_PREFIX) else ""
             if c.label == BASTION_LABEL:
                 g = group("bastion", "Bastion", "the fleet page, mini app and bot: always on")
-            elif c.label.startswith(FLEET_PREFIX) and c.label[len(FLEET_PREFIX) :]:
-                name = c.label[len(FLEET_PREFIX) :]
+            elif name in fleet.servers:
+                g = group(name, fleet.servers[name].title)
+            elif fleet_only:
+                continue
+            elif name:
                 g = group(name, name.title(), "no longer in the fleet")
             else:
                 g = group("other", "Other", "on the accounts, but not the fleet's")
+            totals[cloud] += c.amount
             if g["key"] == "other":
                 key = (c.kind, c.label or c.what)
                 shown = f"{KINDS[c.kind]} {c.label}" if c.label else c.what or KINDS[c.kind]
@@ -448,7 +457,7 @@ def assemble(fleet: Fleet, month: str, fetched: dict[str, Fetched]) -> dict:
         {
             "name": name,
             "title": TITLES.get(name, name),
-            "total": round(sum(c.amount for c in f.charges), 2),
+            "total": round(totals[name], 2),
             "error": f.error,
         }
         for name, f in fetched.items()

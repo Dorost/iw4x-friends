@@ -466,7 +466,7 @@ async function openCosts(month) {
 function costDetail(g, i) {
   if (i.kind !== "vm" || !i.hours) return "";
   const h = `${i.hours < 10 ? i.hours.toFixed(1).replace(/\.0$/, "") : Math.round(i.hours)} h`;
-  return g.key === "bastion" || g.key === "other" ? h : `${i.runs} run${i.runs === 1 ? "" : "s"} · ${h}`;
+  return g.key === "bastion" ? h : `${i.runs} run${i.runs === 1 ? "" : "s"} · ${h}`;
 }
 
 function renderCosts(c) {

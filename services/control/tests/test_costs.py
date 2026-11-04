@@ -250,6 +250,22 @@ def test_charges_per_server_then_the_bastion_then_the_rest():
     assert view["updated_at"] == int(NOW - 60)
 
 
+def test_fleet_only_leaves_out_other_charges_and_removed_servers():
+    vultr = [
+        Charge("iw4x-bastion", "vm", 0.19, 25),
+        Charge("iw4x-fleet-nl", "disk", 0.04),
+        Charge("iw4x", "vm", 2.43, 68),
+        Charge("iw4x-fleet-milan", "disk", 0.15),
+    ]
+    fetched = {"vultr": Fetched(NOW, vultr, [])}
+    view = assemble(FLEET_TOML, "2026-11", fetched, fleet_only=True)
+    assert [g["key"] for g in view["groups"]] == ["nl", "us", "bastion"]
+    assert view["providers"][0]["total"] == view["total"] == 0.23  # what the cards add up to
+    everything = assemble(FLEET_TOML, "2026-11", fetched)
+    assert [g["key"] for g in everything["groups"]] == ["nl", "us", "bastion", "milan", "other"]
+    assert everything["total"] == 2.81
+
+
 def test_without_a_zenlayer_key_istanbul_isnt_listed():
     view = assemble(FLEET_TOML, "2026-11", {"vultr": Fetched(NOW, [], [])})
     assert [g["key"] for g in view["groups"]] == ["nl", "us", "bastion"]

@@ -245,9 +245,9 @@ def routes(
 
     # ---------- costs ----------
 
-    async def costs_view(month: str, balances: bool) -> dict:
+    async def costs_view(month: str, balances: bool, fleet_only: bool = False) -> dict:
         try:
-            return await costs.view(month, balances=balances)
+            return await costs.view(month, balances=balances, fleet_only=fleet_only)
         except BadMonth as e:
             raise HTTPException(400, str(e)) from None
 
@@ -399,9 +399,10 @@ def routes(
 
     @app.get("/tg/api/costs")
     async def tg_costs(request: Request, month: str = ""):
-        """The same as the fleet page's, without what is left on the accounts."""
+        """The fleet page's, with only the fleet's servers and the bastion (no servers taken out
+        of the fleet, nothing else on the accounts) and without what is left on them."""
         await tg_user(request)
-        return await costs_view(month, balances=False)
+        return await costs_view(month, balances=False, fleet_only=True)
 
     def running(name: str):
         spec = s.servers.get(name)

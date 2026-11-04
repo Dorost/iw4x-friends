@@ -259,4 +259,7 @@ def test_costs_in_the_mini_app_without_the_accounts(web):
     assert client.get("/tg/api/costs").status_code == 401
     assert client.get("/tg/api/costs", headers=tma(STRANGER)).status_code == 403
     costs = client.get("/tg/api/costs", headers=tma(AMIN)).json()
-    assert costs["total"] > 0 and "balances" not in costs
+    assert "balances" not in costs
+    # the fleet's servers and the bastion only: the old VPS ("other") is on the fleet page
+    assert [g["key"] for g in costs["groups"]] == ["nl", "us", "ist", "bastion"]
+    assert costs["total"] == round(sum(g["total"] for g in costs["groups"]), 2)
