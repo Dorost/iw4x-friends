@@ -11,7 +11,8 @@
 #   2. the settings from the bastion: the commit's image, the domain, and the setup password
 #      when the game isn't on the disk yet
 #   3. the game onto the disk, the first time only (scripts/linux/setup.sh --game-only); the
-#      fleet's join password (GAME_JOIN_PASSWORD) into server.cfg, every time
+#      fleet's join password (GAME_JOIN_PASSWORD) into server.cfg and IW4x to its latest release
+#      (deploy/node/update-iw4x.sh), every time
 #   4. the firewall: the game port open to all, the rest only over WireGuard
 #   5. the game server's container (deploy/node/docker-compose.yml), once the pull is done
 # The log is in /var/log/iw4x-bootstrap.log; each step there and in its report says how many
@@ -131,6 +132,17 @@ if password != "null":  # how jq -r prints null
     lines = [l for l in open(path).read().splitlines() if not l.startswith("set g_password ")]
     open(path, "w").write("\n".join([*lines, line]) + "\n")
 PY
+
+# IW4x to its latest release, while the image pulls (unless iw4x_update = false in fleet.toml).
+# A failed update leaves IW4x as it was, and the game server starts with that
+if python3 -c 'import sys, tomllib; sys.exit(not tomllib.load(open(sys.argv[1], "rb")).get("iw4x_update", True))' deploy/fleet.toml; then
+  step "updating IW4x"
+  if iw4x=$(timeout 1800 bash deploy/node/update-iw4x.sh "$DATA/game" | tee /dev/stderr | tail -n 1); then
+    report "IW4x $iw4x" 0 1
+  else
+    report "IW4x update failed, the game server starts with the IW4x it has" 0 1
+  fi
+fi
 
 step "opening the firewall"
 ufw --force reset >/dev/null
