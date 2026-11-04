@@ -7,6 +7,10 @@
 
 repo = "https://github.com/Dorost/iw4x-friends.git"
 
+# Every boot brings a game server's IW4x to its latest release, as players' launchers do theirs
+# (deploy/node/update-iw4x.sh). false: servers keep the IW4x they have
+iw4x_update = true
+
 # Always on: the control plane (services/control), the planner bot and Caddy. Its own disk
 # keeps the schedules, the bot's database and the HTTPS certificates across rebuilds.
 [bastion]
