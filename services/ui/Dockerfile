@@ -34,6 +34,6 @@ WORKDIR /app
 # scripts then rebuilds and pulls a few kB instead.
 COPY app.py ./
 RUN uv sync --script app.py
-COPY index.html login.html tg.html lobby.gsc weapons.gsc players.gsc sdfun.gsc vote.gsc ./
+COPY index.html login.html tg.html lobby.gsc weapons.gsc players.gsc sdfun.gsc vote.gsc bots.txt ./
 
 CMD ["sh", "-c", "Xvfb :99 -nolisten tcp & exec uv run app.py"]
