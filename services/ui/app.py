@@ -590,19 +590,35 @@ def install_lobby_playlist() -> bool:
     return True
 
 
-def lobby_playlist(mode: str) -> str:
-    """Index of the lobby playlist for this mode (0-based, for the playlist command).
-    A mode with no playlist definition (a custom gametype) uses Team Deathmatch's.
-    Read back from the file, which is what the running server loaded."""
+def lobby_text() -> str:
+    """The lobby playlist file, which is what the running server loaded."""
     try:
-        text = (GAME_DIR / "userraw" / LOBBY_PLAYLIST).read_text(errors="replace")
+        return (GAME_DIR / "userraw" / LOBBY_PLAYLIST).read_text(errors="replace")
     except OSError:
-        return "0"
-    lobby_modes = re.findall(r'^name english "Lobby (\w+)"', text, re.MULTILINE)
+        return ""
+
+
+def lobby_playlists() -> dict[str, str]:
+    """The lobby playlist of each mode: its index (0-based, for the playlist command)."""
+    modes = re.findall(r'^name english "Lobby (\w+)"', lobby_text(), re.MULTILINE)
+    return {m: str(i) for i, m in enumerate(modes)}
+
+
+def lobby_playlist(mode: str) -> str:
+    """Index of the lobby playlist for this mode. A mode with no playlist definition (a custom
+    gametype) uses Team Deathmatch's."""
+    playlists = lobby_playlists()
+    return playlists.get(mode, playlists.get("war", "0"))
+
+
+def lobby_label(mode: str) -> str | None:
+    """The mode name of the mode's lobby playlist, which clients show (party_gametype)."""
+    text = lobby_text()
     for m in (mode, "war"):
-        if m in lobby_modes:
-            return str(lobby_modes.index(m))
-    return "0"
+        if entry := re.search(rf'^name english "Lobby {m}"\n(?:.*\n)*?\w+,(\w+),1$', text, re.MULTILINE):
+            name = re.search(rf'^gametype {entry[1]}\n(?:.*\n)*?name english "(.*?)"', text, re.MULTILINE)
+            return name[1] if name else None
+    return None
 
 
 def start_server() -> None:
@@ -616,7 +632,9 @@ def start_server() -> None:
     args = ["-dedicated", "+set", "net_port", str(PORT), "+exec", "server.cfg"]
     args += LOBBY_ARGS
     if install_lobby_playlist():
-        args += ["+set", "playlistFilename", LOBBY_PLAYLIST,
+        # sv_lobby_playlists "war:10,dom:3,...": vote.gsc switches the playlist itself
+        playlists = ",".join(f"{m}:{i}" for m, i in lobby_playlists().items())
+        args += ["+set", "playlistFilename", LOBBY_PLAYLIST, "+set", "sv_lobby_playlists", playlists,
                  "+playlist", lobby_playlist(read_cfg().get("g_gametype", "war"))]
     else:
         args += ["+playlist", "0"]
@@ -743,28 +761,78 @@ last_alive = time.monotonic()  # last time the game server answered (watchdog)
 # a map load can report "lobby" for a moment: the lobby counts once it lasts this long
 LOBBY_CONFIRM_SECONDS = 15
 lobby_since = 0.0  # when the server started reporting the lobby; 0 = it doesn't
+# a match start the lobby dropped: started again when the lobby lasts this long after it
+LOBBY_RETRY_SECONDS = 60
+lobby_start_at = 0.0
+lobby_start = threading.Lock()  # one start from the lobby at a time (poll loop, page polls)
 
 
-def set_playlist(mode: str) -> bool:
+def dvar(name: str) -> str | None:
+    """A dvar's value, None when the server didn't answer or doesn't have it."""
+    m = re.search(rf'"{re.escape(name)}" is: "(.*?)\^7"', rcon(name))
+    return m[1] if m else None
+
+
+def set_playlist(mode: str, settle: float = 1.0) -> bool:
     """Switches the lobby to the mode's playlist and reads it back: a match takes its mode from
-    the playlist, and a busy server (e.g. right after start) can drop the rcon command."""
+    the playlist, and a busy server (e.g. right after start) can drop the rcon command.
+    In the lobby, a switch re-picks the lobby map: it settles first; during a match (settle 0)
+    the switch only waits for the lobby."""
     index = lobby_playlist(mode)
     for _ in range(3):
-        if f'"playlist" is: "{index}^7"' in rcon("playlist"):
+        if dvar("playlist") == index:
             return True
         rcon(f"playlist {index}")
-        time.sleep(1)  # switching playlist re-picks the lobby map: let it settle
-    return f'"playlist" is: "{index}^7"' in rcon("playlist")
+        time.sleep(settle)
+    return dvar("playlist") == index
 
 
-def start_from_lobby() -> bool:
-    """Lobby -> match on the map and mode saved in server.cfg (at server start, or when a
-    match fell back to the lobby). False when the lobby didn't take the mode's playlist."""
-    if not set_playlist(read_cfg().get("g_gametype", "war")):
+def go_from_lobby(mode: str) -> bool:
+    """Lobby -> match on server.cfg's map and settings, in this mode. The match runs the mode of
+    the lobby's playlist, and clients name it on the loading screen and the scoreboard for as
+    long as the match runs (map changes too: only the lobby can switch it), hence
+    sv_party_mode, which tells a map change to a new mode that it must pass through the lobby.
+    The lobby takes the playlist it opens with right away, a later switch a while later (see
+    start_match). False when the lobby didn't take the mode's playlist."""
+    if not set_playlist(mode):
         return False
     rcon("exec server.cfg")
-    rcon("xpartygo")
+    rcon(f"set sv_party_mode {mode}")
+    # xpartygo before the lobby shows the new mode starts the old one (the map is server.cfg's,
+    # whatever map the lobby shows)
+    label = lobby_label(mode)
+    for _ in range(10):
+        if not label or (shown := dvar("party_gametype")) == label:
+            break
+        time.sleep(1)
+    else:
+        print(f"the lobby still shows {shown}, not {label}: starting anyway", flush=True)
+    output = rcon("xpartygo")
+    if "StartMatch" not in output:  # the poll starts it again if the lobby stays
+        print(f"xpartygo: no match start in the answer ({output.strip()[:80]!r})", flush=True)
     return True
+
+
+def lobby_next() -> tuple[str, str] | None:
+    """The map and mode vote.gsc sent to the lobby to start (sv_lobby_next "<map> <mode>"),
+    as a match that changes the mode has to go through it."""
+    parts = (dvar("sv_lobby_next") or "").split()
+    if len(parts) == 2 and parts[1] in gametypes() and parts[0] in {m["id"] for m in installed_maps()}:
+        return parts[0], parts[1]
+    return None
+
+
+def start_from_lobby(nxt: tuple[str, str] | None = None) -> bool:
+    """Lobby -> match on the map and mode saved in server.cfg (at server start, or when a
+    match fell back to the lobby), or the ones vote.gsc sent (they become the saved ones).
+    False when the lobby didn't take the mode's playlist."""
+    v = read_cfg()
+    if nxt:
+        v.update({"ui_mapname": nxt[0], "g_gametype": nxt[1], "ui_gametype": nxt[1]})
+        save_cfg(v)
+        for key in ("sv_lobby_next", "sv_vote_map", "sv_vote_mode", "sv_vote_next"):
+            rcon(f"set {key} none")  # used up, as vote.gsc does when it switches maps itself
+    return go_from_lobby(v.get("g_gametype", "war"))
 
 
 # ---------- Telegram: who joins and leaves ----------
@@ -1310,16 +1378,26 @@ async def events(request: Request):
 
 @app.get("/api/state")
 def state():
-    global lobby_started, last_alive, lobby_since
+    global lobby_started, last_alive, lobby_since, lobby_start_at
     live = live_status()
     if live:
         last_alive = time.monotonic()
     lobby_since = (lobby_since or time.monotonic()) if live and live["lobby"] else 0.0
     if live and live["lobby"]:
-        if (not lobby_started and not starting_match.is_set()
-                and time.monotonic() - lobby_since >= LOBBY_CONFIRM_SECONDS):
-            print(f"in the lobby for {time.monotonic() - lobby_since:.0f} s: starting the match", flush=True)
-            lobby_started = start_from_lobby()  # not started: try again on the next poll
+        if lobby_started and time.monotonic() - lobby_start_at >= LOBBY_RETRY_SECONDS:
+            print("still in the lobby after starting the match: starting it again", flush=True)
+            lobby_started = False
+        if not lobby_started and not starting_match.is_set() and lobby_start.acquire(blocking=False):
+            try:
+                # vote.gsc's next match with a new mode starts right away: the lobby is no map load
+                nxt = lobby_next()
+                if not lobby_started and (nxt or time.monotonic() - lobby_since >= LOBBY_CONFIRM_SECONDS):
+                    print(f"in the lobby for {time.monotonic() - lobby_since:.0f} s: starting the match"
+                          + (f" {nxt[0]} {nxt[1]} (vote)" if nxt else ""), flush=True)
+                    lobby_started, lobby_start_at = True, time.monotonic()  # before: it takes a while
+                    lobby_started = start_from_lobby(nxt)  # not started: try again on the next poll
+            finally:
+                lobby_start.release()
     elif not live or live["in_game"]:  # an unknown answer changes nothing
         lobby_started = False
     return {
@@ -1481,7 +1559,7 @@ class Game(Pick, Limits):
 def start_game(g: Game):
     """Lobby or a running match -> match on the chosen map and mode.
     Everyone goes along, still connected."""
-    global lobby_started
+    global lobby_started, lobby_start_at
     v = save_pick(g)
     live = live_status()
     if not live:
@@ -1494,7 +1572,7 @@ def start_game(g: Game):
     finally:
         # the match takes a while to load and the server reports "lobby" meanwhile: no
         # start from the lobby until it's seen in a match again (that resets lobby_started)
-        lobby_started = True
+        lobby_started, lobby_start_at = True, time.monotonic()
         starting_match.clear()
 
 
@@ -1513,26 +1591,41 @@ def save_limits(gametype: str, limits: Limits, v: dict[str, str]) -> None:
     save_cfg(v)
 
 
+def wait_for(what: str, seconds: int) -> bool:
+    """Until the server reports a match ("in_game") or the lobby ("lobby")."""
+    for _ in range(seconds):
+        if (now := live_status()) and now[what]:
+            return True
+        time.sleep(1)
+    return False
+
+
 def start_match(g: Game, v: dict[str, str], live: dict) -> dict:
     save_limits(g.gametype, g, v)
-    if live["in_game"]:  # switch the map straight to the new match, no scoreboard or lobby
-        rcon("exec server.cfg")
+    if live["in_game"]:
         rcon("set sv_vote_map none")  # in-game picks for the next match are used up
         rcon("set sv_vote_mode none")
+    if live["in_game"] and dvar("sv_party_mode") == g.gametype:
+        # same mode: switch the map straight to the new match, no scoreboard or lobby
+        rcon("exec server.cfg")
         output = rcon(f"map {g.map}")
         time.sleep(5)  # the old match still answers for a moment
-        for _ in range(40):
-            if (now := live_status()) and now["in_game"]:
-                break
-            time.sleep(1)
+        wait_for("in_game", 40)
         changed()
         return {"output": output}
-    if not set_playlist(g.gametype):
+    if live["in_game"]:
+        # a new mode: the loading screen and the scoreboard would still name the old one
+        # (go_from_lobby), so the match ends straight into the lobby (lobby.gsc), no scoreboard,
+        # which opens with the mode's playlist when it's switched before
+        if not set_playlist(g.gametype, settle=0):
+            raise HTTPException(503, "the server didn't switch to that mode, try again")
+        rcon("set sv_tolobby 2")
+        if not wait_for("lobby", 30):
+            raise HTTPException(504, "the match didn't end, try again")
+    if not go_from_lobby(g.gametype):
         raise HTTPException(503, "the server didn't switch to that mode, try again")
-    rcon("exec server.cfg")
-    output = rcon("xpartygo")
     changed()
-    return {"output": output}
+    return {"output": ""}
 
 
 @app.post("/api/lobby")
