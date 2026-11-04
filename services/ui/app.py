@@ -25,6 +25,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
+import zlib
 from functools import cache
 from pathlib import Path
 
@@ -520,10 +521,29 @@ def install_lobby_gsc() -> None:
         dest.write_bytes(("\n".join(lines) + "\n").encode())
 
 
+# A joining client asks for the lobby playlist, and the server answers with this file (zlib) in
+# one UDP datagram. Over about 1472 bytes it gets split into IP fragments, which some networks
+# drop: Zenlayer's (Istanbul) drops them all, and the client gives up with "playlist request
+# timeout". So the file has only what the game reads, and must compress to less than this
+PLAYLIST_PACKET_BUDGET = 1400
+OTHER_LANGUAGE = re.compile(rb"(name|description) (?!english )\w+ ")
+
+
+def slim_definition(block: bytes) -> bytes:
+    """A stock gametype definition without comments, padding and names in other languages."""
+    lines = []
+    for line in block.replace(b"\r\n", b"\n").split(b"\n"):
+        line = re.sub(rb"[ \t]+", b" ", line.split(b"//")[0]).strip()
+        if line and not OTHER_LANGUAGE.match(line):
+            lines.append(line)
+    return b"\n".join(lines) + b"\n\n"  # a blank line after each, as in the stock file
+
+
 def install_lobby_playlist() -> bool:
-    """Writes userraw/playlists_lobby.info: the stock gametype definitions plus one playlist
-    per mode, whose rules never let the lobby start a match itself (needs 18 players and a
-    27 hour countdown). The UI starts matches with xpartygo, which skips both.
+    """Writes userraw/playlists_lobby.info: the stock definitions of the modes the playlists use
+    plus one playlist per mode, whose rules never let the lobby start a match itself (needs 18
+    players and a 27 hour countdown). The UI starts matches with xpartygo, which skips both,
+    on the map it picked: a playlist's map list is never used, so each has one map.
     Clients take the mode name in the lobby and on the loading screen from the playlist
     entry, hence a playlist per mode. The server reads this file once, at start."""
     stock = GAME_DIR / "main" / "iw4x" / "x86" / "playlists_default.info"
@@ -532,13 +552,19 @@ def install_lobby_playlist() -> bool:
     data = stock.read_bytes()
     gametypes_only = data[:m.start()] if (m := re.search(rb"^playlist ", data, re.MULTILINE)) else data
     # playlist gametype ids differ from the scripts they run (tdm -> war, ffa -> dm, hq -> koth):
-    # the first definition per script is the plain mode, then come hc_ / die_ variants
+    # the first definition per script is the plain mode, then come hc_ / die_ variants (unused:
+    # hardcore is the Fun panel's scr_hardcore on any mode)
+    definitions: dict[str, bytes] = {}
     playlist_ids: dict[str, str] = {}
-    for gid, script in re.findall(rb"^gametype (\w+).*?^script (\w+)", gametypes_only, re.MULTILINE | re.DOTALL):
-        playlist_ids.setdefault(script.decode(), gid.decode())
+    for block in re.split(rb"(?m)^(?=gametype )", gametypes_only)[1:]:
+        gid = re.match(rb"gametype (\w+)", block)[1].decode()
+        if script := re.search(rb"(?m)^script (\w+)", block):
+            definitions[gid] = slim_definition(block)
+            playlist_ids.setdefault(script[1].decode(), gid)
     maxplayers = read_cfg().get("party_maxplayers", "18")
+    modes = [g for g in gametypes() if g in playlist_ids]
     playlists = []
-    for i, mode in enumerate((g for g in gametypes() if g in playlist_ids), 1):
+    for i, mode in enumerate(modes, 1):
         playlists += [
             f"playlist {i}",
             f'name english "Lobby {mode}"',
@@ -546,13 +572,21 @@ def install_lobby_playlist() -> bool:
             f"rule party_maxplayers {maxplayers}",
             "rule party_matchedplayercount 1",
             "rule party_gameStartTimerLength 99999",
-            "",
-            *(f"{map_id},{playlist_ids[mode]},1" for map_id in STOCK_MAPS),
+            "",  # rules, then the map list, as in the stock file
+            f"{STOCK_MAPS[0]},{playlist_ids[mode]},1",
             "",
         ]
+    used = {playlist_ids[mode] for mode in modes}
+    content = b"".join(d for gid, d in definitions.items() if gid in used)
+    content += ("\n".join(playlists) + "\n").encode()
+    packed = len(zlib.compress(content, 9))
+    print(f"lobby playlist: {len(modes)} modes, {len(content)} bytes, {packed} compressed", flush=True)
+    if packed > PLAYLIST_PACKET_BUDGET:
+        print(f"lobby playlist: over {PLAYLIST_PACKET_BUDGET} bytes compressed, players behind networks "
+              "that drop IP fragments (Istanbul) can't join", flush=True)
     dest = GAME_DIR / "userraw" / LOBBY_PLAYLIST
     dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(gametypes_only + "\n".join(playlists).encode())
+    dest.write_bytes(content)
     return True
 
 
