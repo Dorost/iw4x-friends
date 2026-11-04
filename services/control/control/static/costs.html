@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MW2 Costs</title>
+<!-- the bastion's costs page (services/control, control/costs.py): what each server and the bastion
+     cost in a month, from Vultr's and Zenlayer's billing, and what is left on each account -->
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-size: 13px; }
+</style>
+</head>
+<body class="bg-slate-100 text-slate-700 min-h-screen">
+
+<svg style="display:none">
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-reload" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-spin" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+</svg>
+
+<div class="max-w-6xl mx-auto p-4 space-y-4">
+
+  <header class="bg-white rounded-xl shadow-sm p-4 flex flex-wrap items-center gap-3">
+    <a href="/" class="btn bg-slate-100 text-slate-600 hover:bg-slate-200"><svg class="w-3.5 h-3.5"><use href="#i-back"/></svg>Servers</a>
+    <h1 class="text-base font-semibold text-slate-800">Costs</h1>
+    <span id="updated" class="text-[11px] text-slate-400"></span>
+    <button id="reload" onclick="load(month)" class="btn ml-auto bg-slate-100 text-slate-600 hover:bg-slate-200"><svg class="w-3.5 h-3.5"><use href="#i-reload"/></svg>Refresh</button>
+  </header>
+
+  <div id="months" class="flex flex-wrap gap-1.5"></div>
+
+  <div id="body" class="space-y-4">
+    <div class="bg-white rounded-xl shadow-sm p-6 flex items-center gap-2 text-xs text-slate-500"><svg class="w-4 h-4 animate-spin"><use href="#i-spin"/></svg>Asking Vultr and Zenlayer…</div>
+  </div>
+
+  <p class="text-[11px] text-slate-400 px-1">From Vultr's and Zenlayer's own billing, in US dollars. This month's figures are what's billed so far:
+    Zenlayer's lag up to an hour, and Vultr bills a VM by the hour it started. A game server's VM is billed only while it runs; its disk all month.</p>
+</div>
+
+<div id="toast" class="hidden fixed bottom-4 right-4 bg-rose-600 text-white text-xs px-3 py-2 rounded-lg shadow"></div>
+
+<style type="text/tailwindcss">
+  .btn { @apply inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition active:scale-95 disabled:opacity-40 disabled:pointer-events-none; }
+  .chip { @apply px-2.5 py-1 rounded-md text-[11px] font-medium bg-white border border-slate-200 text-slate-500 cursor-pointer select-none; }
+  .chip.on { @apply bg-sky-600 border-sky-600 text-white; }
+</style>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+const usd = n => '$' + Number(n || 0).toFixed(2);
+const monthName = m => new Date(m + '-01T12:00:00Z').toLocaleDateString([], {month: 'long', year: 'numeric'});
+let C = null, month = '';
+
+function ago(ts) {
+  const m = Math.round((Date.now() / 1000 - ts) / 60);
+  return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : `${Math.floor(m / 60)}h ago`;
+}
+
+// "7 runs · 9 h" for a game server's VM, "310 h" for the bastion's
+function detail(g, i) {
+  if (i.kind !== 'vm' || !i.hours) return '';
+  const h = `${i.hours < 10 ? i.hours.toFixed(1).replace(/\.0$/, '') : Math.round(i.hours)} h`;
+  return g.key === 'bastion' || g.key === 'other' ? h : `${i.runs} run${i.runs === 1 ? '' : 's'} · ${h}`;
+}
+
+function group(g) {
+  const rows = g.items.length ? g.items.map(i => `
+      <div class="flex items-baseline gap-2 py-1">
+        <span class="min-w-0 truncate">${esc(i.name)}</span>
+        <span class="text-[11px] text-slate-400 shrink-0">${esc(detail(g, i))}</span>
+        <span class="ml-auto font-mono text-slate-700 tabular-nums">${usd(i.amount)}</span>
+      </div>`).join('') : '<p class="text-xs text-slate-400 py-1">Nothing billed</p>';
+  return `<section class="bg-white rounded-xl shadow-sm p-4 flex flex-col gap-1">
+    <div class="flex items-baseline gap-2">
+      <h2 class="text-sm font-semibold text-slate-800">${esc(g.title)}</h2>
+      <span class="ml-auto text-sm font-semibold font-mono tabular-nums text-slate-800">${usd(g.total)}</span>
+    </div>
+    ${g.note ? `<div class="text-[11px] text-slate-400">${esc(g.note)}</div>` : ''}
+    <div class="divide-y divide-slate-100 text-xs mt-1">${rows}</div>
+  </section>`;
+}
+
+function render() {
+  $('updated').textContent = C.updated_at ? `updated ${ago(C.updated_at)}` : '';
+  $('months').innerHTML = C.months.length > 1 ? C.months.map(m => `<span class="chip ${m === C.month ? 'on' : ''}" onclick="load('${m}')">${esc(monthName(m))}</span>`).join('') : '';
+  const errors = C.providers.filter(p => p.error).map(p => `<div class="bg-amber-50 text-amber-800 text-xs rounded-lg px-3 py-2">${esc(p.title)} didn't answer${C.groups.length ? ', these are its last figures' : ''}: ${esc(p.error)}</div>`).join('');
+  const split = C.providers.map(p => `<span>${esc(p.title)} <b class="font-mono text-slate-600">${usd(p.total)}</b></span>`).join('<span class="text-slate-300">·</span>');
+  const balances = (C.balances || []).map(b => `
+      <div class="flex items-baseline gap-2">
+        <span>${esc(b.title)} · ${esc(b.label || 'balance')}</span>
+        <span class="ml-auto font-mono font-semibold tabular-nums ${b.label === 'Owed' ? 'text-rose-600' : 'text-slate-700'}">${b.amount === null ? '?' : usd(b.amount)}</span>
+      </div>${b.error ? `<div class="text-[11px] text-amber-700">${esc(b.error)}</div>` : ''}`).join('');
+  $('body').innerHTML = `${errors}
+    <div class="grid md:grid-cols-[2fr_1fr] gap-4">
+      <section class="bg-white rounded-xl shadow-sm p-4">
+        <div class="text-xs text-slate-500">${esc(monthName(C.month))}${C.current ? ' so far' : ''}</div>
+        <div class="text-3xl font-semibold font-mono tabular-nums text-slate-800 mt-1">${usd(C.total)}</div>
+        <div class="flex flex-wrap gap-2 text-xs text-slate-500 mt-2">${split}</div>
+      </section>
+      ${balances ? `<section class="bg-white rounded-xl shadow-sm p-4 space-y-2 text-xs">
+        <div class="text-xs text-slate-500">Left on the accounts, now</div>${balances}</section>` : ''}
+    </div>
+    <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-4">${C.groups.map(group).join('')}</div>`;
+}
+
+async function load(m) {
+  const btn = $('reload'), use = btn.querySelector('use');
+  btn.disabled = true; use.setAttribute('href', '#i-spin'); btn.querySelector('svg').classList.add('animate-spin');
+  try {
+    const r = await fetch('/api/costs' + (m ? `?month=${encodeURIComponent(m)}` : ''));
+    if (r.status === 401) { location.href = '/login'; return; }
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
+    C = await r.json();
+    month = m || '';
+    render();
+  } catch (e) {
+    const t = $('toast'); t.textContent = e.message; t.classList.remove('hidden');
+    clearTimeout(t._h); t._h = setTimeout(() => t.classList.add('hidden'), 6000);
+  } finally {
+    btn.disabled = false; use.setAttribute('href', '#i-reload'); btn.querySelector('svg').classList.remove('animate-spin');
+  }
+}
+
+load('');
+setInterval(() => { if (C) $('updated').textContent = C.updated_at ? `updated ${ago(C.updated_at)}` : ''; }, 30000);
+</script>
+</body>
+</html>

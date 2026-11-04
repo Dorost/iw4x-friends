@@ -21,7 +21,7 @@ import time
 from pathlib import Path
 
 from control import keys, userdata
-from control.config import _list, load_fleet
+from control.config import BASTION_LABEL, _list, load_fleet
 from control.dns import Cloudflare
 from control.providers import ACTIVE, GONE, Machine
 from control.providers.vultr import Vultr
@@ -29,7 +29,7 @@ from control.providers.zenlayer import Zenlayer
 
 ROOT = Path(__file__).resolve().parents[3]
 FLEET = ROOT / "deploy/fleet.toml"
-LABEL = "iw4x-bastion"
+LABEL = BASTION_LABEL
 ENVIRONMENT = "bastion"  # the GitHub environment with the secrets
 
 

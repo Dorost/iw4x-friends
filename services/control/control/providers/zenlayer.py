@@ -18,7 +18,9 @@ import httpx
 from control.providers import ACTIVE, FAILED, GONE, PENDING, CloudError, Instance, Machine
 
 HOST = "console.zenlayer.com"
-VERSION = "2025-09-01"  # of the zec service, as in Zenlayer's own SDK
+# the API version of each service used here, as in Zenlayer's own SDK: zec is Elastic Compute, zbc
+# billing (control/costs.py)
+VERSIONS = {"zec": "2025-09-01", "zbc": "2024-08-09"}
 ALGORITHM = "ZC2-HMAC-SHA256"
 CONTENT_TYPE = "application/json; charset=utf-8"
 SECURITY_GROUP = "iw4x-fleet"
@@ -88,20 +90,28 @@ class Zenlayer:
         self.poll, self.clock = poll, clock
 
     async def call(self, action: str, **params) -> dict:
+        return await self.request("zec", action, params)
+
+    async def billing(self, action: str, **params) -> dict:
+        return await self.request("zbc", action, params)
+
+    async def request(self, service: str, action: str, params: dict) -> dict:
         body = json.dumps(params, separators=(",", ":")).encode()
         timestamp = int(self.clock())
         headers = {
             "Content-Type": CONTENT_TYPE,
             "Host": HOST,
             "X-ZC-Action": action,
-            "X-ZC-Version": VERSION,
-            "X-ZC-Service": "zec",
+            "X-ZC-Version": VERSIONS[service],
+            "X-ZC-Service": service,
             "X-ZC-Timestamp": str(timestamp),
             "X-ZC-Signature-Method": ALGORITHM,
             "Authorization": sign(self.key_id, self.key_password, body, timestamp),
         }
         try:
-            r = await self.http.post(f"https://{HOST}/api/v2/zec", content=body, headers=headers)
+            r = await self.http.post(
+                f"https://{HOST}/api/v2/{service}", content=body, headers=headers
+            )
             data = r.json()
         except (httpx.HTTPError, ValueError) as e:
             raise CloudError(f"Zenlayer not reachable: {type(e).__name__}") from None

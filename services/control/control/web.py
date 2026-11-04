@@ -1,8 +1,11 @@
 """The bastion's web side, behind Caddy on https://<bastion domain>:
 
 /            the fleet page: every server, boot and shut down, schedules (UI_PASSWORD login)
+/costs       what the fleet costs, per server and the bastion (control/costs.py), and what is
+             left on each cloud account (UI_PASSWORD login)
 /s/<name>/   a running server's own control page (services/ui), passed through over WireGuard
-/tg/         the Telegram mini app: map, mode, bots, boot and shut down (members of the group)
+/tg/         the Telegram mini app: map, mode, bots, boot and shut down, costs (members of the
+             group)
 /node/       reports from the game servers while they set up (WireGuard only, their token)
 """
 
@@ -28,6 +31,7 @@ from sqlalchemy import select
 from starlette.background import BackgroundTask
 
 from control import keys
+from control.costs import BadMonth, Costs, for_providers
 from control.db import RUNNING, UP, Event
 from control.db import Schedule as ScheduleRow
 from control.nodes import NodeError, auth_header
@@ -70,8 +74,14 @@ def page(name: str) -> HTMLResponse:
     return HTMLResponse((STATIC / name).read_text())
 
 
-def routes(app: FastAPI, orch: Orchestrator, proxy_http: httpx.AsyncClient | None = None) -> None:
+def routes(
+    app: FastAPI,
+    orch: Orchestrator,
+    proxy_http: httpx.AsyncClient | None = None,
+    costs: Costs | None = None,
+) -> None:
     s = orch.s
+    costs = costs or for_providers(s.fleet, orch.providers, s.fake_cloud)
     session_key = keys.secret_file(Path(s.data_dir) / "session.key")
     # no read timeout: the servers' pages keep a live update stream open
     proxy_http = proxy_http or httpx.AsyncClient(timeout=httpx.Timeout(10, read=None))
@@ -233,6 +243,25 @@ def routes(app: FastAPI, orch: Orchestrator, proxy_http: httpx.AsyncClient | Non
         need_login(request)
         return await act(name, action, "the web UI")
 
+    # ---------- costs ----------
+
+    async def costs_view(month: str, balances: bool) -> dict:
+        try:
+            return await costs.view(month, balances=balances)
+        except BadMonth as e:
+            raise HTTPException(400, str(e)) from None
+
+    @app.get("/costs", response_class=HTMLResponse)
+    def costs_page(request: Request):
+        if not logged_in(request):
+            return RedirectResponse("/login")
+        return page("costs.html")
+
+    @app.get("/api/costs")
+    async def fleet_costs(request: Request, month: str = ""):
+        need_login(request)
+        return await costs_view(month, balances=True)
+
     # ---------- schedules ----------
 
     def checked(body: ScheduleIn) -> dict:
@@ -367,6 +396,12 @@ def routes(app: FastAPI, orch: Orchestrator, proxy_http: httpx.AsyncClient | Non
         view = fleet_view()
         view["servers"] = [v for v in view["servers"] if v["available"]]
         return view
+
+    @app.get("/tg/api/costs")
+    async def tg_costs(request: Request, month: str = ""):
+        """The same as the fleet page's, without what is left on the accounts."""
+        await tg_user(request)
+        return await costs_view(month, balances=False)
 
     def running(name: str):
         spec = s.servers.get(name)
