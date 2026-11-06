@@ -267,6 +267,10 @@ VOTE_LIST = "scriptdata/vote.txt"  # in userraw, where IW4x's FileRead looks
 # and bots take names from the top; this one in userraw wins over it. IW4x reads it once, when
 # the first bot joins, so a change applies from the next server start.
 BOTS_TXT = Path(__file__).resolve().parent / "bots.txt"
+# What bots say in chat instead of Bot Warfare's English lines: botchat.gsc reads botchat.txt
+# (in userraw/scriptdata) at the start of every match. FileRead returns at most 64 KB.
+BOTCHAT_GSC = Path(__file__).resolve().parent / "botchat.gsc"
+BOTCHAT_TXT = Path(__file__).resolve().parent / "botchat.txt"
 PLAYER_ACTIONS = {"kill", "launch", "up", "give"}
 # weapons the Players table can give: name -> weapon id
 GIVE_WEAPONS = {
@@ -512,7 +516,7 @@ def server_pids() -> list[int]:
 
 def install_lobby_gsc() -> None:
     """The server loads custom scripts on every map load, so this also reaches a running server."""
-    for src in (LOBBY_GSC, WEAPONS_GSC, PLAYERS_GSC, SD_GSC, VOTE_GSC):
+    for src in (LOBBY_GSC, WEAPONS_GSC, PLAYERS_GSC, SD_GSC, VOTE_GSC, BOTCHAT_GSC):
         dest = GAME_DIR / "userraw" / "scripts" / "mp" / src.name
         if GAME_DIR.exists() and (not dest.exists() or dest.read_bytes() != src.read_bytes()):
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -525,6 +529,7 @@ def install_lobby_gsc() -> None:
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(("\n".join(lines) + "\n").encode())
         (GAME_DIR / "userraw" / "bots.txt").write_bytes(BOTS_TXT.read_bytes())
+        (dest.parent / "botchat.txt").write_bytes(BOTCHAT_TXT.read_bytes())
 
 
 # A joining client asks for the lobby playlist, and the server answers with this file (zlib) in

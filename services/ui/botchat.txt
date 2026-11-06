@@ -1,0 +1,565 @@
+# What the bots say in the game chat (botchat.gsc). The game server reads this file at the start
+# of every match: edit it and deploy. It started as all of Bot Warfare's own English lines (the
+# bot mod, maps/mp/bots/_bot_chat.gsc), with the same moments and chances. At most 64 KB.
+#
+# [moment] 5%   starts the lines of a moment, with the chance (0-100) that a bot says one of them
+#               then (10% when there's no number). One line of the section is picked at random.
+#               Delete a whole section and the bots say nothing at that moment.
+# Lines starting with # are notes, empty lines don't count. Color codes like ^1 work in lines.
+#
+# Filled in when said:
+#   {color}      a random color for the text after it
+#   {name}       the other player of the moment: who the bot killed, who killed it, ...
+#   {map}        the map
+#   {weapon}     a weapon (the one that killed, the grenade thrown, ...)
+#   {mystreak}   the bot's kill streak        {theirstreak}  the other player's kill streak
+#   {mydeaths}   the bot's deaths in a row    {theirdeaths}  the other player's deaths in a row
+#   {random}     a random player in the match
+#   {winner} {loser}  the best and the worst score of the match
+#   {team}       the bot's team (allies or axis)
+#   {seconds}    how long it camps or follows someone
+#   {crate}      what's in the care package
+#   {wasd}       random wasd letters
+# A line with a {...} the moment doesn't have is never said: {weapon} only where the notes
+# above a section name it.
+#
+# A line that starts with (something) is said only when that applies, e.g. (best) in [end won]
+# only by the bot with the best score. Which ones there are is in the notes above each section.
+
+
+# ---------- start of a match, per game type (2 to 10 s after the bot joins) ----------
+
+[start war] 7%
+TEEEEEEEEAM, DEEEEAAAAAATHMAAAAATCH!!
+Lets get em guys, wipe the floor with them.
+Yeeeesss master...
+
+[start dom] 7%
+Yaaayy!! I LOVE DOMINATION!!!!
+Lets cap the flags and them.
+Yeeeesss master...
+
+[start sd] 7%
+Ahhhh! I'm scared! No respawning!
+Lets get em guys, wipe the floor with them.
+Yeeeesss master...
+
+[start dd] 7%
+Try not to get spawn killed.
+OK we need a plan. Nah lets just kill.
+Yeeeesss master...
+
+[start sab] 7%
+Soccer/Football! Lets play it!
+Who plays sab these days.
+I do not know what to say.
+
+[start ctf] 7%
+Halo style
+I'm going cap all the flags.
+NO IM CAPPING IT
+
+[start dm] 7%
+DEEEEAAAAAATHMAAAAATCH!!
+IM GOING TO KILL U ALL
+lol sweet. time to camp.
+
+[start koth] 7%
+HQ TIME!
+
+[start gtnw] 7%
+global thermonuclear warfare!!!!!!!
+
+# 2 s later, by a bot that has the nuke in its killstreaks
+[start nuke] 25%
+I WILL TRY AND GET A NUKE!!!
+
+
+# ---------- kills and deaths (said 1 to 3 s after) ----------
+
+# The bot killed {name}. {weapon}: the bot's weapon.
+[kill] 5%
+{color}Haha take that {name}
+{color}Who's your daddy!
+{color}O i just kicked your ass {name}!!
+{color}Better luck next time {name}
+{color}{name} Is that all you got?
+{color}LOL {name}, l2play
+{color}:)
+{color}Im unstoppable!
+{color}Wow {name} that was a close one!
+{color}Haha thank you, thank you very much.
+{color}HAHAHAHA LOL
+{color}ROFL you suck {name}!!
+{color}Wow that was a lucky shot!
+{color}Thats right, i totally pwnd your ass!
+{color}Don't even think that i am hacking cause that was pure skill!
+LOL xD xDDDD {name} sucks! HAHA ROFLMAO
+Wow that was an easy kill.
+noob down
+Lol u suck {name}
+PWND!
+sit down {name}
+wow that was close, but i still got you ;)
+oooooo! i got u good!
+thanks for the streak lol
+lol sweet got a kill
+Just killed a newb, LOL
+lolwtf that was a funny death
+i bet {name} is using the arrow keys to move.
+lol its noobs like {name} that ruin teams
+lolwat was that {name}?
+haha thanks {name}, im at a {mystreak} streak.
+lol {name} is at a {theirdeaths} deathstreak
+KLAPPED
+oooh get merked {name}
+i love {map}!
+{map} is my favorite map!
+get rekt
+lol i rekt {name}
+lol ur mum can play better than u!
+{name} just got rekt
+Man, I sure love my {weapon}!
+lol u got killed {name}, kek
+
+# {name} killed the bot. {weapon}: the killer's weapon. {mystreak}: the kill streak the bot
+# just lost. (streak): it had one, (no streak): it didn't.
+[death] 8%
+{color}Damm, i just got pwnd by {name}
+{color}Hax ! Hax ! Hax !
+{color}WOW n1 {name}
+{color}How the?? How did you do that {name}?
+(streak) {color}Nooooooooo my killstreaks!! :( I had a {mystreak} killstreak!!
+(no streak) man im getting spawn killed, i have a {mydeaths} deathstreak!
+{color}Stop spawn KILLING!!!
+{color}Haha Well done {name}
+{color}Agggghhhh {name} you are such a noob!!!!
+{color}n1 {name}
+Sigh at my lag, it's totally killing me.. ^2Just Look at my ^1Ping!
+omg wow that was LEGENDARY, well done {name}
+Today is defnitly not my day
+{color}Aaaaaaaagh!!!
+{color}Dude What the hell, {name} is such a HACKER!!
+{color}{name} you Wallhacker!
+{color}This is so frustrating!
+:O I can't believe that just happened
+{name} you ^1Noooo^2ooooooooo^3ooooo^5b
+{color}LOL, {name} how did you kill me?
+{color}laaaaaaaaaaaaaaaaaaaag
+{color}i hate this map!
+{name} You tanker!!
+Sigh at my isp
+^1I'll ^2be ^6back
+LoL that was random
+ooohh that was so close {name} and you know it !!
+{color}rofl
+AAAAHHHHH! WTF! IM GOING TO KILL YOU {name}
+AHH! IM DEAD BECAUSE {random} is a noob!
+{random}, please don't talk.
+Wow {random} is a blocker noob!
+Next time GET OUT OF MY WAY {random}!!
+Wow, I'm dead because {name} is a tryhard...
+Try harder {name} please!
+I bet {name}'s fingers are about to break.
+WOW, USE A REAL GUN {name}!
+k wtf. {name} is hacking
+nice wallhacks {name}
+wh {name}
+cheetos!
+wow {map} is messed up
+lolwtf was that {name}?
+admin pls ban {name}
+WTF IS WITH THESE SPAWNS??
+im getting owned lol...
+someone kill {name}, they are on a streak of {theirstreak}!
+man i died
+nice noob gun {name}
+stop camping {name}!
+k THERE IS NOTHING I CAN DO ABOUT DYING!!
+aw
+lol {map} sux
+why are we even playing on {map}?
+{map} is such an unfair map!!
+what were they thinking when making {map}?!
+{name} totally just destroyed me!
+can i be admen plz? so i can ban {name}
+wow {name} is such a no life!!
+man i got rekt by {name}
+admen pls ben {name}
+Wow! Nice {weapon} you got there, {name}!
+you are so banned {name}
+recorded reported and deported! {name}
+hack name {name}?
+dude can you send me that hack {name}?
+nice aimbot {name}!!1
+you are benned {name}!!
+that was topkek {name}
+
+
+# ---------- kill streaks ----------
+
+# The bot reached a kill streak of 25 (any number works: add a [streak 5] for 5 kills).
+# (nuke): it earned a nuke. (no nuke): it doesn't have the nuke in its killstreaks.
+# (nukes off): the server doesn't let bots have a nuke (bots_loadout_allow_op 0).
+[streak 25] 100%
+(nuke) I GOT A NUKE!!
+(nuke) NUKEEEEEEEEEEEEEEEEE
+(nuke) 25 killstreak!!!
+(nuke) NNNNNUUUUUUUUUUKKKKEEE!!! UWDHAWIDMIOGHE
+(nuke) You guys are getting nuuuuuuked~ x3
+(no nuke) Come on! I would of had a nuke but I don't got it set...
+(nukes off) WOW.. I could have a nuke but dumb admin disabled it for bots.
+
+# The bot calls in a killstreak: [killstreak <name>] with the game's name of it. Pave Low is
+# helicopter_flares, Chopper Gunner helicopter_minigun. Others that work the same way: uav,
+# counter_uav, airdrop, sentry, predator_missile, precision_airstrike, harrier_airstrike,
+# helicopter, airdrop_mega, stealth_airstrike.
+[killstreak helicopter_flares] 100%
+Nice! I got the paves!
+
+[killstreak emp] 100%
+Wow, wasn't expecting on getting an EMP.
+You don't see an EMP everyday!
+
+[killstreak nuke] 100%
+NUUUKE
+lol sweet nuke
+NUUUUUUKKKKKKEEEEEE!!!!
+YEEEEEEEES!!
+sweet I get a nuke and my team is noob
+GET NUKED NERDS!!!!
+NUKEM NOW!!!! NUKEEEEE!
+Get nuked kids!
+
+[killstreak ac130] 100%
+^3Time to ^1klap ^3some kids!
+Stingers are not welcome! AC130 rules all!
+Bahahahahahaaa! Time to rule the map with AC130!
+ac130 Madness!
+Say hello to my little friend, ^6AC130!
+
+[killstreak helicopter_minigun] 100%
+Eat my Chopper Gunner!!
+and here comes the ^1PAIN!
+Awwwww Yeah! Time to create choas in 40 seconds flat.
+Woot! Got my chopper gunner!
+Wewt got my choppa!
+Time to spawn kill with the OP chopper!
+GET TO DA CHOPPA!!
+
+# Someone's nuke is coming, every bot. {name}: who called it in. (mine): the bot did,
+# (theirs): someone else. (my team): it's from the bot's team, (their team): from the other one.
+[nuke] 30%
+(theirs) Wow who got a nuke?
+(mine) NUUUUUUKKKKKKEEEEEE!!!! :D
+(theirs) lol {name} is a hacker
+(mine) im the best!
+woah, that nuke is like much wow
+(their team) man my team sucks ):
+(my team) man my team is good lol
+
+
+# ---------- end of a match (said 0 to 10 s after) ----------
+# (best): the bot has the best score of everyone, (worst): the worst, (other): neither.
+
+# The bot's team won.
+[end won] 20%
+{color}Haha what a game
+xDDDDDDDDDD LOL HAHAHA FUN!
+{color}gg
+{color}That was fun
+{color}Lol my team always wins!
+{color}Haha if i am on {team} my team always wins!
+{color}GGA, our team was awesome!
+{color}My team {team} always wins!!
+{color}WOW that was EPIC!
+{color}Hackers lost haha noobs
+{color}Nice game!! Good job team!
+{color}GGA, Well done team!
+{color}LOL! camper noobs lose
+{color}owned.
+lool we won!!
+har har har :B  we WON!
+lol the sillys got pwnd :3
+we won lol sweet
+:v we won!
+(best) LOL we wouldn't of won without me!
+(best) I'm the VERY BEST!
+(worst) damn i sucked but i still won
+(worst) lol my team is good, i suck doe
+(other) lol {loser} sucked hard!
+(other) wow {winner} did very well!
+(other) lol {loser} should be playing a noobier game
+(other) i think {winner} is a hacker
+
+# The bot's team lost.
+[end lost] 20%
+{color}Hackers win
+xDDDDDDDDDD LOL HAHAHA
+{color}gg
+{color}That wasn't fun
+{color}Wow my team SUCKS!
+{color}My team {team} always loses!!
+{color}bg
+{color}vbg
+{color}WOW that was EPIC!
+{color}Good game
+{color}Bad game
+{color}very bad game
+{color}campers win
+{color}CAMPER NOOBS!!
+we lost but i still had fun
+>.> damn try hards
+>:(  that wasnt fair
+lost did we?
+>:V noobs win
+(best) LOL we lost even with my score.
+(best) my teammates are garabge
+(worst) damn im probally the reason we lost
+(worst) lol im garbage
+(other) {loser} should just leave
+(other) kwtf {winner} is a hacker
+(other) {loser} sux
+(other) {winner} is a noob!
+
+# A team game ended in a draw.
+[end draw] 20%
+{color}gg
+{color}bg
+{color}vbg
+{color}vgg
+{color}gg no rm
+{color}ggggggggg
+{color}good game
+{color}gee gee
+
+# Free-for-all ended.
+[end ffa] 20%
+(best) {color}Haha Suck it, you all just got pwnd!
+(best) {color}LOL i just wasted you all!! Whoot whoot!
+(best) {color}LOL i just wasted you all!! Whoot whoot!
+(worst) {color}Lol i Sucked in this game, just look at my score!
+(worst) GGA i suck, Nice score {winner}
+(worst) {color}nice wallhacks {winner}
+(other) {color}gga, Bad luck {loser}
+(other) This game sucked, {winner} is such a hacker!!
+(other) {color}Rofl, {loser} dude, you suck!!
+(other) {color}Nice Score {winner}, how did you get to be so good?
+(other) {color}Lol atleast i did better then {loser}
+(other) {color}lolwtf {winner}
+{color}gee gee
+{color}WOW that was EPIC!
+{color}Nice Game!
+{color}good game
+{color}gga  c  u  all later
+{color}bg
+{color}GG
+{color}gg
+{color}vbg
+{color}gga
+{color}BG
+{color}stupid map
+{color}ffa sux
+{color}:3 i had fun
+{color}:P nubs are playin
+{color}nub nub nub thx 4 the nubs
+{color}damn campers
+
+
+# ---------- what the bot is doing (Bot Warfare's names: go = on its way, start, stop) ----------
+
+# Care packages. (mine): the bot's own, (theirs): someone else's, {name}: whose.
+[crate_cap go] 5%
+(mine) going to my carepackage
+(theirs) going to {name}'s carepackage
+going to this carepackage
+
+[crate_cap start] 15%
+(mine) taking my carepackage
+(theirs) taking {name}'s carepackage
+taking this carepackage
+
+[crate_cap stop] 10%
+(mine) Pheww... Got my carepackage
+(mine) lolnoobs i got my carepackage. what now!?
+(mine) holy cow! that was a close one!
+(mine) lol u sillys. i got my care package
+(mine) :3 i got my package
+(mine) :3 i got my {crate}
+(theirs) LOL! (10-101) I took {name}'s carepackage.
+(theirs) lolsweet just found a carepackage, just for me!
+(theirs) I heard {name} owed me a carepackage. Thanks lol.
+(theirs) >;3 i took your care package! xDD
+(theirs) hahaah jajaja i took your {crate}
+
+# {name} took the bot's care package.
+[crate_cap captured] 10%
+sad... gf carepackage
+WTF MAN! THAT WAS MINE.
+Wow wtf {name}, i worked hard for that carepackage...
+>.< {name}, fine take my skill package.
+Wow! there goes my {crate}!
+
+[crate_cap unreachable] 25%
+i cant reach that carepackage!
+
+# The bot shoots at an enemy killstreak. {weapon}: what it shoots with.
+[attack_vehicle start] 10%
+Not on my watch...
+Take down aircraft I am
+{color}i hate killstreaks
+Killstreaks ruin this game!!
+killstreaks sux
+keep the killstreaks comin'
+lol see that killstreak? its going to go BOOM!
+{color}Lol I bet that noob used hardline to get that streak.
+WOW HOW DO YOU GET THAT?? ITS GONE NOW.
+HAHA say goodbye to your killstreak
+All your effort is gone now.
+I hope there are flares on that killstreak.
+lol u silly, i'm taking down killstreaks :3 xDD
+Im going to takedown your ks with my {weapon}
+
+[camp go] 10%
+going to camp for {seconds} seconds
+time to go camp!
+rofl im going to camp
+
+[camp start] 10%
+well im camping... this is fun!
+lol im camping, hope i kill someone
+im camping! i guess ill wait {seconds} before moving again
+
+[camp stop] 10%
+finished camping..
+wow that was a load of camping!
+well its been over {seconds} seconds, i guess ill stop camping
+
+# The bot follows a teammate, {name}.
+[follow start] 10%
+well im going to follow {name} for {seconds} seconds
+Lets go together {name} <3 :)
+lets be butt buddies {name} and ill follow you!
+
+[follow stop] 10%
+well that was fun following {name} for {seconds} seconds
+im done following that guy
+
+# Claymores, C4, ... {weapon}: which.
+[equ go] 10%
+going to place a {weapon}
+
+[equ start] 10%
+placed a {weapon}
+
+# Grenades. {weapon}: which.
+[nade go] 10%
+going to throw a {weapon}
+
+[nade start] 10%
+threw a {weapon}
+
+[tube go] 10%
+i am going to go tube
+
+[tube start] 10%
+i tubed
+
+[throwback stop] 10%
+i threw back the grenade!
+
+[revenge start] 10%
+Im going to check out my death location.
+
+[revenge stop] 10%
+i checked out my deathlocation...
+
+# The bot heard {name}.
+[heard_target start] 5%
+I think I hear {name}...
+
+[heard_target stop] 5%
+Well i checked out {name}'s location...
+
+# An enemy sentry gun.
+[turret_attack go] 5%
+going to this sentry...
+
+[turret_attack start] 5%
+attacking this sentry...
+
+# An enemy tactical insertion.
+[attack_equ go_ti] 10%
+going to this ti...
+
+[attack_equ camp_ti] 10%
+lol im camping this ti!
+
+[attack_equ trigger_ti] 10%
+lol i destoryed this ti!
+
+# Reviving {name} (only in modes with revives).
+[revive go] 10%
+i am going to revive {name}
+
+[revive start] 10%
+i am reviving {name}
+
+[revive stop] 10%
+i revived {name}
+
+[killcam start] 1%
+WTF?!?!?!! Dude youre a hacker and a half!!
+Haa! Got my fraps ready, time to watch this killcam.
+
+[killcam stop] 1%
+Wow... Im reporting you!!!
+Got it on fraps!
+
+# The bot is stuck.
+[stuck] 20%
+{wasd}
+
+
+# ---------- in Bot Warfare's lines, but Bot Warfare never reports these moments ----------
+# so they're never said; kept in case a newer Bot Warfare does
+
+[throwback start] 10%
+i am going to throw back the grenade!
+
+[tbag go] 50%
+Im going to go tBag XD
+
+[tbag start] 50%
+Im going to tBag XD
+
+[tbag stop] 50%
+Awwww yea... How do you like that? XD
+
+[rage start] 80%
+K this is not going as I planned.
+Screw this! I'm out.
+Have fun being owned.
+MY TEAM IS GARBAGE!
+kthxbai hackers
+
+
+# ---------- moments without lines yet: add a section with one of these names ----------
+# [chat]  someone wrote in chat, {name}: who (every bot gets the chance to answer)
+# [connection connected] / [connection disconnected]  {name}: who joined or left
+# [killstreak camp]  the bot waits for a good spot to use a killstreak
+# [follow_threat start] [follow_threat stop] [uav_target start] [uav_target stop]
+# [jav go] [jav start] [turret_attack stop] [attack_equ start] [attack_equ stop]
+# [attack_vehicle stop]
+# Game modes, [<mode> <what> <go|start|stop>]:
+#   S&D, Sabotage: [sd plant go] [sd plant start] [sd plant stop], the same for defuse;
+#     [sd bomb start|stop] (going for the bomb), [sd planter start|stop] (guarding the
+#     planter), [sd defuser start|stop]; Sabotage the same with sab
+#   Demolition: [dem plant go|start|stop] [dem defuse go|start|stop] [dem planter start|stop]
+#     [dem defuser start|stop]
+#   Domination: [dom cap go|start|stop] [dom defend start|stop] [dom spawnkill start|stop]
+#   Headquarters: [hq cap go|start|stop] [hq defend start|stop]
+#   Capture the Flag: [cap their_flag start|stop] [cap my_flag start|stop] [cap cap start|stop]
+#   One Flag: [oneflag their_flag|my_flag|cap start|stop]
+#   Global Thermonuclear War: [gtnw cap go|start|stop]; Arena: [arena cap go|start|stop];
+#   VIP: [vip cap start|stop]
