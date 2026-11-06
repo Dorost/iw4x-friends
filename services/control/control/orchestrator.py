@@ -61,6 +61,11 @@ def who(by: str) -> str:
     return "Someone on the fleet page" if by == "the web UI" else by
 
 
+def console_arg(s: str) -> str:
+    """A value for the game console: in quotes when it has a space or a ;."""
+    return f'"{s}"' if any(c.isspace() or c == ";" for c in s) else s
+
+
 def machine(spec: ServerSpec) -> Machine:
     return Machine(spec.label, spec.region, spec.plan, spec.volume_gb, spec.options)
 
@@ -305,11 +310,19 @@ class Orchestrator:
         self.start(name, "boot", self._boot(name, by))
         lines = [
             f"🚀 <b>{esc(who(by))}</b> booted <b>{esc(spec.title)}</b>, up in about 5 minutes",
-            f"🎯 <code>connect {esc(spec.domain)}</code>",
+            self.connect_line(name),
         ]
         if line := self.idle_line(name, "It goes offline {m} min after it's up if nobody joins"):
             lines.append(line)
         self.tg.post("\n".join(lines))
+
+    def connect_line(self, name: str) -> str:
+        """How to join, for the group: the console command, with the join password unless the
+        server is open to everyone (or the fleet has none, and each server keeps its own)."""
+        command = f"connect {self.s.servers[name].domain}"
+        if self.s.game_password and not self.row(name).join_public:
+            command = f"password {console_arg(self.s.game_password)}; {command}"
+        return f"🎯 <code>{esc(command)}</code>"
 
     def idle_line(self, name: str, text: str) -> str:
         """The idle rule's warning for the group, or "" in a schedule window (no idle rule then)."""
@@ -518,7 +531,7 @@ class Orchestrator:
         self.event(name, f"up at {row.ip}")
         lines = [
             f"🟢 <b>{esc(spec.title)}</b> is up",
-            f"🎯 <code>connect {esc(spec.domain)}</code>",
+            self.connect_line(name),
         ]
         if line := self.idle_line(name, "Goes offline in {m} min if nobody joins"):
             lines.append(line)

@@ -357,10 +357,27 @@ async def test_the_group_hears_who_booted_and_the_idle_rule(fleet):
     booted, is_up = posts(orch)
     assert booted == (
         "🚀 <b>Yashar</b> booted <b>NL</b>, up in about 5 minutes\n"
-        "🎯 <code>connect mw2-nl.dorost.nl</code>\n"
+        "🎯 <code>password join; connect mw2-nl.dorost.nl</code>\n"
         "⏳ It goes offline 15 min after it's up if nobody joins"
     )
-    assert is_up.endswith("⏳ Goes offline in 15 min if nobody joins")
+    assert is_up == (
+        "🟢 <b>NL</b> is up\n"
+        "🎯 <code>password join; connect mw2-nl.dorost.nl</code>\n"
+        "⏳ Goes offline in 15 min if nobody joins"
+    )
+
+
+@pytest.mark.anyio
+async def test_the_group_gets_the_password_only_when_it_is_needed(tmp_path):
+    orch, _, _ = make(tmp_path, NOW, game_password="tea time;")
+    assert orch.connect_line("nl") == (
+        '🎯 <code>password "tea time;"; connect mw2-nl.dorost.nl</code>'
+    )
+    await orch.set_public("nl", True, "test")  # open to everyone: no password to type
+    assert orch.connect_line("nl") == "🎯 <code>connect mw2-nl.dorost.nl</code>"
+    (tmp_path / "none").mkdir()
+    orch, _, _ = make(tmp_path / "none", NOW, game_password="")  # each server keeps its own
+    assert orch.connect_line("nl") == "🎯 <code>connect mw2-nl.dorost.nl</code>"
 
 
 @pytest.mark.anyio
