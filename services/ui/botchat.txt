@@ -30,18 +30,18 @@
 # ---------- start of a match, per game type (2 to 10 s after the bot joins) ----------
 
 [start war] 7%
-TEEEEEEEEAM, DEEEEAAAAAATHMAAAAATCH!!
-Lets get em guys, wipe the floor with them.
+TEEEEEEEEAM, SiiiiiishhhhMAAAAATCH!!
+Galin gedax sikax bilalarin.
 Yeeeesss master...
 
 [start dom] 7%
-Yaaayy!! I LOVE DOMINATION!!!!
+Jaaaan!! I LOVE DOMINATION!!!!
 Lets cap the flags and them.
 Yeeeesss master...
 
 [start sd] 7%
-Ahhhh! I'm scared! No respawning!
-Lets get em guys, wipe the floor with them.
+Soxum SDa
+Galin gedax sikax bilalarin.
 Yeeeesss master...
 
 [start dd] 7%
@@ -79,121 +79,121 @@ I WILL TRY AND GET A NUKE!!!
 
 # The bot killed {name}. {weapon}: the bot's weapon.
 [kill] 5%
-{color}Haha take that {name}
-{color}Who's your daddy!
-{color}O i just kicked your ass {name}!!
-{color}Better luck next time {name}
-{color}{name} Is that all you got?
-{color}LOL {name}, l2play
-{color}:)
-{color}Im unstoppable!
-{color}Wow {name} that was a close one!
-{color}Haha thank you, thank you very much.
-{color}HAHAHAHA LOL
-{color}ROFL you suck {name}!!
-{color}Wow that was a lucky shot!
-{color}Thats right, i totally pwnd your ass!
-{color}Don't even think that i am hacking cause that was pure skill!
-LOL xD xDDDD {name} sucks! HAHA ROFLMAO
-Wow that was an easy kill.
-noob down
-Lol u suck {name}
-PWND!
-sit down {name}
-wow that was close, but i still got you ;)
-oooooo! i got u good!
-thanks for the streak lol
-lol sweet got a kill
-Just killed a newb, LOL
-lolwtf that was a funny death
-i bet {name} is using the arrow keys to move.
-lol its noobs like {name} that ruin teams
-lolwat was that {name}?
-haha thanks {name}, im at a {mystreak} streak.
-lol {name} is at a {theirdeaths} deathstreak
-KLAPPED
-oooh get merked {name}
-i love {map}!
-{map} is my favorite map!
-get rekt
-lol i rekt {name}
-lol ur mum can play better than u!
-{name} just got rekt
-Man, I sure love my {weapon}!
-lol u got killed {name}, kek
+{color}Al ichiva {name}
+{color}Amu chand salete?
+{color}Sihdim bilave {name}!
+{color}Saninkin sana verram {name}
+{color}{name} kolle zorun buyide?
+{color}kefin {name}? :D
+{color}:D
+{color}Man ganaaaam
+{color}Oho {name} az qalirde ha!
+{color}saghol jeyran kill uchun
+{color}Gada gada gada :))
+{color}Sishmisan {name}!!
+{color}Gotdan gatdin!
+{color}Azivi sihdim {name}
+{color}Jehdirdin ke {name}
+gada :))) {name} sishdin ke
+cholax {name} :D
+noob gada
+sishmisan {name}
+sihdirdin!
+ote yera baba {name}
+gotdan gatdim {name} :D
+sihdim ke bilave {name}
+yasha kill uchun :D
+bilaxara birin oldurdum :D
+Gor {name} san naghadr kosdast san ke botdan yedin
+bilaxara olde
+{name} falaaaaj :))
+noob gada {name} :D
+sanidin {name}?
+haha yasha {name}, {mystreak} killstreaka chatdim.
+gada {name} {theirdeaths} seride faghat olure :))))
+khosh galdin
+{name} gora getde :D
+Bah bah {map}!
+{map} juuuun!
+sihtir
+sihdim {name}
+Sanin amman bunan behtar oynar!
+{name} sihtirde
+{weapon} batarde!
+gota getdin {name} :D
 
 # {name} killed the bot. {weapon}: the killer's weapon. {mystreak}: the kill streak the bot
 # just lost. (streak): it had one, (no streak): it didn't.
 [death] 8%
-{color}Damm, i just got pwnd by {name}
-{color}Hax ! Hax ! Hax !
-{color}WOW n1 {name}
-{color}How the?? How did you do that {name}?
-(streak) {color}Nooooooooo my killstreaks!! :( I had a {mystreak} killstreak!!
-(no streak) man im getting spawn killed, i have a {mydeaths} deathstreak!
-{color}Stop spawn KILLING!!!
-{color}Haha Well done {name}
-{color}Agggghhhh {name} you are such a noob!!!!
-{color}n1 {name}
-Sigh at my lag, it's totally killing me.. ^2Just Look at my ^1Ping!
-omg wow that was LEGENDARY, well done {name}
-Today is defnitly not my day
-{color}Aaaaaaaagh!!!
-{color}Dude What the hell, {name} is such a HACKER!!
-{color}{name} you Wallhacker!
-{color}This is so frustrating!
-:O I can't believe that just happened
-{name} you ^1Noooo^2ooooooooo^3ooooo^5b
-{color}LOL, {name} how did you kill me?
+{color}Gada {name} sihde mane
+{color}Gada Gada Gada
+{color}Oha {name}
+{color}Gada najuuur {name}?
+(streak) {color}Manim killstreakim :( {mystreak} varimide!!
+(no streak) faghat spawn'da olurama, {mydeaths} dalbadal olmusham!
+{color}spawn khattamiyiiiiiin!!!
+{color}batarida {name}
+{color}{name} sishmisan!!!!
+{color}aalide {name}
+Soxum bu interneta ^2bax pinga sanalah
+barakanah {name}
+Olmasa man gedim kopum
+{color}GADAAAAAA!
+{color}gada {name} soxup mana chixatmire
+{color}{name} sihtir baba!
+{color}Azim sikilde!
+:O gada o namanide
+{name} ^1Poooo^2ooooooooo^3ooooo^5x
+{color}Najude vurdun mani {name}?
 {color}laaaaaaaaaaaaaaaaaaaag
-{color}i hate this map!
-{name} You tanker!!
-Sigh at my isp
-^1I'll ^2be ^6back
-LoL that was random
-ooohh that was so close {name} and you know it !!
-{color}rofl
-AAAAHHHHH! WTF! IM GOING TO KILL YOU {name}
-AHH! IM DEAD BECAUSE {random} is a noob!
-{random}, please don't talk.
-Wow {random} is a blocker noob!
-Next time GET OUT OF MY WAY {random}!!
-Wow, I'm dead because {name} is a tryhard...
-Try harder {name} please!
-I bet {name}'s fingers are about to break.
-WOW, USE A REAL GUN {name}!
-k wtf. {name} is hacking
-nice wallhacks {name}
-wh {name}
-cheetos!
-wow {map} is messed up
-lolwtf was that {name}?
-admin pls ban {name}
-WTF IS WITH THESE SPAWNS??
-im getting owned lol...
-someone kill {name}, they are on a streak of {theirstreak}!
-man i died
-nice noob gun {name}
-stop camping {name}!
-k THERE IS NOTHING I CAN DO ABOUT DYING!!
-aw
-lol {map} sux
-why are we even playing on {map}?
-{map} is such an unfair map!!
-what were they thinking when making {map}?!
-{name} totally just destroyed me!
-can i be admen plz? so i can ban {name}
-wow {name} is such a no life!!
-man i got rekt by {name}
-admen pls ben {name}
-Wow! Nice {weapon} you got there, {name}!
-you are so banned {name}
-recorded reported and deported! {name}
-hack name {name}?
-dude can you send me that hack {name}?
-nice aimbot {name}!!1
-you are benned {name}!!
-that was topkek {name}
+{color}soxum bu mapa!
+{name} qahba gada
+Soxum bu interneta
+^1manda ^2cholax
+Gotdan gatdin
+olda akhe {name}
+{color}oha
+sikajagham bilave {name}
+{random} mani da gota verde!
+{random} bax ba orda :))
+gada {random} nia sichip
+Sihdir da {random}!!
+bu {name} mani gota verde...
+Zor vur {name}
+{name} gotun achilde?
+noob gada {name}
+gada olmusan keeeee {name}
+aimbot {name}
+{name} cheat vurup
+pox!
+insafan {map} pox de
+o nayide {name}?
+baba chah chixat {name}
+BU NA SPAWNIDE???
+gota gediram...
+{name} oldurun. killstreaki {theirstreak} olde!
+sihdirdim
+haranin alindaki ozuna {name}
+{name} camp elama gada
+manda faghat oluma!
+ah baba
+{map} da, {map} chixardani da
+biz {map}'da na pox yiyirux?
+{map}'dan zahlam gedir
+axe kim dede {map} da oyniax?!
+{name} siiihde mane!
+birdana da code yazin {name} giramasin
+oha {name} pox yemaghina bax!!
+gada {name} sihde mane
+{name} aziva
+o alindaki {weapon} sox gotuva {name}!
+dayan galdim {name}
+da bunan sora {name} galsa man yoxam
+ollllll qutaaar {name}
+aslan olamaha birdan {name}?
+olmusan ke {name}!!1
+aslan olma haaaaaa {name}
+oho {name}
 
 
 # ---------- kill streaks ----------
@@ -264,25 +264,25 @@ woah, that nuke is like much wow
 
 # The bot's team won.
 [end won] 20%
-{color}Haha what a game
-xDDDDDDDDDD LOL HAHAHA FUN!
-{color}gg
-{color}That was fun
-{color}Lol my team always wins!
+{color}inafan bataride
+yapishde
+{color}aghalar yorulmiasiz
+{color}qashayide
+{color}marg bar monafegh
 {color}Haha if i am on {team} my team always wins!
 {color}GGA, our team was awesome!
 {color}My team {team} always wins!!
 {color}WOW that was EPIC!
 {color}Hackers lost haha noobs
 {color}Nice game!! Good job team!
-{color}GGA, Well done team!
+{color}yashasin azarbaijan
 {color}LOL! camper noobs lose
-{color}owned.
+{color}jaaaan.
 lool we won!!
 har har har :B  we WON!
 lol the sillys got pwnd :3
 we won lol sweet
-:v we won!
+da gorar. khudafiz :D
 (best) LOL we wouldn't of won without me!
 (best) I'm the VERY BEST!
 (worst) damn i sucked but i still won
@@ -298,23 +298,23 @@ we won lol sweet
 xDDDDDDDDDD LOL HAHAHA
 {color}gg
 {color}That wasn't fun
-{color}Wow my team SUCKS!
+{color}sishdix
 {color}My team {team} always loses!!
-{color}bg
-{color}vbg
+{color}aghride :D
+{color}Gogo'nin yeri bosh
 {color}WOW that was EPIC!
-{color}Good game
-{color}Bad game
+{color}gotdan gatdiz
+{color}baba bu na game'ide
 {color}very bad game
 {color}campers win
-{color}CAMPER NOOBS!!
+{color}gota getdux ke :D
 we lost but i still had fun
 >.> damn try hards
 >:(  that wasnt fair
 lost did we?
->:V noobs win
+gotdan gatdiz
 (best) LOL we lost even with my score.
-(best) my teammates are garabge
+(best) bizim team sichiiip
 (worst) damn im probally the reason we lost
 (worst) lol im garbage
 (other) {loser} should just leave
