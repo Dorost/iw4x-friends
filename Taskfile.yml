@@ -103,7 +103,7 @@ tasks:
       - uv run scripts/tools/vultr.py status
 
   vps:sync-iw4x:
-    desc: After an IW4x update (task game:update), copy the new IW4x files to the Vultr VPS
+    desc: After an IW4x update (task game), copy the new IW4x files to the Vultr VPS
     cmds:
       - uv run scripts/tools/vultr.py sync-iw4x
 
@@ -129,19 +129,19 @@ tasks:
         platforms: [windows]
 
   game:
-    desc: Start the IW4x game with the shared settings, skipping the update check (use when it does not open)
+    desc: Update IW4x with its launcher, then start the game with the shared settings
     cmds:
       - cmd: ./scripts/mac/start-game.sh
         platforms: [darwin]
       - cmd: '{{.PS}} scripts/windows/start-game.ps1'
         platforms: [windows]
 
-  game:update:
-    desc: Run the IW4x launcher with its update check, then start the game
+  game:no-update:
+    desc: Start the game without the launcher's update check (use when the check hangs)
     cmds:
-      - cmd: ./scripts/mac/start-game.sh --update
+      - cmd: ./scripts/mac/start-game.sh --no-update
         platforms: [darwin]
-      - cmd: '{{.PS}} scripts/windows/start-game.ps1 -Update'
+      - cmd: '{{.PS}} scripts/windows/start-game.ps1 -NoUpdate'
         platforms: [windows]
 
   game:hide:

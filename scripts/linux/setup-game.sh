@@ -7,11 +7,12 @@
 #   4. configures it: fresh profile, fullscreen at native resolution, shared game
 #      settings (config/client.cfg)
 #   5. installs the custom maps + bots pack (install-maps.sh)
-#   6. creates an app menu entry that starts the game
+#   6. creates an app menu entry that updates IW4x and starts the game
 #
-# Plain Wine instead of IW4x's own Linux launcher: that one needs Steam with Proton, and
-# updates IW4x on every start. Like the Mac and Windows shortcuts this starts the IW4x
-# version from the package, the one the servers run.
+# The game runs on plain Wine, not through IW4x's own Linux launcher: that one needs Steam
+# with Proton. IW4x's Windows launcher, under the same Wine, brings IW4x to the latest
+# release before every start (as the Mac and Windows shortcuts and the servers do), then the
+# starter runs iw4x.exe itself.
 #
 # Run it straight from GitHub, in a terminal:
 #   bash -c "$(curl -fsSL https://raw.githubusercontent.com/Dorost/iw4x-friends/main/scripts/linux/setup-game.sh)"
@@ -286,7 +287,7 @@ else
 fi
 # The game folder also holds the 64-bit Windows launcher's DLLs. Some distros' Wine loads
 # zlib1.dll for its own DLLs and finds the 64-bit one here first: the 32-bit game then
-# fails to start. The game is started without that launcher here, so move it aside.
+# fails to start. The starter (iw4x.sh) puts it back only while that launcher updates IW4x.
 if [[ -f "$GAME/zlib1.dll" ]]; then
   mv "$GAME/zlib1.dll" "$GAME/zlib1.dll.x64"
   ok "moved aside the Windows launcher's 64-bit zlib1.dll (stops some Wine builds from starting the game)"
@@ -617,9 +618,19 @@ step "App menu entry"
 launcher="$DIR/iw4x.sh"
 cat > "$launcher" <<EOF
 #!/usr/bin/env bash
-# Start IW4x under Wine with the shared settings (written by setup-game.sh)
+# Start IW4x under Wine with the shared settings (written by setup-game.sh). IW4x's own
+# launcher first brings IW4x (and itself) to the latest release, as the servers do on every
+# boot; a failed update starts the IW4x that is installed
 export WINEPREFIX="$WINEPREFIX" WINEDEBUG=-all WINEDLLOVERRIDES="mscoree,mshtml="
 cd "$GAME" || exit 1
+# The launcher's 64-bit zlib1.dll stops some Wine builds from starting the 32-bit game, so it
+# lives aside as zlib1.dll.x64. Missing, the launcher downloads IW4x (mm) again: it's back in
+# place only while the launcher runs
+[[ -f zlib1.dll.x64 && ! -e zlib1.dll ]] && mv zlib1.dll.x64 zlib1.dll
+command -v notify-send >/dev/null && notify-send IW4x "Checking for updates..."
+wine iw4x-launcher.exe --arch x86 --skip-launch --no-shortcuts --no-connect-protocol < /dev/null \
+  || echo "IW4x update failed, starting the installed version"
+[[ -f zlib1.dll ]] && mv -f zlib1.dll zlib1.dll.x64
 exec wine iw4x.exe +exec client_tweaks.cfg "\$@"
 EOF
 chmod +x "$launcher"

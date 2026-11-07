@@ -6,7 +6,7 @@
 #   4. configures it: unique player identity, fullscreen at native resolution,
 #      Auto graphics, MSync on, shared game settings (config/client.cfg)
 #   5. installs the custom maps + bots pack (install-maps.sh)
-#   6. creates a Desktop launcher that skips IW4x's remote update check
+#   6. creates a Desktop launcher: IW4x's own launcher, which updates IW4x before every start
 #
 # Run it straight from GitHub, in Terminal:
 #   zsh -c "$(curl -fsSL https://raw.githubusercontent.com/Dorost/iw4x-friends/main/scripts/mac/setup.sh)"
@@ -626,10 +626,10 @@ launcher="$HOME/Desktop/IW4x.command"
 [[ "$BOTTLE" == "mw" ]] || launcher="$HOME/Desktop/IW4x ($BOTTLE).command"
 cat > "$launcher" <<EOF
 #!/bin/zsh
-# Start IW4x, skipping the launcher's GitHub update check (it can hang under CrossOver)
+# Start IW4x with its own launcher, which first brings IW4x (and itself) to the latest release
 cd "$GAME"
 exec "$WINE" --bottle "$BOTTLE" --cx-app iw4x-launcher.exe \\
-  --arch x86 --skip-remote --no-self-update --no-shortcuts --no-connect-protocol \\
+  --arch x86 --no-shortcuts --no-connect-protocol \\
   --game-args "+exec client_tweaks.cfg"
 EOF
 chmod +x "$launcher"
