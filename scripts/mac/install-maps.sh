@@ -3,6 +3,11 @@
 # iw_23.iwd holds textures some DLC maps (e.g. Shipment) need but IW4x doesn't ship.
 # macOS (CrossOver bottle) and Linux. Safe to re-run: skips if already installed,
 # and an interrupted download resumes.
+# Every run also deletes the usermaps/ folders of maps IW4x ships itself (zone/**/<map>.ff).
+# Older packs had 7 of those (Backlot, Broadcast, District, Ambush, Countdown, Seatown,
+# Showdown). IW4x plays its own copy anyway but still loads the folder's textures on top,
+# a server with the folder only lets in players with the same copy, and on IW4x before
+# r5292 the pack's Countdown froze the server.
 #
 # Run it straight from GitHub:
 #   bash -c "$(curl -fsSL https://raw.githubusercontent.com/Dorost/iw4x-friends/main/scripts/mac/install-maps.sh)"
@@ -50,6 +55,20 @@ download_url() {
   fi
 }
 
+# delete the usermaps/ folders of maps IW4x ships itself (see the top of this file)
+remove_duplicate_maps() {
+  local folder map removed=()
+  [[ -d "$DIR/usermaps" && -d "$DIR/zone" ]] || return 0
+  for folder in "$DIR"/usermaps/*/; do
+    [[ -d "$folder" ]] || continue  # an empty usermaps/
+    map=$(basename "$folder")
+    [[ -n "$(find "$DIR/zone" -name "$map.ff" -print -quit)" ]] || continue
+    rm -rf "$folder"
+    removed+=("$map")
+  done
+  (( ${#removed[@]} == 0 )) || ok "removed ${removed[*]} from usermaps/ (IW4x has its own copy)"
+}
+
 # ask for the setup password and print the decrypted links ("game=<url>" and "maps=<url>"
 # lines). Fails when there are none, on Enter (paste a link instead) or after 3 wrong tries
 unlock_links() {
@@ -76,6 +95,7 @@ step "Custom maps + bots pack (~1 GB)"
 
 # already installed: done, without contacting Google Drive (use --force to reinstall)
 if (( ! FORCE )) && [[ -f "$DIR/$MARK" ]]; then
+  remove_duplicate_maps
   ok "already installed"
   exit 0
 fi
@@ -141,6 +161,7 @@ for part in usermaps userraw main; do
   mkdir -p "$DIR/$part"
   cp -R "$tmp/$part/." "$DIR/$part/"
 done
+remove_duplicate_maps  # an older pack (e.g. one left in ~/Downloads) still has them
 size_of "$ZIP" > "$DIR/$MARK"
 ok "installed $(ls "$DIR/usermaps" | wc -l | tr -d ' ') maps and the bots mod into $DIR"
 (( KEEP_ZIP )) || { rm -f "$ZIP"; ok "removed $ZIP_NAME"; }
