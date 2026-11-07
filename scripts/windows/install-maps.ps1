@@ -2,6 +2,11 @@
 Install the custom maps + bots pack (usermaps\, userraw\ and main\iw_23.iwd) into an MW2 game folder (Windows).
 iw_23.iwd holds textures some DLC maps (e.g. Shipment) need but IW4x doesn't ship.
 Safe to re-run: skips if already installed, and an interrupted download resumes.
+Every run also deletes the usermaps\ folders of maps IW4x ships itself (zone\**\<map>.ff).
+Older packs had 7 of those (Backlot, Broadcast, District, Ambush, Countdown, Seatown,
+Showdown). IW4x plays its own copy anyway but still loads the folder's textures on top,
+a server with the folder only lets in players with the same copy, and on IW4x before
+r5292 the pack's Countdown froze the server.
 
 Run it straight from GitHub, in PowerShell:
   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/Dorost/iw4x-friends/main/scripts/windows/install-maps.ps1)))
@@ -76,6 +81,22 @@ function Get-RemoteSize($url) {
     return ""
 }
 
+# Delete the usermaps\ folders of maps IW4x ships itself (see the top of this file).
+function Remove-DuplicateMaps {
+    $usermaps = Join-Path $InstallDir "usermaps"
+    $zone = Join-Path $InstallDir "zone"
+    if (-not (Test-Path $usermaps) -or -not (Test-Path $zone)) { return }
+    $shipped = @{}
+    Get-ChildItem $zone -Recurse -File -Filter "*.ff" | ForEach-Object { $shipped[$_.BaseName.ToLower()] = $true }
+    $removed = @()
+    foreach ($folder in Get-ChildItem $usermaps -Directory) {
+        if (-not $shipped.ContainsKey($folder.Name.ToLower())) { continue }
+        Remove-Item -Recurse -Force $folder.FullName
+        $removed += $folder.Name
+    }
+    if ($removed) { Ok "removed $($removed -join ', ') from usermaps (IW4x has its own copy)" }
+}
+
 function Remove-HtmlPartial($path) {
     if ((Test-Path $path) -and (Get-Item $path).Length -gt 0) {
         $fs = [IO.File]::OpenRead($path); $first = $fs.ReadByte(); $fs.Dispose()
@@ -93,6 +114,7 @@ if (-not (Test-Path (Join-Path $InstallDir "iw4x.exe"))) { Die "no MW2 + IW4x in
 
 # already installed: done, without contacting Google Drive (use -Force to reinstall)
 if (-not $Force -and (Test-Path $Mark)) {
+    Remove-DuplicateMaps
     Ok "already installed"
     return
 }
@@ -141,6 +163,7 @@ try {
         [IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $dest, $true)
     }
 } finally { $archive.Dispose() }
+Remove-DuplicateMaps  # an older pack (e.g. one left in Downloads) still has them
 Set-Content -Path $Mark -Value "$((Get-Item $Zip).Length)" -Encoding ascii
 Ok "installed $((Get-ChildItem (Join-Path $InstallDir 'usermaps') -Directory).Count) maps and the bots mod into $InstallDir"
 if (-not $KeepZip) { Remove-Item $Zip; Ok "removed $ZipName" }
