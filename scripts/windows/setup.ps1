@@ -6,7 +6,7 @@ One-shot setup of MW2 + IW4x on a Windows PC:
   4. configures the game: fresh profile, fullscreen at native resolution, shared game
      settings from config/client.cfg (lowest graphics, no FPS drops when hit)
   5. installs the custom maps + bots pack (install-maps.ps1)
-  6. creates a Desktop shortcut that skips IW4x's remote update check
+  6. creates a Desktop shortcut: IW4x's own launcher, which updates IW4x before every start
 
 Run it straight from GitHub, in PowerShell:
   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/Dorost/iw4x-friends/main/scripts/windows/setup.ps1)))
@@ -599,8 +599,9 @@ $lnk = Join-Path ([Environment]::GetFolderPath("Desktop")) "IW4x.lnk"
 $shell = New-Object -ComObject WScript.Shell
 $sc = $shell.CreateShortcut($lnk)
 $sc.TargetPath = Join-Path $game "iw4x-launcher.exe"
-# skip the GitHub update check (it can hang); run the launcher without these flags to update
-$sc.Arguments = '--arch x86 --skip-remote --no-self-update --no-shortcuts --no-connect-protocol --game-args "+exec client_tweaks.cfg"'
+# IW4x's own launcher brings IW4x (and itself) to the latest release before every start, as the
+# servers do on every boot. No shortcuts of its own: they would start without client_tweaks.cfg
+$sc.Arguments = '--arch x86 --no-shortcuts --no-connect-protocol --game-args "+exec client_tweaks.cfg"'
 $sc.WorkingDirectory = $game
 $sc.IconLocation = Join-Path $game "iw4x.exe"
 $sc.Save()

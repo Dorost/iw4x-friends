@@ -3,8 +3,8 @@
 #   - config/client.cfg   shared settings (graphics, hit fixes, sound), loaded on every start
 #   - custom maps + bots  installed if missing (scripts/mac/install-maps.sh)
 #   - config/classes.cfg  custom classes, loaded with F9 during a match, or exec classes.cfg in the console
-# Default skips the launcher's GitHub update check, which can hang under CrossOver.
-# Pass --update to let the launcher update IW4x first.
+# IW4x's own launcher brings IW4x (and itself) to the latest release first, as the servers do on
+# every boot; --no-update starts the installed version without checking.
 source "$(dirname "$0")/env.sh"
 # a second copy would sit behind an invisible "Game already running" dialog
 if ./scripts/mac/kill-game.sh --dry-run | grep -q .; then
@@ -20,7 +20,7 @@ bash scripts/mac/install-maps.sh --dir "$IW4X_GAME_DIR" || echo "Custom maps not
 echo "Tip: load the ready-made classes with F9 during a match, or at the main menu: ~ then exec classes.cfg"
 
 cd "$IW4X_GAME_DIR" || exit 1
-skip=(--skip-remote --no-self-update --no-shortcuts --no-connect-protocol)
-[[ "$1" == "--update" ]] && skip=()
+skip=()
+[[ "${1:-}" == "--no-update" ]] && skip=(--skip-remote --no-self-update)
 exec "$WINE" --bottle "$IW4X_GAME_BOTTLE" --cx-app iw4x-launcher.exe \
-  --arch x86 "${skip[@]}" --game-args "+exec client_tweaks.cfg"
+  --arch x86 --no-shortcuts --no-connect-protocol "${skip[@]}" --game-args "+exec client_tweaks.cfg"

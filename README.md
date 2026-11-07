@@ -60,6 +60,10 @@ On an x86_64 PC with a Vulkan graphics driver. The game runs in Wine with DXVK; 
 
 It installs into `~/Games/iw4x` (change it with `--dir`). Only need the custom maps and bots? Run `bash install-maps.sh --dir ~/Games/iw4x/game` instead.
 
+### Updates
+
+The **IW4x** icon updates IW4x before every start, so you play the same version as the servers. The first start after a while can take a minute or two. Set up before November 2026? Your icon doesn't update yet: run the setup once more, it skips what's done and renews the icon.
+
 ## Joining a game
 
 In the game, open **Server Browser → LAN** for a server on your network. For any server (LAN or internet), press `~` and type:
