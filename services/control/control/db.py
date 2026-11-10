@@ -166,6 +166,23 @@ class Kill(Base):
     team_kill: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
+class PlaySession(Base):
+    """A person on a server, from loading into its first map to leaving (services/ui/app.py,
+    Stats: J and Q lines). until is when they were last seen there while it goes on."""
+
+    __tablename__ = "sessions"
+    __table_args__ = (UniqueConstraint("server", "log", "node_session"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    server: Mapped[str] = mapped_column(String(32), index=True)
+    run_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    log: Mapped[str] = mapped_column(String(32))  # the server's stats file and its session number
+    node_session: Mapped[int] = mapped_column(Integer)
+    guid: Mapped[str] = mapped_column(String(64), index=True)
+    name: Mapped[str] = mapped_column(String(64))
+    since: Mapped[int] = mapped_column(Integer)
+    until: Mapped[int] = mapped_column(Integer, index=True)
+
+
 def migrate(db_path: Path) -> None:
     cfg = Config(str(HERE / "alembic.ini"))
     cfg.set_main_option("script_location", str(HERE / "migrations"))

@@ -303,9 +303,10 @@ class Orchestrator:
                 text = presence_text(server, joined, left, self.presence[name].players.values())
                 self.tg.post(text, silent=not joined)  # only leaves: no notification sound
 
-    async def pull_stats(self, name: str) -> bool:
-        """Takes in the kills and matches the server wrote down since the last time (its
-        stats file, services/ui/app.py). False when it didn't answer."""
+    async def pull_stats(self, name: str, final: bool = False) -> bool:
+        """Takes in the kills, matches and sessions the server wrote down since the last time
+        (its stats file, services/ui/app.py); final: before a shutdown, the sessions that go on
+        up to now. False when it didn't answer."""
         spec, row = self.s.servers[name], self.row(name)
         if not row.token:
             return False
@@ -313,7 +314,7 @@ class Orchestrator:
         run_id = row.run_id or self.open_run(name)
         log_id, after = row.stats_log, row.stats_seq or 0
         while True:
-            data = await self.nodes.stats_events(spec.wg_ip, row.token, after, stats.PAGE)
+            data = await self.nodes.stats_events(spec.wg_ip, row.token, after, stats.PAGE, final)
             if data is None:
                 return False
             if data["log"] != log_id:
@@ -628,7 +629,7 @@ class Orchestrator:
                 if inst.status != GONE:
                     if row.token and was_running:  # its last kills, while it still answers
                         try:
-                            await self.pull_stats(name)
+                            await self.pull_stats(name, final=True)
                         except Exception:
                             log.exception("%s: last kills not taken in", name)
                     if row.token:  # a clean unmount of the disk before it is detached
@@ -674,12 +675,13 @@ class Orchestrator:
             return
         self.event(name, "off")
         report = ""
+        link = await self.tg.app_link() if row.run_id and was_running else None
         if row.run_id:
             with self.db.begin() as db:
                 if run := db.get(Run, row.run_id):
                     run.stopped_at = self.now()
                 if was_running:
-                    report = stats.report(db, row.run_id, self.now())
+                    report = stats.report(db, row.run_id, self.now(), link)
         if was_running:
             back = " · 🔒 the password is back for its next boot" if row.join_public else ""
             text = f"⚪ <b>{esc(spec.title)}</b> shut down ({esc(reason)}){back}"

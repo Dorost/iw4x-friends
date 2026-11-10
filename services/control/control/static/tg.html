@@ -127,6 +127,7 @@
   .brow .n { text-align: right; }
   .brow .rank { color: var(--hint); font-size: 13px; }
   .brow .who { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .brow .who small { display: block; font-weight: 400; font-size: 12px; color: var(--hint); }
   .brow .kd { font-weight: 600; }
   .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
   .stat { background: var(--card); border-radius: 14px; padding: 12px; text-align: center; }
@@ -524,6 +525,8 @@ let trail = [];
 let statsServers = [];  // name and title of every server of the fleet, from /tg/api/stats  // the players opened from the list, one from another (nemesis, victims): back goes up it
 const kd = n => Number(n || 0).toFixed(2);
 const pct = (n, of) => of ? Math.round(100 * n / of) + "%" : "–";
+// time played: 45m, 2h 05m
+const played = s => { const m = Math.floor((s || 0) / 60); return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m` : `${m}m`; };
 
 function scopeText(d) {
   const where = d.server ? [...statsServers, ...fleet.servers].find(x => x.name === d.server)?.title || d.server : "All servers";
@@ -563,10 +566,10 @@ async function openStats(period, srv) {
     document.getElementById("board").innerHTML = d.rows.length ? `<div class="board">
         <div class="brow head"><span></span><span>Player</span><span class="n">K</span><span class="n">D</span><span class="n">K/D</span><span class="n">HS</span></div>
         ${d.rows.map((r, i) => `<button class="brow" onclick="openPlayer(${Number(r.id)})">
-          <span class="rank">${i + 1}</span><span class="who">${esc(r.name)}</span>
+          <span class="rank">${i + 1}</span><span class="who">${esc(r.name)}${r.time ? `<small>${played(r.time)} played</small>` : ""}</span>
           <span class="n">${r.kills}</span><span class="n">${r.deaths}</span><span class="n kd">${kd(r.kd)}</span>
           <span class="n">${pct(r.headshots, r.kills)}</span></button>`).join("")}</div>
-      <div class="hint note">Tap a player for who they kill, who kills them, their weapons and maps. HS: headshots of their kills.
+      <div class="hint note">Tap a player for who they kill, who kills them, their weapons and maps. HS: headshots of their kills. Time played: from joining a server to leaving it.
         Kills of bots count too; a team mate or yourself is a death, not a kill, as on the scoreboard.</div>`
       : `<div class="message" style="padding-top: 6vh"><div class="icon">🎯</div><h1>No kills yet</h1><p>Not in this period on ${statsScope.server ? "this server" : "any server"}.</p></div>`;
   } catch (e) {
@@ -618,13 +621,13 @@ function list(label, rows, row, empty) {
 }
 
 function kdRow(r) {
-  return `<div class="crow"><span class="what">${esc(r.name)}</span>
+  return `<div class="crow"><span class="what">${esc(r.name)}${r.time ? `<div class="hint">${played(r.time)} played</div>` : ""}</span>
     <span class="num">${r.kills} / ${r.deaths} · <b>${kd(r.kd)}</b>${r.ping != null ? ` · ${r.ping} ms` : ""}</span></div>`;
 }
 
 function renderPlayer(d) {
-  if (!d.kills && !d.deaths) return `<div class="message" style="padding-top: 6vh"><div class="icon">🎯</div><h1>Nothing here</h1><p>No kills or deaths in this period.</p></div>`;
-  const facts = [`${d.headshots} headshot${d.headshots === 1 ? "" : "s"} (${pct(d.headshots, d.kills)})`,
+  if (!d.kills && !d.deaths && !d.time) return `<div class="message" style="padding-top: 6vh"><div class="icon">🎯</div><h1>Nothing here</h1><p>Didn't play in this period.</p></div>`;
+  const facts = [d.time ? `${played(d.time)} played` : "", `${d.headshots} headshot${d.headshots === 1 ? "" : "s"} (${pct(d.headshots, d.kills)})`,
     `${d.matches} match${d.matches === 1 ? "" : "es"}`, d.suicides ? `${d.suicides} by own hand or a fall` : ""].filter(Boolean);
   const hits = d.hits.map(h => `<div class="crow hit"><div class="top"><span class="what">${esc(h.name)}</span>
       <span class="num">${pct(h.count, d.hits_total)}</span></div><div class="bar"><i style="width: ${d.hits_total ? 100 * h.count / d.hits_total : 0}%"></i></div></div>`).join("");
@@ -644,7 +647,7 @@ function renderPlayer(d) {
     <div class="hint note" style="margin-top: ${d.hits_total ? 10 : 0}px">${d.no_body_part ? `${d.no_body_part} kill${d.no_body_part === 1 ? "" : "s"} without a body part: explosives, killstreaks.` : ""}${d.hits_total ? "" : " No kills by a hit yet."}</div>
     ${list("Maps · kills / deaths · K/D", d.maps, kdRow, "No matches.")}
     ${list("Modes", d.modes, kdRow, "No matches.")}
-    ${list("Servers · with average ping", d.servers, kdRow, "")}`;
+    ${list("Servers · time played, average ping", d.servers, kdRow, "")}`;
 }
 
 // ---------- bots ----------
@@ -701,8 +704,11 @@ if (!INIT) {
   tg.expand();
   try { tg.setHeaderColor("secondary_bg_color"); tg.setBackgroundColor("secondary_bg_color"); } catch (e) {}
   if (nativeBack()) tg.BackButton.onClick(closeView);
-  if (tg.initDataUnsafe.start_param === "plan") openPlan(true);  // t.me/<bot>?startapp=plan
-  else refresh();
+  const start = tg.initDataUnsafe.start_param || "";
+  if (start === "plan") openPlan(true);  // t.me/<bot>?startapp=plan
+  else if (/^p\d+$/.test(start)) {  // t.me/<bot>?startapp=p<person>: a name in a shutdown message
+    refresh().then(() => { if (fleet) { statsScope.period = "all"; openPlayer(Number(start.slice(1))); } });
+  } else refresh();
   // the list every 6 s; the players screen every 2 s, so a kick or a join shows right away
   let ticks = 0;
   setInterval(() => {

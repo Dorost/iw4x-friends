@@ -375,7 +375,7 @@ def routes(
     def titles() -> dict[str, str]:
         return {n: spec.title for n, spec in s.fleet.servers.items()}
 
-    def stats_scope(db, server: str, period: str) -> list:
+    def stats_scope(db, server: str, period: str) -> stats.Scope:
         if period not in stats.PERIODS:
             raise HTTPException(400, "period: last, 7d, 30d or all")
         if server and server not in s.fleet.servers:
@@ -384,23 +384,23 @@ def routes(
 
     def stats_board(server: str, period: str) -> dict:
         with orch.db.begin() as db:
-            where = stats_scope(db, server, period)
+            sc = stats_scope(db, server, period)
             return {
                 "period": period,
                 "server": server,
                 "servers": [{"name": n, "title": t} for n, t in titles().items()],
-                "span": stats.span(db, where),
-                "rows": stats.board(db, where),
+                "span": stats.span(db, sc),
+                "rows": stats.board(db, sc),
             }
 
     def stats_person(person: int, server: str, period: str) -> dict:
         with orch.db.begin() as db:
-            where = stats_scope(db, server, period)
+            sc = stats_scope(db, server, period)
             try:
-                view = stats.person_view(db, person, where, titles())
+                view = stats.person_view(db, person, sc, titles())
             except stats.NoSuchPlayer:
                 raise HTTPException(404, "no such player") from None
-            return {**view, "period": period, "server": server, "span": stats.span(db, where)}
+            return {**view, "period": period, "server": server, "span": stats.span(db, sc)}
 
     @app.get("/api/players")
     def players(request: Request):

@@ -63,6 +63,18 @@ def fake_kill(orch: Orchestrator, ip: str) -> None:
     """task control:dev: a running pretend server writes down a random kill (a new match now
     and then), for the stats."""
     events = orch.nodes.stats.get(ip, [])
+    if events and random.random() < 0.05:  # who plays, how long so far
+        for i, (guid, name) in enumerate(FAKE_PEOPLE):
+            orch.nodes.add_event(
+                ip,
+                type="play",
+                session=i + 1,
+                guid=guid,
+                name=name,
+                since=events[0]["at"],
+                until=orch.now(),
+                at=orch.now(),
+            )
     matches = [e for e in events if e["type"] == "match"]
     if not matches or random.random() < 0.03:
         mp, mode = random.choice(

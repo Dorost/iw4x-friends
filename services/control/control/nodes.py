@@ -58,14 +58,17 @@ class Nodes:
         except (httpx.HTTPError, ValueError):
             return None
 
-    async def stats_events(self, ip: str, token: str, after: int, limit: int) -> dict | None:
-        """The kills and matches the server wrote down after event number after (its
-        /api/stats/events): {"log": file id, "last": number, "events": [...]}. None when it
-        doesn't answer, or runs a version from before the stats."""
+    async def stats_events(
+        self, ip: str, token: str, after: int, limit: int, final: bool = False
+    ) -> dict | None:
+        """The kills, matches and sessions the server wrote down after event number after (its
+        /api/stats/events): {"log": file id, "last": number, "events": [...]}; final: the
+        sessions that go on up to now. None when it doesn't answer, or runs a version from before
+        the stats."""
         try:
             r = await self.http.get(
                 self.url(ip, "/api/stats/events"),
-                params={"after": after, "limit": limit},
+                params={"after": after, "limit": limit, "final": int(final)},
                 headers={"Authorization": auth_header(token)},
                 timeout=15,
             )
@@ -148,7 +151,9 @@ class FakeNodes:
         self.bodies.append(body)
         return httpx.Response(200, json={"ok": True})
 
-    async def stats_events(self, ip: str, token: str, after: int, limit: int) -> dict | None:
+    async def stats_events(
+        self, ip: str, token: str, after: int, limit: int, final: bool = False
+    ) -> dict | None:
         if ip not in self.up:
             return None
         events = self.stats.get(ip, [])

@@ -58,6 +58,7 @@ class Telegram:
         self.outbox: asyncio.Queue[tuple[str, bool]] = asyncio.Queue()
         self.button: dict | None = None
         self.button_checked = 0.0
+        self.app_url: str | None = None  # https://t.me/<bot>?startapp, once it has the mini app
 
     @property
     def on(self) -> bool:
@@ -101,6 +102,8 @@ class Telegram:
             try:
                 me = await self.call("getMe")
                 self.button_checked = time.monotonic()
+                has_app = me.get("has_main_web_app")
+                self.app_url = f"https://t.me/{me['username']}?startapp" if has_app else None
                 self.button = (
                     {
                         "inline_keyboard": [
@@ -118,6 +121,14 @@ class Telegram:
             except TelegramError:
                 pass
         return self.button
+
+    async def app_link(self) -> str | None:
+        """The start of a link that opens the mini app with a start parameter (append it), or
+        None while the bot has no mini app."""
+        if not self.on:
+            return None
+        await self.app_button()
+        return self.app_url + "=" if self.app_url else None
 
     def post(self, text: str, silent: bool = False) -> None:
         """Queues a message to the group (HTML); send_loop sends them in order."""

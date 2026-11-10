@@ -1343,7 +1343,13 @@ def tg_thumb(map_id: str):
 # A bare "InitGame" starts every map, and every round of S&D, while the map is still loading: its
 # map and mode come from the next rcon status that shows the match (the lines after it wait for
 # that, INIT_WAIT at most). The end of a match isn't logged on a lobby server (ExitLevel only
-# rarely), so a match ends when the next one starts. The poll loop reads
+# rarely), so a match ends when the next one starts, at its last line. A round goes on after a
+# ShutdownGame; a server that stopped wrote none, so its next start is a new match.
+# Time played: J;<guid>;<num>;<name> when a player loads into a map (every map), Q;... when they
+# leave. A session runs from the first J to the Q, and goes to the bastion as "play" events: one
+# when it starts, every SESSION_EVERY seconds while it lasts, at the end, and when the bastion asks
+# for everything before a shutdown (final). A start of this app ends the sessions of the last run
+# where they were (the game starts with it). The poll loop reads
 # the new lines, drops bot-vs-bot kills, and adds who is a bot and each side's ping from the last
 # rcon status (at most POLL_SECONDS old, IW4x's own log has neither). The kills and the matches
 # they belong to go, numbered, into stats.jsonl in the data dir (the server's disk); the fleet's
@@ -1356,6 +1362,8 @@ STATS_KEPT_BYTES = 4 << 20  # stats.jsonl drops what the bastion has, once it gr
 # modes that start every round over (InitGame again) on the same map: the match goes on
 ROUND_MODES = {"sd", "sab", "dd", "arena", "ctf", "oneflag"}
 INIT_WAIT = 30  # seconds an InitGame waits for the match to show in the rcon status
+SESSION_EVERY = 60  # seconds between the "play" events of a session that goes on
+JOIN_LINE = re.compile(r"(?P<kind>[JQ]);(?P<guid>[^;]*);(?P<num>-?\d+);(?P<name>.*)")
 KILL_LINE = re.compile(
     r"K;(?P<vguid>[^;]*);(?P<vnum>-?\d+);(?P<vteam>[^;]*);(?P<vname>.*);"
     r"(?P<kguid>[^;]*);(?P<knum>-?\d+);(?P<kteam>allies|axis|free|none|spectator|world|[^;]*);(?P<kname>.*);"
@@ -1381,6 +1389,8 @@ class Stats:
         self.inode = st.get("inode")
         self.match: dict | None = st.get("match")  # the open match: id, map, gametype
         self.match_id = int(st.get("match_id", 0))
+        self.sessions: dict[str, dict] = st.get("sessions") or {}  # guid -> id, name, since, until
+        self.session_id = int(st.get("session_id", 0))
         if "offset" in st:
             self.offset = int(st["offset"])
         else:  # first run: from here on, not the kills of earlier runs (no pings, no times)
@@ -1391,6 +1401,9 @@ class Stats:
         last = self.last_event()  # written, but the state after it wasn't saved
         if last and last["seq"] > self.seq:
             self.seq, self.offset = last["seq"], max(self.offset, last.get("off", 0))
+        # the game starts with this app: who played in the last run left where they were last seen
+        ended, self.sessions = list(self.sessions.items()), {}
+        self.append([self.play(guid, sess) for guid, sess in ended])
         self.save()
 
     def last_event(self) -> dict | None:
@@ -1405,7 +1418,8 @@ class Stats:
     def save(self) -> None:
         tmp = self.state_path.with_suffix(".tmp")
         tmp.write_text(json.dumps({"log": self.log_id, "seq": self.seq, "offset": self.offset, "inode": self.inode,
-                                   "match": self.match, "match_id": self.match_id}))
+                                   "match": self.match, "match_id": self.match_id,
+                                   "sessions": self.sessions, "session_id": self.session_id}))
         tmp.replace(self.state_path)
 
     def see(self, live: dict | None) -> None:
@@ -1433,17 +1447,23 @@ class Stats:
     def parse(self, line: str, at: int, off: int) -> list[dict]:
         """The events of one log line ("  12:34 K;..."): a match starts or ends, a kill."""
         _, _, body = line.strip().partition(" ")
+        if body.startswith("ShutdownGame"):
+            if self.match:
+                self.match["shut"] = True  # a round or a map change, not the server stopping
+            return []
         if body == "InitGame" or body.startswith("InitGame:"):
             info = body.split("\\")[1:]  # IW4x logs none; older games had the server info here
             kv = dict(zip(info[::2], info[1::2]))
             fresh = self.waiting is not None and self.game_at > self.waiting
             game = (kv["mapname"], kv.get("g_gametype", "")) if kv.get("mapname") else self.game if fresh else ("", "")
             self.waiting = None
-            if self.match and (self.match["map"], self.match["gametype"]) == game and game[1] in ROUND_MODES:
+            m = self.match
+            if m and m.get("shut") and (m["map"], m["gametype"]) == game and game[1] in ROUND_MODES:
+                m["shut"] = False
                 return []  # the next round
-            ended = [{"type": "end", "match": self.match["id"], "at": at, "off": off}] if self.match else []
+            ended = [{"type": "end", "match": m["id"], "at": m.get("seen", at), "off": off}] if m else []
             self.match_id += 1
-            self.match = {"id": self.match_id, "map": game[0], "gametype": game[1]}
+            self.match = {"id": self.match_id, "map": game[0], "gametype": game[1], "seen": at}
             # vote.gsc or Start game ran exec server.cfg for this match: its weapons rule
             weapons = read_cfg().get("sv_funweapons", "0")
             mode, _ = tg_mode(game[1], weapons)
@@ -1454,6 +1474,24 @@ class Stats:
         if body.startswith("ExitLevel"):
             ended, self.match = self.match, None
             return [{"type": "end", "match": ended["id"], "at": at, "off": off}] if ended else []
+        if self.match:
+            self.match["seen"] = at  # the match was still on
+        if j := JOIN_LINE.fullmatch(body):
+            guid = j["guid"].lower()
+            p = self.roster.get(int(j["num"]))
+            if not guid or guid.startswith("bot") or p and p["bot"] and p["guid"].lower() == guid:
+                return []
+            if j["kind"] == "Q":
+                sess = self.sessions.pop(guid, None)
+                if sess:
+                    sess["until"] = at
+                return [self.play(guid, sess)] if sess else []
+            if guid in self.sessions:  # the next map
+                self.sessions[guid]["name"] = strip_colors(j["name"])
+                return []
+            self.session_id += 1
+            self.sessions[guid] = {"id": self.session_id, "name": strip_colors(j["name"]), "since": at, "until": at}
+            return [self.play(guid, self.sessions[guid])]
         m = KILL_LINE.fullmatch(body)
         if not m:
             return []
@@ -1473,44 +1511,68 @@ class Stats:
             self.waiting = time.monotonic()
         return self.game_at <= self.waiting and time.monotonic() - self.waiting < INIT_WAIT
 
-    def read(self) -> None:
-        """Takes in the lines the game wrote since the last call."""
+    @staticmethod
+    def play(guid: str, sess: dict) -> dict:
+        return {"type": "play", "session": sess["id"], "guid": guid, "name": sess["name"],
+                "since": sess["since"], "until": sess["until"], "at": sess["until"]}
+
+    def append(self, events: list[dict]) -> None:
+        """Numbers the events and adds them to the file."""
+        if not events:
+            return
+        numbered = []
+        for e in events:
+            self.seq += 1
+            numbered.append({"seq": self.seq, **e})
+        with self.out.open("a+b") as f:
+            # a line cut short by a crash stays a line of its own (and is skipped)
+            cut = False
+            if size := f.seek(0, os.SEEK_END):
+                f.seek(size - 1)
+                cut = f.read(1) != b"\n"
+            f.write((("\n" if cut else "") + "".join(json.dumps(e) + "\n" for e in numbered)).encode())
+
+    def lines(self, now: int) -> list[dict]:
+        """The events of the lines the game wrote since the last call."""
+        try:
+            st = self.log_path.stat()
+        except OSError:
+            return []
+        if st.st_ino != self.inode or st.st_size < self.offset:  # a new file
+            self.inode, self.offset = st.st_ino, 0
+        if st.st_size == self.offset:
+            return []
+        with self.log_path.open("rb") as f:
+            f.seek(self.offset)
+            data = f.read(min(st.st_size - self.offset, 4 << 20))
+        end = data.rfind(b"\n") + 1  # a line the game is still writing waits for the next call
+        events, pos = [], self.offset
+        for raw in data[:end].splitlines(keepends=True):
+            line = raw.decode(errors="replace")
+            if self.wait(line):
+                break  # this line and the ones after it: on a later call
+            pos += len(raw)
+            events += self.parse(line, now, pos)
+        self.offset = pos
+        return events
+
+    def read(self, final: bool = False) -> None:
+        """Takes in the lines the game wrote since the last call, and how long the sessions that
+        go on have lasted: every SESSION_EVERY seconds, or up to now (final)."""
         with self.lock:
-            try:
-                st = self.log_path.stat()
-            except OSError:
-                return
-            if st.st_ino != self.inode or st.st_size < self.offset:  # a new file
-                self.inode, self.offset = st.st_ino, 0
-            if st.st_size == self.offset:
-                return
-            with self.log_path.open("rb") as f:
-                f.seek(self.offset)
-                data = f.read(min(st.st_size - self.offset, 4 << 20))
-            end = data.rfind(b"\n") + 1  # a line the game is still writing waits for the next call
-            events, pos, now = [], self.offset, int(time.time())
-            for raw in data[:end].splitlines(keepends=True):
-                line = raw.decode(errors="replace")
-                if self.wait(line):
-                    break  # this line and the ones after it: on a later call
-                pos += len(raw)
-                for e in self.parse(line, now, pos):
-                    self.seq += 1
-                    events.append({"seq": self.seq, **e})
-            self.offset = pos
-            if events:
-                with self.out.open("a+b") as f:
-                    # a line cut short by a crash stays a line of its own (and is skipped)
-                    cut = False
-                    if size := f.seek(0, os.SEEK_END):
-                        f.seek(size - 1)
-                        cut = f.read(1) != b"\n"
-                    f.write((("\n" if cut else "") + "".join(json.dumps(e) + "\n" for e in events)).encode())
+            now = int(time.time())
+            events = self.lines(now)
+            for guid, sess in self.sessions.items():
+                if now - sess["until"] >= (0 if final else SESSION_EVERY) and now > sess["until"]:
+                    sess["until"] = now
+                    events.append(self.play(guid, sess))
+            self.append(events)
             self.save()
 
-    def events(self, after: int, limit: int = 1000) -> dict:
-        """The events after number after, for the bastion; what it has (up to after) may go."""
-        self.read()
+    def events(self, after: int, limit: int = 1000, final: bool = False) -> dict:
+        """The events after number after, for the bastion; what it has (up to after) may go.
+        final: the sessions that go on are taken up to now (the server is about to shut down)."""
+        self.read(final)
         with self.lock:
             out, keep = [], []
             try:
@@ -1542,12 +1604,13 @@ stats = Stats(GAMES_LOG, DATA_DIR / "stats.jsonl", DATA_DIR / "stats-state.json"
 
 
 @app.get("/api/stats/events")
-def stats_events(after: int = 0, limit: int = 1000):
-    """Kills (with a person on at least one side) and matches after event number after: for the
-    fleet's bastion, which keeps them (services/control, control/stats.py)."""
+def stats_events(after: int = 0, limit: int = 1000, final: int = 0):
+    """Kills (with a person on at least one side), matches and who played how long, after event
+    number after: for the fleet's bastion, which keeps them (services/control, control/stats.py).
+    final=1 before it shuts the server down: the sessions that go on, up to now."""
     if not stats:
         raise HTTPException(404, "no stats here (STATS=1 is for the fleet's game servers)")
-    return stats.events(after, max(1, min(limit, 5000)))
+    return stats.events(after, max(1, min(limit, 5000)), bool(final))
 
 
 # ---------- live updates ----------

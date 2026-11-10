@@ -79,7 +79,7 @@ def test_kills_deaths_and_what_counts(db):
     assert take(db, evening()) == 8
     assert take(db, evening()) == 0  # asked again: nothing twice
     with db.begin() as s:
-        rows = {r["name"]: r for r in stats.board(s, [])}
+        rows = {r["name"]: r for r in stats.board(s, stats.Scope())}
         assert s.scalar(select(func.count()).select_from(Match)) == 2
         assert s.scalar(select(Match.ended_at).where(Match.node_match == 1)) == NOW + 600
         fall = s.scalar(select(Kill).where(Kill.seq == 6))
@@ -105,10 +105,10 @@ def test_the_shutdown_report(db):
         text = stats.report(s, run, NOW)
     assert text.startswith("📊 2h 14m · 2 matches\n<pre>")
     lines = text.removesuffix("</pre>").replace("<pre>", "").split("\n")[1:]
-    assert lines[0].split() == ["K", "D", "K/D"]
-    assert lines[1].split() == ["Yashar", "3", "2", "1.50"]
-    assert lines[2].split() == ["Amin", "1", "2", "0.50"]
-    assert lines[3].split() == ["Sara", "0", "2", "0.00"]
+    assert lines[0].split() == ["K", "D", "K/D", "Time"]
+    assert lines[1].split() == ["Yashar", "3", "2", "1.50", "–"]  # no session came in
+    assert lines[2].split() == ["Amin", "1", "2", "0.50", "–"]
+    assert lines[3].split() == ["Sara", "0", "2", "0.00", "–"]
     with db.begin() as s:  # nobody got a kill: nothing to post
         empty = stats.new_run(s, "nl", NOW, "test")
     take(db, [kill(50, side(YASHAR, "Yashar"), bot("Pedro"))], run_id=empty)
@@ -128,14 +128,17 @@ def test_one_person_on_two_installs(db):
         stats.link(s, new, sug["person"])
     with db.begin() as s:
         assert stats.players_view(s)["suggestions"] == []
-        rows = {r["name"]: r for r in stats.board(s, [])}
+        rows = {r["name"]: r for r in stats.board(s, stats.Scope())}
         assert rows["Yashar"]["kills"] == 4 and rows["Yashar"]["matches"] == 3
         assert len(stats.players_view(s)["people"]) == 3  # the empty person went
         stats.unlink(s, new)
     with db.begin() as s:
         view = stats.players_view(s)
         assert len(view["people"]) == 4 and view["suggestions"] == []  # not suggested again
-        assert [r["kills"] for r in stats.board(s, []) if r["name"] == "Yashar"] == [3, 1]
+        assert [r["kills"] for r in stats.board(s, stats.Scope()) if r["name"] == "Yashar"] == [
+            3,
+            1,
+        ]
 
 
 def test_a_players_page(db):
@@ -143,7 +146,7 @@ def test_a_players_page(db):
     with db.begin() as s:
         pid = s.get(Player, YASHAR).person_id
         amin = s.get(Player, AMIN).person_id
-        v = stats.person_view(s, pid, [], {"nl": "Netherlands"})
+        v = stats.person_view(s, pid, stats.Scope(), {"nl": "Netherlands"})
     assert (v["kills"], v["deaths"], v["headshots"], v["matches"]) == (3, 2, 1, 2)
     assert v["vs_bots"] == {"kills": 2, "deaths": 0}
     assert v["vs_humans"] == {"kills": 1, "deaths": 1}
@@ -157,7 +160,9 @@ def test_a_players_page(db):
     assert hits == {"head": 1, "neck": 0, "torso": 1, "arms": 0, "legs": 1}
     assert v["maps"][0] == {"name": "Rust", "kills": 2, "deaths": 2, "kd": 1.0}
     assert {m["name"] for m in v["modes"]} == {"Team Deathmatch", "Free-for-all"}
-    assert v["servers"] == [{"name": "Netherlands", "kills": 3, "deaths": 2, "kd": 1.5, "ping": 46}]
+    assert v["servers"] == [
+        {"name": "Netherlands", "kills": 3, "deaths": 2, "kd": 1.5, "ping": 46, "time": 0}
+    ]
 
 
 def test_scopes(db):
@@ -169,6 +174,60 @@ def test_scopes(db):
         assert stats.board(s, stats.scope("us", "all", NOW, s)) == []
         week = stats.scope("nl", "7d", NOW + 8 * 86400, s)
         assert stats.board(s, week) == []
+
+
+def play(seq, session, guid, name, since, until):
+    return {
+        "seq": seq,
+        "type": "play",
+        "session": session,
+        "guid": guid,
+        "name": name,
+        "since": NOW + since,
+        "until": NOW + until,
+        "at": NOW + until,
+    }
+
+
+def test_time_played(db):
+    with db.begin() as s:
+        run = stats.new_run(s, "nl", NOW, "test")
+        s.get(Run, run).ready_at = NOW
+    events = evening() + [
+        play(30, 1, YASHAR, "Yashar", 0, 0),
+        play(31, 2, SARA, "Sara", 60, 60),  # a session goes on: the same one, later
+        play(32, 1, YASHAR, "Yashar", 0, 60),
+        play(33, 1, YASHAR, "Yashar", 0, 3900),
+        play(34, 2, SARA, "Sara", 60, 1260),
+        play(35, 3, "4444dddd4444dddd", "Lurker", 100, 400),  # played, never killed or died
+    ]
+    take(db, events, run_id=run)
+    take(db, [play(36, 1, YASHAR, "Yashar", 0, 3000)], run_id=run)  # an older one changes nothing
+    with db.begin() as s:
+        rows = {r["name"]: r for r in stats.board(s, stats.Scope())}
+        assert rows["Yashar"]["time"] == 3900 and rows["Sara"]["time"] == 1200
+        assert rows["Lurker"]["time"] == 300 and rows["Lurker"]["kills"] == 0
+        assert rows["Amin"]["time"] == 0
+        pid = s.get(Player, YASHAR).person_id
+        v = stats.person_view(s, pid, stats.Scope(), {"nl": "NL"})
+        assert v["time"] == 3900 and v["servers"][0]["time"] == 3900
+        text = stats.report(s, run, NOW + 4000, "https://t.me/testbot?startapp=")
+    lines = text.split("</pre>")[0].split("\n")
+    assert lines[2].split() == ["Yashar", "3", "2", "1.50", "1h05"]
+    assert lines[4].split() == ["Sara", "0", "2", "0.00", "20m"]
+    assert lines[5].split() == ["Lurker", "0", "0", "0.00", "5m"]
+    profiles = text.split("</pre>")[1]
+    assert profiles.startswith('\n👤 <a href="https://t.me/testbot?startapp=p')
+    assert f'startapp=p{pid}">Yashar</a>' in profiles and profiles.count("<a ") == 4
+
+
+def test_last_run_is_the_latest_anyone_played_in(db):
+    take(db, evening(), run_id=1)
+    take(db, [play(40, 9, SARA, "Sara", 9000, 9300)], run_id=2)  # later, no kills
+    with db.begin() as s:
+        sc = stats.scope("", "last", NOW, s)
+        assert sc.run_id == 2
+        assert [(r["name"], r["time"]) for r in stats.board(s, sc)] == [("Sara", 300)]
 
 
 def test_weapon_names():
@@ -223,7 +282,8 @@ async def test_kills_come_in_while_it_runs_and_the_group_gets_them_at_shutdown(f
     await orch.tasks["nl"]
     (msg,) = posts(orch)
     assert msg.startswith("⚪ <b>NL</b> shut down (by test)\n\n📊 30 min · 2 matches")
-    assert "Yashar     3     2   1.50" in msg
+    assert "Yashar     3     2   1.50      –" in msg
+    assert '\n👤 <a href="https://t.me/testbot?startapp=p' in msg
     row = orch.row("nl")
     assert row.run_id is None and row.stats_seq == 11
     with orch.db.begin() as s:
