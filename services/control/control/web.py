@@ -4,8 +4,8 @@
 /costs       what the fleet costs, per server and the bastion (control/costs.py), and what is
              left on each cloud account (UI_PASSWORD login)
 /s/<name>/   a running server's own control page (services/ui), passed through over WireGuard
-/tg/         the Telegram mini app: map, mode, bots, boot and shut down, costs (members of the
-             group)
+/tg/         the Telegram mini app: map, mode, bots, boot and shut down, costs, kill stats
+             (members of the group)
 /node/       reports from the game servers while they set up (WireGuard only, their token)
 """
 
@@ -30,7 +30,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from starlette.background import BackgroundTask
 
-from control import keys
+from control import keys, stats
 from control.costs import BadMonth, Costs, for_providers
 from control.db import RUNNING, UP, Event
 from control.db import Schedule as ScheduleRow
@@ -62,6 +62,10 @@ class ScheduleIn(BaseModel):
     tz: str
     enabled: bool = True
     note: str = ""
+
+
+class LinkTo(BaseModel):
+    person: int
 
 
 class Progress(BaseModel):
@@ -366,6 +370,62 @@ def routes(
             background=BackgroundTask(resp.aclose),
         )
 
+    # ---------- kill stats (control/stats.py) ----------
+
+    def titles() -> dict[str, str]:
+        return {n: spec.title for n, spec in s.fleet.servers.items()}
+
+    def stats_scope(db, server: str, period: str) -> stats.Scope:
+        if period not in stats.PERIODS:
+            raise HTTPException(400, "period: last, 7d, 30d or all")
+        if server and server not in s.fleet.servers:
+            raise HTTPException(404, "no such server")
+        return stats.scope(server, period, orch.now(), db)
+
+    def stats_board(server: str, period: str) -> dict:
+        with orch.db.begin() as db:
+            sc = stats_scope(db, server, period)
+            return {
+                "period": period,
+                "server": server,
+                "servers": [{"name": n, "title": t} for n, t in titles().items()],
+                "span": stats.span(db, sc),
+                "rows": stats.board(db, sc),
+            }
+
+    def stats_person(person: int, server: str, period: str) -> dict:
+        with orch.db.begin() as db:
+            sc = stats_scope(db, server, period)
+            try:
+                view = stats.person_view(db, person, sc, titles())
+            except stats.NoSuchPlayer:
+                raise HTTPException(404, "no such player") from None
+            return {**view, "period": period, "server": server, "span": stats.span(db, sc)}
+
+    @app.get("/api/players")
+    def players(request: Request):
+        """Everyone who played, with their game identities, and "same person?" suggestions."""
+        need_login(request)
+        with orch.db.begin() as db:
+            return stats.players_view(db)
+
+    @app.post("/api/players/{guid}/{action}")
+    def player_action(guid: str, action: str, request: Request, body: LinkTo | None = None):
+        need_login(request)
+        with orch.db.begin() as db:
+            try:
+                if action == "link" and body:
+                    stats.link(db, guid, body.person)
+                elif action == "unlink":
+                    stats.unlink(db, guid)
+                elif action == "dismiss":
+                    stats.dismiss(db, guid)
+                else:
+                    raise HTTPException(404, "no such action")
+            except stats.NoSuchPlayer:
+                raise HTTPException(404, "no such player") from None
+            return stats.players_view(db)
+
     # ---------- Telegram mini app ----------
 
     async def tg_user(request: Request) -> dict:
@@ -402,6 +462,18 @@ def routes(
         """The same as the fleet page's, without what is left on the accounts."""
         await tg_user(request)
         return await costs_view(month, balances=False)
+
+    @app.get("/tg/api/stats")
+    async def tg_stats(request: Request, period: str = "last", server: str = ""):
+        """Everyone's kills, deaths, K/D and headshots of a period, on one server or all."""
+        await tg_user(request)
+        return stats_board(server, period)
+
+    @app.get("/tg/api/stats/people/{person}")
+    async def tg_stats_person(request: Request, person: int, period: str = "all", server: str = ""):
+        """One player: their nemesis, victims, weapons, body parts, maps, modes and servers."""
+        await tg_user(request)
+        return stats_person(person, server, period)
 
     def running(name: str):
         spec = s.servers.get(name)

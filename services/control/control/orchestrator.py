@@ -10,7 +10,10 @@ Booting a server:
      downloads the game onto the disk the first time
   4. running once its web UI answers over WireGuard
 Shutting down: the game stops and the disk is unmounted (deploy/node/stop.sh), the disk detached,
-the VM destroyed, the domain pointed back at the bastion."""
+the VM destroyed, the domain pointed back at the bastion.
+
+While a server runs, the kills it writes down come in every STATS_EVERY seconds and once more
+before it shuts down (control/stats.py); the shutdown message has everyone's of that run."""
 
 import asyncio
 import contextlib
@@ -24,9 +27,20 @@ from pathlib import Path
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from control import keys, userdata
+from control import keys, stats, userdata
 from control.config import ServerSpec, Settings
-from control.db import BOOTING, FAILED, OFF, PROVISIONING, RUNNING, STOPPING, UP, Event, Server
+from control.db import (
+    BOOTING,
+    FAILED,
+    OFF,
+    PROVISIONING,
+    RUNNING,
+    STOPPING,
+    UP,
+    Event,
+    Run,
+    Server,
+)
 from control.db import Schedule as ScheduleRow
 from control.providers import ACTIVE, GONE, CloudError, Machine, Provider
 from control.schedule import (
@@ -48,6 +62,7 @@ FAILED_KEEP = 10 * 60  # a failed server's VM stays this long for a look, then g
 UPDATE_WHEN_EMPTY = 120  # a running server updates to a new commit once nobody played this long
 MAX_ATTEMPTS = 3  # boots in a row a schedule window tries before giving up
 EVENTS_KEPT = 500
+STATS_EVERY = 5  # seconds between asking a running server for its new kills
 
 
 class Busy(Exception):
@@ -93,6 +108,7 @@ class Orchestrator:
         self.presence: dict[str, Presence] = {}
         self.progress_at: dict[str, float] = {}  # last /node/progress report per server
         self.update_failed: dict[str, str] = {}  # server -> commit it couldn't update to
+        self.stats_at: dict[str, float] = {}  # when each server was last asked for its kills
         self.ssh_public = keys.ssh_key(Path(s.data_dir) / "ssh" / "id_ed25519")
         with self.db.begin() as db:
             for name in s.fleet.servers:
@@ -271,6 +287,11 @@ class Orchestrator:
             self.states[name] = state
             if row.status != RUNNING:
                 continue
+            if state and time.monotonic() - self.stats_at.get(name, 0) >= STATS_EVERY:
+                try:
+                    await self.pull_stats(name)
+                except Exception:
+                    log.exception("%s: kills not taken in", name)
             humans = humans_of(state)
             if humans:
                 self.update(name, last_human_at=now)
@@ -281,6 +302,46 @@ class Orchestrator:
                 server = (state or {}).get("name") or spec.title
                 text = presence_text(server, joined, left, self.presence[name].players.values())
                 self.tg.post(text, silent=not joined)  # only leaves: no notification sound
+
+    async def pull_stats(self, name: str, final: bool = False) -> bool:
+        """Takes in the kills, matches and sessions the server wrote down since the last time
+        (its stats file, services/ui/app.py); final: before a shutdown, the sessions that go on
+        up to now. False when it didn't answer."""
+        spec, row = self.s.servers[name], self.row(name)
+        if not row.token:
+            return False
+        self.stats_at[name] = time.monotonic()
+        run_id = row.run_id or self.open_run(name)
+        log_id, after = row.stats_log, row.stats_seq or 0
+        while True:
+            data = await self.nodes.stats_events(spec.wg_ip, row.token, after, stats.PAGE, final)
+            if data is None:
+                return False
+            if data["log"] != log_id:
+                if after:  # a new stats file on the server (a new disk): from its start
+                    log_id, after = data["log"], 0
+                    continue
+                log_id = data["log"]
+            events = data["events"]
+            with self.db.begin() as db:
+                stats.ingest(db, name, run_id, log_id, events)
+                seqs = [
+                    e["seq"] for e in events if isinstance(e, dict) and type(e.get("seq")) is int
+                ]
+                after = max([after, *seqs])
+                srv = db.get(Server, name)
+                srv.stats_log, srv.stats_seq = log_id, after
+            if len(events) < stats.PAGE:
+                return True
+
+    def open_run(self, name: str) -> int:
+        """This run of the server in runs (a server up from before the stats gets one now)."""
+        row = self.row(name)
+        with self.db.begin() as db:
+            run_id = stats.new_run(db, name, row.booted_at or self.now(), row.boot_by)
+            db.get(Run, run_id).ready_at = row.ready_at
+            db.get(Server, name).run_id = run_id
+        return run_id
 
     async def sync_peers(self) -> None:
         peers = {}
@@ -444,6 +505,8 @@ class Orchestrator:
         )
         self.event(name, f"booting ({by})")
         self.presence.pop(name, None)
+        self.update(name, run_id=None)
+        self.open_run(name)
         try:
             if row.instance_id:
                 self.update(name, step="removing the VM of the last try")
@@ -528,6 +591,10 @@ class Orchestrator:
             name, status=RUNNING, step="", ready_at=self.now(), attempts=0, version=self.s.version
         )
         row = self.row(name)
+        if row.run_id:
+            with self.db.begin() as db:
+                if run := db.get(Run, row.run_id):
+                    run.ready_at = row.ready_at
         self.event(name, f"up at {row.ip}")
         lines = [
             f"🟢 <b>{esc(spec.title)}</b> is up",
@@ -560,6 +627,11 @@ class Orchestrator:
             if row.instance_id:
                 inst = await p.get_instance(row.instance_id)
                 if inst.status != GONE:
+                    if row.token and was_running:  # its last kills, while it still answers
+                        try:
+                            await self.pull_stats(name, final=True)
+                        except Exception:
+                            log.exception("%s: last kills not taken in", name)
                     if row.token:  # a clean unmount of the disk before it is detached
                         code, out = await self.nodes.ssh(
                             spec.wg_ip, "bash /opt/iw4x/deploy/node/stop.sh", timeout=180
@@ -585,6 +657,7 @@ class Orchestrator:
                 version=None,
                 ready_at=None,
                 join_public=False,  # open to everyone lasts one run: the next boot has the password
+                run_id=None,
             )
             await self.sync_peers()
             self.states.pop(name, None)
@@ -601,11 +674,18 @@ class Orchestrator:
             self.tg.post(f"⚠️ <b>{esc(spec.title)}</b>: {esc(text)}", silent=True)
             return
         self.event(name, "off")
+        report = ""
+        link = await self.tg.app_link() if row.run_id and was_running else None
+        if row.run_id:
+            with self.db.begin() as db:
+                if run := db.get(Run, row.run_id):
+                    run.stopped_at = self.now()
+                if was_running:
+                    report = stats.report(db, row.run_id, self.now(), link)
         if was_running:
             back = " · 🔒 the password is back for its next boot" if row.join_public else ""
-            self.tg.post(
-                f"⚪ <b>{esc(spec.title)}</b> shut down ({esc(reason)}){back}", silent=True
-            )
+            text = f"⚪ <b>{esc(spec.title)}</b> shut down ({esc(reason)}){back}"
+            self.tg.post(text + (f"\n\n{report}" if report else ""), silent=True)
 
     async def _update(self, name: str) -> None:
         spec = self.s.servers[name]

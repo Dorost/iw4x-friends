@@ -58,6 +58,28 @@ class Nodes:
         except (httpx.HTTPError, ValueError):
             return None
 
+    async def stats_events(
+        self, ip: str, token: str, after: int, limit: int, final: bool = False
+    ) -> dict | None:
+        """The kills, matches and sessions the server wrote down after event number after (its
+        /api/stats/events): {"log": file id, "last": number, "events": [...]}; final: the
+        sessions that go on up to now. None when it doesn't answer, or runs a version from before
+        the stats."""
+        try:
+            r = await self.http.get(
+                self.url(ip, "/api/stats/events"),
+                params={"after": after, "limit": limit, "final": int(final)},
+                headers={"Authorization": auth_header(token)},
+                timeout=15,
+            )
+            data = r.json() if r.status_code == 200 else None
+        except (httpx.HTTPError, ValueError):
+            return None
+        if not isinstance(data, dict) or not isinstance(data.get("events"), list):
+            return None
+        log_id = data.get("log")
+        return data if isinstance(log_id, str) and 0 < len(log_id) <= 32 else None
+
     async def ssh(self, ip: str, command: str, timeout: float = 600) -> tuple[int, str]:
         """Runs command as root on the server; (exit code, output)."""
         proc = await asyncio.create_subprocess_exec(
@@ -100,6 +122,8 @@ class FakeNodes:
         self.ssh_calls: list[tuple[str, str]] = []
         self.requests: list[tuple[str, str, str]] = []
         self.bodies: list = []
+        self.stats: dict[str, list[dict]] = {}  # IP -> the events its stats file has
+        self.stats_log: dict[str, str] = {}  # IP -> that file's id
 
     async def state(self, ip: str, token: str) -> dict | None:
         if ip not in self.up:
@@ -126,6 +150,25 @@ class FakeNodes:
         self.requests.append((ip, method, path))
         self.bodies.append(body)
         return httpx.Response(200, json={"ok": True})
+
+    async def stats_events(
+        self, ip: str, token: str, after: int, limit: int, final: bool = False
+    ) -> dict | None:
+        if ip not in self.up:
+            return None
+        events = self.stats.get(ip, [])
+        return {
+            "log": self.stats_log.setdefault(ip, f"log-{ip}"),
+            "last": events[-1]["seq"] if events else 0,
+            "events": [e for e in events if e["seq"] > after][:limit],
+        }
+
+    def add_event(self, ip: str, **event) -> dict:
+        """The pretend server writes down a kill or a match (tests, task control:dev)."""
+        events = self.stats.setdefault(ip, [])
+        event = {**event, "seq": (events[-1]["seq"] if events else 0) + 1}
+        events.append(event)
+        return event
 
     async def ssh(self, ip: str, command: str, timeout: float = 600) -> tuple[int, str]:
         self.ssh_calls.append((ip, command))

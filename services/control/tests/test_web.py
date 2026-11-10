@@ -260,3 +260,56 @@ def test_costs_in_the_mini_app_without_the_accounts(web):
     assert client.get("/tg/api/costs", headers=tma(STRANGER)).status_code == 403
     costs = client.get("/tg/api/costs", headers=tma(AMIN)).json()
     assert costs["total"] > 0 and "balances" not in costs
+
+
+def test_stats_in_the_mini_app_and_players_on_the_page(web):
+    from test_stats import YASHAR, evening, side, take
+
+    client, orch, _, _ = web
+    take(orch.db, evening())
+    take(
+        orch.db,
+        [
+            {
+                "seq": 40,
+                "type": "kill",
+                "match": None,
+                "at": 2_000_000_000,
+                "weapon": "m4_mp",
+                "means": "MOD_RIFLE_BULLET",
+                "hit": "head",
+                "damage": 1,
+                "victim": side("bot1", "Pedro", "axis", bot=True),
+                "killer": side("feed", "Yashar"),
+            }
+        ],
+    )
+    assert client.get("/tg/api/stats").status_code == 401
+    assert client.get("/tg/api/stats", headers=tma(STRANGER)).status_code == 403
+    board = client.get("/tg/api/stats?period=all", headers=tma(AMIN)).json()
+    assert [r["name"] for r in board["rows"]] == [
+        "Yashar",
+        "Yashar",
+        "Amin",
+        "Sara",
+    ]  # not linked yet
+    assert [x["name"] for x in board["servers"]] == ["nl", "us", "ist"]
+    assert client.get("/tg/api/stats?period=year", headers=tma(AMIN)).status_code == 400
+    assert client.get("/tg/api/stats?server=mars", headers=tma(AMIN)).status_code == 404
+    pid = board["rows"][0]["id"]
+    me = client.get(f"/tg/api/stats/people/{pid}?period=all", headers=tma(AMIN)).json()
+    assert me["kills"] == 3 and me["weapons"][0]["name"] == "Intervention"
+    assert client.get("/tg/api/stats/people/999", headers=tma(AMIN)).status_code == 404
+
+    assert client.get("/api/players").status_code == 401
+    login(client)
+    view = client.get("/api/players").json()
+    (sug,) = view["suggestions"]
+    assert sug["guid"] == "feed" and sug["person"] == pid
+    assert client.post("/api/players/nope/unlink").status_code == 404
+    view = client.post("/api/players/feed/link", json={"person": pid}).json()
+    assert view["suggestions"] == []
+    yashar = next(p for p in view["people"] if p["id"] == pid)
+    assert {p["guid"] for p in yashar["players"]} == {YASHAR, "feed"}
+    board = client.get("/tg/api/stats?period=all", headers=tma(AMIN)).json()
+    assert board["rows"][0]["kills"] == 4

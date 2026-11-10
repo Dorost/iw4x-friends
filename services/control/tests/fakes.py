@@ -59,6 +59,11 @@ def make(tmp: Path, now: datetime, **settings) -> tuple[Orchestrator, FakeCloud,
         now=clock,
         poll=0,
     )
+
+    async def app_link():
+        return "https://t.me/testbot?startapp="
+
+    orch.tg.app_link = app_link
     return orch, cloud, clock
 
 
