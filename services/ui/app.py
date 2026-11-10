@@ -1339,7 +1339,9 @@ def tg_thumb(map_id: str):
 # ---------- kills, for the fleet's stats ----------
 # The game writes every death to userraw/logs/games_mp.log, a line at a time (g_logSync 1):
 #   K;<victim guid>;<num>;<team>;<name>;<killer guid>;<num>;<team>;<name>;<weapon>;<damage>;<means of death>;<hit location>
-# (killer num -1, team "world" and no guid: a fall, the map's kill zone). The poll loop reads
+# (killer num -1, team "world" and no guid: a fall, the map's kill zone; bots' guids are bot<n>).
+# A bare "InitGame" starts every map, and every round of S&D; the end of a match isn't logged on a
+# lobby server (ExitLevel only rarely), so a match ends when the next one starts. The poll loop reads
 # the new lines, drops bot-vs-bot kills, and adds who is a bot and each side's ping from the last
 # rcon status (at most POLL_SECONDS old, IW4x's own log has neither). The kills and the matches
 # they belong to go, numbered, into stats.jsonl in the data dir (the server's disk); the fleet's
@@ -1349,6 +1351,8 @@ def tg_thumb(map_id: str):
 STATS_ON = os.environ.get("STATS") == "1"
 GAMES_LOG = GAME_DIR / "userraw" / "logs" / "games_mp.log"
 STATS_KEPT_BYTES = 4 << 20  # stats.jsonl drops what the bastion has, once it grows past this
+# modes that start every round over (InitGame again) on the same map: the match goes on
+ROUND_MODES = {"sd", "sab", "dd", "arena", "ctf", "oneflag"}
 KILL_LINE = re.compile(
     r"K;(?P<vguid>[^;]*);(?P<vnum>-?\d+);(?P<vteam>[^;]*);(?P<vname>.*);"
     r"(?P<kguid>[^;]*);(?P<knum>-?\d+);(?P<kteam>allies|axis|free|none|spectator|world|[^;]*);(?P<kname>.*);"
@@ -1361,6 +1365,7 @@ class Stats:
         self.log_path, self.out, self.state_path = log_path, out, state
         self.lock = threading.Lock()
         self.roster: dict[int, dict] = {}  # client num -> the last rcon status line of the player there
+        self.game: tuple[str, str] = ("", "")  # map and gametype of the last rcon status
         try:
             st = json.loads(state.read_text())
         except (OSError, ValueError):
@@ -1401,6 +1406,7 @@ class Stats:
     def see(self, live: dict | None) -> None:
         """The players of the last rcon status, for who is a bot and their pings."""
         if live and live["in_game"]:
+            self.game = (live["map"], live["gametype"])
             for p in live["players"]:
                 self.roster[p["num"]] = p
 
@@ -1421,20 +1427,20 @@ class Stats:
     def parse(self, line: str, at: int, off: int) -> list[dict]:
         """The events of one log line ("  12:34 K;..."): a match starts or ends, a kill."""
         _, _, body = line.strip().partition(" ")
-        if body.startswith("InitGame:"):
-            info = body.split("\\")[1:]
+        if body == "InitGame" or body.startswith("InitGame:"):
+            info = body.split("\\")[1:]  # IW4x logs none; older games had the server info here
             kv = dict(zip(info[::2], info[1::2]))
-            game = (kv.get("mapname", ""), kv.get("g_gametype", ""))
-            # S&D starts every round over (InitGame again), the match goes on
-            if self.match and (self.match["map"], self.match["gametype"]) == game:
-                return []
+            game = (kv["mapname"], kv.get("g_gametype", "")) if kv.get("mapname") else current_game() or self.game
+            if self.match and (self.match["map"], self.match["gametype"]) == game and game[1] in ROUND_MODES:
+                return []  # the next round
+            ended = [{"type": "end", "match": self.match["id"], "at": at, "off": off}] if self.match else []
             self.match_id += 1
             self.match = {"id": self.match_id, "map": game[0], "gametype": game[1]}
             # vote.gsc or Start game ran exec server.cfg for this match: its weapons rule
             weapons = read_cfg().get("sv_funweapons", "0")
             mode, _ = tg_mode(game[1], weapons)
             rule = FUN_RULES["sv_funweapons"][3].get(weapons, "") if weapons != "0" and mode == game[1] else ""
-            return [{"type": "match", "match": self.match_id, "at": at, "off": off, "map": game[0],
+            return ended + [{"type": "match", "match": self.match_id, "at": at, "off": off, "map": game[0],
                      "map_name": MAP_NAMES.get(game[0], game[0]), "gametype": game[1], "mode": mode,
                      "mode_name": APP_MODES.get(mode) or GAMETYPE_NAMES.get(mode, mode), "rule": rule}]
         if body.startswith("ExitLevel"):
@@ -1503,6 +1509,17 @@ class Stats:
             except OSError:
                 pass
             return {"log": self.log_id, "last": self.seq, "events": out}
+
+
+def current_game() -> tuple[str, str] | None:
+    """Map and gametype the server runs now (getstatus, no rcon): right after an InitGame line,
+    the match it started. None without an answer."""
+    raw = udp("getstatus", 0.7)
+    if not raw:
+        return None
+    info = raw.split("\n", 1)[0].split("\\")[1:]
+    kv = dict(zip(info[::2], info[1::2]))
+    return (kv["mapname"], kv.get("g_gametype", "")) if kv.get("mapname") else None
 
 
 def stats_line(line: str) -> dict | None:
