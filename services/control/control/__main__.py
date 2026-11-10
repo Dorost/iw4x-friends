@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import random
 import sys
 from contextlib import asynccontextmanager
 
@@ -45,8 +46,68 @@ def build(s: config.Settings) -> Orchestrator:
     )
 
 
+FAKE_PEOPLE = [("1111aaaa1111aaaa", "Yashar"), ("2222bbbb2222bbbb", "Amin"), ("3333cccc", "Sara")]
+FAKE_BOTS = ["Pedro", "Jose", "Ahmed"]
+FAKE_WEAPONS = [
+    ("cheytac_fmj_mp", "MOD_HEAD_SHOT", "head"),
+    ("m4_reflex_mp", "MOD_RIFLE_BULLET", "torso_upper"),
+    ("ump45_silencer_mp", "MOD_PISTOL_BULLET", "right_arm_lower"),
+    ("spas12_mp", "MOD_RIFLE_BULLET", "left_leg_upper"),
+    ("usp_tactical_mp", "MOD_MELEE", "torso_lower"),
+    ("frag_grenade_mp", "MOD_GRENADE_SPLASH", "none"),
+    ("ac130_105mm_mp", "MOD_PROJECTILE_SPLASH", "none"),
+]
+
+
+def fake_kill(orch: Orchestrator, ip: str) -> None:
+    """task control:dev: a running pretend server writes down a random kill (a new match now
+    and then), for the stats."""
+    events = orch.nodes.stats.get(ip, [])
+    matches = [e for e in events if e["type"] == "match"]
+    if not matches or random.random() < 0.03:
+        mp, mode = random.choice(
+            [("mp_rust", "war"), ("mp_terminal", "sd"), ("mp_highrise", "dom")]
+        )
+        name = {"war": "Team Deathmatch", "sd": "Search & Destroy", "dom": "Domination"}[mode]
+        orch.nodes.add_event(
+            ip,
+            type="match",
+            match=len(matches) + 1,
+            at=orch.now(),
+            map=mp,
+            map_name=mp[3:].title(),
+            gametype=mode,
+            mode=mode,
+            mode_name=name,
+        )
+        return
+    sides = [
+        {"guid": g, "name": n, "bot": False, "ping": random.randint(30, 120)}
+        for g, n in FAKE_PEOPLE
+    ]
+    sides += [{"guid": "bot" + n.lower(), "name": n, "bot": True, "ping": 0} for n in FAKE_BOTS]
+    killer, victim = random.sample(sides, 2)
+    if killer["bot"] and victim["bot"]:
+        return
+    killer, victim = {**killer, "team": "allies"}, {**victim, "team": "axis"}
+    weapon, means, hit = random.choice(FAKE_WEAPONS)
+    orch.nodes.add_event(
+        ip,
+        type="kill",
+        match=len(matches),
+        at=orch.now(),
+        victim=victim,
+        killer=killer,
+        weapon=weapon,
+        damage=100,
+        means=means,
+        hit=hit,
+    )
+
+
 async def fake_servers(orch: Orchestrator) -> None:
-    """task control:dev: the pretend servers answer a few seconds after their VM is up."""
+    """task control:dev: the pretend servers answer a few seconds after their VM is up, and
+    then kills happen on them."""
     while True:
         for name, spec in orch.s.servers.items():
             row = orch.row(name)
@@ -55,6 +116,8 @@ async def fake_servers(orch: Orchestrator) -> None:
                 orch.nodes.up.add(spec.wg_ip)
             elif row.status in ("off", "stopping"):
                 orch.nodes.up.discard(spec.wg_ip)
+            elif row.status == "running":
+                fake_kill(orch, spec.wg_ip)
         await asyncio.sleep(1)
 
 

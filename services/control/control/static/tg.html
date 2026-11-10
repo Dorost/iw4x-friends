@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>MW2 servers</title>
 <!-- Telegram mini app of the fleet (services/control, /tg/): boot and shut down the servers, their map,
-     mode and bots, and what they cost. Made from the single server one in services/ui/tg.html -->
+     mode and bots, what they cost, and everyone's kills (control/stats.py). Made from the single server one in services/ui/tg.html -->
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root {
@@ -116,6 +116,30 @@
   .crow .what { min-width: 0; }
   .crow .amt { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; }
   .warnbox { background: color-mix(in srgb, #ffb300 18%, transparent); border-radius: 12px; padding: 10px 12px; font-size: 14px; margin-bottom: 10px; }
+
+  /* stats */
+  .seg + .chips { margin-top: 10px; }
+  .chips.small .chip { padding: 6px 12px; font-size: 14px; }
+  .board { background: var(--card); border-radius: 14px; padding: 0 12px; }
+  .brow { display: grid; grid-template-columns: 22px minmax(0, 1fr) 40px 40px 46px 40px; align-items: center; gap: 6px; width: 100%; text-align: left; padding: 11px 0; border-top: 1px solid var(--sep); font-variant-numeric: tabular-nums; }
+  .brow:first-child { border-top: 0; }
+  .brow.head { font-size: 12px; color: var(--hint); padding: 9px 0 7px; text-transform: uppercase; letter-spacing: .03em; }
+  .brow .n { text-align: right; }
+  .brow .rank { color: var(--hint); font-size: 13px; }
+  .brow .who { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .brow .kd { font-weight: 600; }
+  .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+  .stat { background: var(--card); border-radius: 14px; padding: 12px; text-align: center; }
+  .stat b { display: block; font-size: 26px; line-height: 1.15; font-variant-numeric: tabular-nums; }
+  .stat span { font-size: 12px; color: var(--hint); text-transform: uppercase; letter-spacing: .04em; }
+  .facts { margin: 10px 4px 0; }
+  .crow .num { margin-left: auto; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .crow.tap { cursor: pointer; }
+  .crow.tap .num::after { content: " ›"; color: var(--hint); }
+  .bar { height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--hint) 18%, transparent); margin-top: 6px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+  .crow.hit { display: block; }
+  .crow.hit .top { display: flex; }
 </style>
 </head>
 <body>
@@ -198,6 +222,7 @@ function openView(v, html) {
 
 function closeView() {
   if (busy) return;
+  if (view && view.parent) return view.parent();  // a screen opened from another goes back to it
   view = null;
   if (nativeBack()) tg.BackButton.hide();
   renderList();
@@ -234,8 +259,10 @@ function renderList() {
   const cards = fleet.servers.map(card).join("");
   const costs = `<button class="card plan" onclick="openCosts()"><span class="emoji">💰</span>
       <span><b>Costs</b><br><span class="hint">What the servers and the bastion cost this month</span></span><span class="go">›</span></button>`;
+  const stats = `<button class="card plan" onclick="openStats()"><span class="emoji">📊</span>
+      <span><b>Stats</b><br><span class="hint">Kills, deaths and who kills whom</span></span><span class="go">›</span></button>`;
   app.innerHTML = plan + (cards || `<div class="message"><div class="icon">🛰</div><h1>No servers yet</h1><p>The bastion has no cloud API key.</p></div>`)
-    + (cards ? costs : "");
+    + (cards ? stats + costs : "");
 }
 
 // the Plan page gets Telegram's launch data in its address, as Telegram does
@@ -487,6 +514,137 @@ function renderCosts(c) {
     <div class="panel"><div class="total">${usd(c.total)}</div><div class="hint">${split}</div></div>
     <div class="label">Per server</div><div class="cg">${rows}</div>
     <div class="hint note">From Vultr's and Zenlayer's billing, in US dollars. A game server's VM is billed only while it runs, its disk all month. Zenlayer's figures lag up to an hour.</div>`;
+}
+
+// ---------- stats: everyone's kills and deaths, and one player's (control/stats.py) ----------
+
+const PERIODS = [["last", "Last run"], ["7d", "7 days"], ["30d", "30 days"], ["all", "All time"]];
+let statsScope = {period: "last", server: ""};
+let trail = [];
+let statsServers = [];  // name and title of every server of the fleet, from /tg/api/stats  // the players opened from the list, one from another (nemesis, victims): back goes up it
+const kd = n => Number(n || 0).toFixed(2);
+const pct = (n, of) => of ? Math.round(100 * n / of) + "%" : "–";
+
+function scopeText(d) {
+  const where = d.server ? [...statsServers, ...fleet.servers].find(x => x.name === d.server)?.title || d.server : "All servers";
+  if (d.period !== "last") return `${PERIODS.find(p => p[0] === d.period)[1]} · ${where}`;
+  if (!d.span) return `Last run · ${where}`;
+  return `Last run · ${where} · ${day(d.span.from)}–${clock(d.span.to)}`;
+}
+
+function periodSeg(fn) {
+  return `<div class="seg">${PERIODS.map(([k, label]) =>
+    `<button class="${statsScope.period === k ? "on" : ""}" onclick="${fn}('${k}')">${label}</button>`).join("")}</div>`;
+}
+
+function loading(id) {
+  return `<div id="${id}"><div class="message" style="padding-top: 8vh"><div class="spin" style="margin: 0 auto"></div></div></div>`;
+}
+
+async function openStats(period, srv) {
+  trail = [];
+  if (period) statsScope.period = period;
+  if (srv !== undefined) statsScope.server = srv;
+  if (period || srv !== undefined) tick();
+  openView({kind: "stats"}, `
+    <header><h1>Stats</h1><div class="hint" id="statsWhen">&nbsp;</div></header>
+    ${periodSeg("openStats")}
+    <div class="chips small" id="statsServers"></div>
+    <div class="label">Players</div>
+    ${loading("board")}`);
+  try {
+    const d = await api(`/tg/api/stats?period=${statsScope.period}&server=${encodeURIComponent(statsScope.server)}`);
+    if (!view || view.kind !== "stats") return;
+    statsServers = d.servers;
+    document.getElementById("statsWhen").textContent = scopeText(d);
+    // every server of the fleet, also one this bastion can't boot (its kills stay)
+    document.getElementById("statsServers").innerHTML = [{name: "", title: "All servers"}, ...d.servers].map(x =>
+      `<button class="chip${statsScope.server === x.name ? " on" : ""}" onclick="openStats(null, '${esc(x.name)}')">${esc(x.title)}</button>`).join("");
+    document.getElementById("board").innerHTML = d.rows.length ? `<div class="board">
+        <div class="brow head"><span></span><span>Player</span><span class="n">K</span><span class="n">D</span><span class="n">K/D</span><span class="n">HS</span></div>
+        ${d.rows.map((r, i) => `<button class="brow" onclick="openPlayer(${Number(r.id)})">
+          <span class="rank">${i + 1}</span><span class="who">${esc(r.name)}</span>
+          <span class="n">${r.kills}</span><span class="n">${r.deaths}</span><span class="n kd">${kd(r.kd)}</span>
+          <span class="n">${pct(r.headshots, r.kills)}</span></button>`).join("")}</div>
+      <div class="hint note">Tap a player for who they kill, who kills them, their weapons and maps. HS: headshots of their kills.
+        Kills of bots count too; a team mate or yourself is a death, not a kill, as on the scoreboard.</div>`
+      : `<div class="message" style="padding-top: 6vh"><div class="icon">🎯</div><h1>No kills yet</h1><p>Not in this period on ${statsScope.server ? "this server" : "any server"}.</p></div>`;
+  } catch (e) {
+    const box = document.getElementById("board");
+    if (box) box.innerHTML = `<div class="warnbox">${esc(e.message)}</div>`;
+  }
+}
+
+function openPlayer(id) {
+  trail.push(id);
+  showPlayer();
+}
+
+function playerBack() {
+  trail.pop();
+  if (trail.length) showPlayer();
+  else openStats();
+}
+
+async function showPlayer(period) {
+  if (period) { statsScope.period = period; tick(); }
+  const id = trail[trail.length - 1];
+  openView({kind: "player", id, parent: playerBack}, `
+    <header><h1 id="pname">&nbsp;</h1><div class="hint" id="pwhen">&nbsp;</div></header>
+    ${periodSeg("showPlayer")}
+    ${loading("player")}`);
+  try {
+    const d = await api(`/tg/api/stats/people/${id}?period=${statsScope.period}&server=${encodeURIComponent(statsScope.server)}`);
+    if (!view || view.kind !== "player" || view.id !== id) return;
+    document.getElementById("pname").textContent = d.name;
+    document.getElementById("pwhen").textContent = scopeText(d);
+    document.getElementById("player").innerHTML = renderPlayer(d);
+  } catch (e) {
+    const box = document.getElementById("player");
+    if (box) box.innerHTML = `<div class="warnbox">${esc(e.message)}</div>`;
+  }
+}
+
+// someone on the other side of a kill: a person opens their page, a bot or the world doesn't
+function otherRow(o) {
+  const name = o.kind === "bot" ? `🤖 ${esc(o.name)}` : o.kind === "self" ? `💀 ${esc(o.name)}` : esc(o.name);
+  const tap = o.kind === "person" && o.id !== view.id ? ` tap" onclick="openPlayer(${Number(o.id)})` : "";
+  return `<div class="crow${tap}"><span class="what">${name}</span><span class="num">${o.count}×</span></div>`;
+}
+
+function list(label, rows, row, empty) {
+  return `<div class="label">${label}</div>` + (rows.length ? `<div class="cg">${rows.map(row).join("")}</div>`
+    : `<div class="hint note" style="margin-top: 0">${empty}</div>`);
+}
+
+function kdRow(r) {
+  return `<div class="crow"><span class="what">${esc(r.name)}</span>
+    <span class="num">${r.kills} / ${r.deaths} · <b>${kd(r.kd)}</b>${r.ping != null ? ` · ${r.ping} ms` : ""}</span></div>`;
+}
+
+function renderPlayer(d) {
+  if (!d.kills && !d.deaths) return `<div class="message" style="padding-top: 6vh"><div class="icon">🎯</div><h1>Nothing here</h1><p>No kills or deaths in this period.</p></div>`;
+  const facts = [`${d.headshots} headshot${d.headshots === 1 ? "" : "s"} (${pct(d.headshots, d.kills)})`,
+    `${d.matches} match${d.matches === 1 ? "" : "es"}`, d.suicides ? `${d.suicides} by own hand or a fall` : ""].filter(Boolean);
+  const hits = d.hits.map(h => `<div class="crow hit"><div class="top"><span class="what">${esc(h.name)}</span>
+      <span class="num">${pct(h.count, d.hits_total)}</span></div><div class="bar"><i style="width: ${d.hits_total ? 100 * h.count / d.hits_total : 0}%"></i></div></div>`).join("");
+  return `<div class="tiles">
+      <div class="stat"><b>${d.kills}</b><span>Kills</span></div>
+      <div class="stat"><b>${d.deaths}</b><span>Deaths</span></div>
+      <div class="stat"><b>${kd(d.kd)}</b><span>K/D</span></div></div>
+    <div class="hint facts">${facts.join(" · ")}</div>
+    <div class="label">Against</div><div class="cg">
+      <div class="crow"><span class="what">People</span><span class="num">${d.vs_humans.kills} / ${d.vs_humans.deaths} · <b>${kd(d.vs_humans.deaths ? d.vs_humans.kills / d.vs_humans.deaths : d.vs_humans.kills)}</b></span></div>
+      <div class="crow"><span class="what">Bots</span><span class="num">${d.vs_bots.kills} / ${d.vs_bots.deaths} · <b>${kd(d.vs_bots.deaths ? d.vs_bots.kills / d.vs_bots.deaths : d.vs_bots.kills)}</b></span></div></div>
+    ${list("Nemesis: killed by", d.nemesis, otherRow, "Nobody killed them.")}
+    ${list("Favorite victims", d.victims, otherRow, "No kills.")}
+    ${list("Weapons", d.weapons, w => `<div class="crow"><span class="what">${esc(w.name)}</span><span class="num">${w.count} kill${w.count === 1 ? "" : "s"}</span></div>`, "No kills.")}
+    <div class="label">Where they hit</div>
+    ${d.hits_total ? `<div class="cg">${hits}</div>` : ""}
+    <div class="hint note" style="margin-top: ${d.hits_total ? 10 : 0}px">${d.no_body_part ? `${d.no_body_part} kill${d.no_body_part === 1 ? "" : "s"} without a body part: explosives, killstreaks.` : ""}${d.hits_total ? "" : " No kills by a hit yet."}</div>
+    ${list("Maps · kills / deaths · K/D", d.maps, kdRow, "No matches.")}
+    ${list("Modes", d.modes, kdRow, "No matches.")}
+    ${list("Servers · with average ping", d.servers, kdRow, "")}`;
 }
 
 // ---------- bots ----------

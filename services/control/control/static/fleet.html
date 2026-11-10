@@ -4,8 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MW2 Servers</title>
-<!-- the bastion's fleet page (services/control): every game server, boot / shut down, schedules;
-     its costs are on their own page (costs.html) -->
+<!-- the bastion's fleet page (services/control): every game server, boot / shut down, schedules,
+     who played (their game identities, linked into people for the stats); its costs are on their
+     own page (costs.html) -->
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
   body { font-size: 13px; }
@@ -25,6 +26,7 @@
   <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
   <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M11 12l9-9M17 6l3 3M14 9l2 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
   <symbol id="i-coin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M14.8 9.2c-.5-.8-1.5-1.3-2.8-1.3-1.6 0-2.8.8-2.8 2s1.2 1.7 2.8 2.1 2.8.9 2.8 2.1-1.2 2-2.8 2c-1.3 0-2.4-.5-2.9-1.4M12 6v1.9M12 16.1V18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4 21a8 8 0 0 1 16 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
   <symbol id="i-spin" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
 </svg>
 
@@ -71,6 +73,14 @@
         <button type="button" id="fCancel" onclick="resetForm()" style="display: none" class="btn bg-slate-200 text-slate-600 hover:bg-slate-300">Cancel</button>
       </div>
     </form>
+  </section>
+
+  <section class="bg-white rounded-xl shadow-sm p-4 space-y-3">
+    <h2 class="title"><svg class="w-4 h-4"><use href="#i-user"/></svg>Players</h2>
+    <p class="text-[11px] text-slate-400">Everyone with a kill or a death on the servers, as the kill stats count them (the mini app's 📊 Stats).
+      A new install of the game plays as a new identity: link it to its person and their stats add up. Linking can be undone.</p>
+    <div id="suggestions" class="space-y-2"></div>
+    <div id="people" class="divide-y divide-slate-100"></div>
   </section>
 
   <section class="bg-white rounded-xl shadow-sm p-4">
@@ -302,6 +312,56 @@ function remove(id, btn) {
   return busy(btn, async () => { await api(`/api/schedules/${id}`, undefined, 'DELETE'); if (editing === id) resetForm(); load(); });
 }
 
+// ---------- players: game identities (IW4x guids) linked into people, for the stats ----------
+
+let P = null;
+const date = ts => new Date(ts * 1000).toLocaleDateString([], {day: 'numeric', month: 'short', year: 'numeric'});
+const short = guid => guid.length > 8 ? '…' + guid.slice(-6) : guid;
+
+function renderPlayers() {
+  const name = id => (P.people.find(p => p.id === id) || {name: '?'}).name;
+  $('suggestions').innerHTML = P.suggestions.map(x => `
+    <div class="flex flex-wrap items-center gap-2 text-xs bg-amber-50 text-amber-900 rounded-lg px-3 py-2">
+      <span>Same person? <b>${esc(x.name)}</b> <span class="text-amber-700">(new identity ${esc(short(x.guid))})</span> plays with a name <b>${esc(x.person_name)}</b> had already.</span>
+      <span class="ml-auto flex gap-1.5">
+        <button onclick="playerAct('${esc(x.guid)}', 'link', this, ${x.person})" class="btn bg-amber-600 text-white hover:bg-amber-700">Yes, link them</button>
+        <button onclick="playerAct('${esc(x.guid)}', 'dismiss', this)" class="btn bg-white text-amber-800 hover:bg-amber-100">Not the same</button>
+      </span>
+    </div>`).join('');
+  $('people').innerHTML = P.people.length ? P.people.map(person => `
+    <div class="py-2 flex flex-wrap gap-x-4 gap-y-1.5 items-start text-xs">
+      <div class="w-40 shrink-0"><div class="font-medium text-slate-800 truncate">${esc(person.name)}</div>
+        <div class="text-[11px] text-slate-400">last played ${date(person.last_seen)}</div></div>
+      <div class="flex-1 min-w-0 space-y-1">${person.players.map(pl => `
+        <div class="flex flex-wrap items-center gap-2">
+          <code class="text-[11px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600" title="${esc(pl.guid)}">${esc(short(pl.guid))}</code>
+          <span class="text-slate-600 truncate" title="names it played with">${pl.names.map(esc).join(', ')}</span>
+          <span class="text-[11px] text-slate-400">${date(pl.first_seen)} – ${date(pl.last_seen)}</span>
+          <span class="ml-auto flex gap-1.5 items-center">
+            ${person.players.length > 1 ? `<button onclick="playerAct('${esc(pl.guid)}', 'unlink', this)" class="btn bg-slate-100 text-slate-600 hover:bg-slate-200" title="Make this identity someone of its own">Unlink</button>` : ''}
+            ${P.people.length > 1 ? `<select onchange="if (this.value) playerAct('${esc(pl.guid)}', 'link', this, Number(this.value))" class="bg-white border border-slate-200 rounded-lg px-1.5 py-1 text-[11px]">
+              <option value="">Link to…</option>${P.people.filter(o => o.id !== person.id).map(o => `<option value="${o.id}">${esc(o.name)}</option>`).join('')}</select>` : ''}
+          </span>
+        </div>`).join('')}</div>
+    </div>`).join('') : '<p class="text-xs text-slate-400 py-1">Nobody yet: players show up with their first kill or death.</p>';
+}
+
+async function loadPlayers() {
+  try { P = await api('/api/players'); renderPlayers(); } catch (e) {}
+}
+
+function playerAct(guid, action, el, person) {
+  if (action === 'link' && !confirm(`Count identity ${short(guid)} as ${(P.people.find(p => p.id === person) || {}).name}?`)) {
+    if (el.tagName === 'SELECT') el.value = '';
+    return;
+  }
+  return busy(el.tagName === 'BUTTON' ? el : null, async () => {
+    P = await api(`/api/players/${encodeURIComponent(guid)}/${action}`, action === 'link' ? {person} : {});
+    renderPlayers();
+    toast({link: 'linked', unlink: 'unlinked', dismiss: 'kept apart'}[action]);
+  });
+}
+
 // ---------- the page ----------
 
 function render() {
@@ -333,7 +393,9 @@ async function logout() { await fetch('/api/auth/logout', {method: 'POST'}); loc
 
 fillZones();
 load();
+loadPlayers();
 setInterval(() => { if (!document.hidden) load(); }, 3000);
+setInterval(() => { if (!document.hidden) loadPlayers(); }, 60000);
 </script>
 </body>
 </html>

@@ -188,7 +188,7 @@ A second bot from @BotFather (`/newbot`) and a test group, so the real group and
 
 The servers behind `mw2-nl.dorost.nl`, `mw2-us.dorost.nl` and `mw2-ist.dorost.nl` (Istanbul) run only when wanted: a bastion at `https://mw2.dorost.nl` creates each one by a schedule, or when someone boots it from the fleet page or the Telegram mini app. It destroys the server again once nobody plays. Every push to `main` deploys to the bastion, and the servers follow. How it works, its secrets and setting it up from scratch: [`deploy/README.md`](deploy/README.md).
 
-On the fleet, the bastion does the Telegram parts above itself: the mini app is `https://mw2.dorost.nl/tg/`, and it posts the joins and leaves. The game servers don't get the bot token.
+On the fleet, the bastion does the Telegram parts above itself: the mini app is `https://mw2.dorost.nl/tg/`, and it posts the joins and leaves. The game servers don't get the bot token. It also keeps every kill with a person in it, for the mini app's 📊 Stats and the kills and deaths in the group when a server shuts down ([Kill stats](deploy/README.md#kill-stats)).
 
 ## Repo layout
 

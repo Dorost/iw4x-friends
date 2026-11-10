@@ -17,6 +17,7 @@ services:
       JOIN_HOST: ${JOIN_HOST:?JOIN_HOST missing in .env} # the domain players connect to
       UI_DATA_DIR: /data
       AUTOSTART: "1"
+      STATS: "1" # the kills for the bastion's stats (services/ui/app.py, Stats)
       # no TELEGRAM_*: the bastion posts the joins and leaves and serves the mini app
     volumes:
       - /srv/iw4x/game:/game
