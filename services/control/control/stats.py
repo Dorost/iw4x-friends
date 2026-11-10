@@ -601,7 +601,7 @@ def person_view(db: Session, person_id: int, sc: Scope, titles: dict[str, str]) 
             {"name": k, "kills": v[0], "deaths": v[1], "kd": ratio(v[0], v[1])}
             for k, v in d.items()
         ]
-        return sorted(out, key=lambda r: (-(r["kills"] + r["deaths"]), r["name"]))
+        return sorted(out, key=lambda r: (-r["kills"], -r["kd"], r["name"]))  # most kills first
 
     return {
         "id": person_id,
@@ -635,7 +635,7 @@ def person_view(db: Session, person_id: int, sc: Scope, titles: dict[str, str]) 
                 }
                 for s, v in per_server.items()
             ),
-            key=lambda r: (-(r["kills"] + r["deaths"]), -r["time"]),
+            key=lambda r: (-r["kills"], -r["kd"], -r["time"]),  # most kills first
         ),
     }
 

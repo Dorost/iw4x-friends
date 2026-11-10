@@ -159,7 +159,11 @@ def test_a_players_page(db):
     hits = {h["key"]: h["count"] for h in v["hits"]}
     assert hits == {"head": 1, "neck": 0, "torso": 1, "arms": 0, "legs": 1}
     assert v["maps"][0] == {"name": "Rust", "kills": 2, "deaths": 2, "kd": 1.0}
-    assert {m["name"] for m in v["modes"]} == {"Team Deathmatch", "Free-for-all"}
+    assert [m["name"] for m in v["modes"]] == ["Team Deathmatch", "Free-for-all"]  # most kills
+    assert [(m["name"], m["kills"], m["deaths"]) for m in v["maps"]] == [
+        ("Rust", 2, 2),
+        ("Shipment", 1, 0),
+    ]
     assert v["servers"] == [
         {"name": "Netherlands", "kills": 3, "deaths": 2, "kd": 1.5, "ping": 46, "time": 0}
     ]
