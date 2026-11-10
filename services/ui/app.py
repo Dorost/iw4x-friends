@@ -1340,8 +1340,10 @@ def tg_thumb(map_id: str):
 # The game writes every death to userraw/logs/games_mp.log, a line at a time (g_logSync 1):
 #   K;<victim guid>;<num>;<team>;<name>;<killer guid>;<num>;<team>;<name>;<weapon>;<damage>;<means of death>;<hit location>
 # (killer num -1, team "world" and no guid: a fall, the map's kill zone; bots' guids are bot<n>).
-# A bare "InitGame" starts every map, and every round of S&D; the end of a match isn't logged on a
-# lobby server (ExitLevel only rarely), so a match ends when the next one starts. The poll loop reads
+# A bare "InitGame" starts every map, and every round of S&D, while the map is still loading: its
+# map and mode come from the next rcon status that shows the match (the lines after it wait for
+# that, INIT_WAIT at most). The end of a match isn't logged on a lobby server (ExitLevel only
+# rarely), so a match ends when the next one starts. The poll loop reads
 # the new lines, drops bot-vs-bot kills, and adds who is a bot and each side's ping from the last
 # rcon status (at most POLL_SECONDS old, IW4x's own log has neither). The kills and the matches
 # they belong to go, numbered, into stats.jsonl in the data dir (the server's disk); the fleet's
@@ -1353,6 +1355,7 @@ GAMES_LOG = GAME_DIR / "userraw" / "logs" / "games_mp.log"
 STATS_KEPT_BYTES = 4 << 20  # stats.jsonl drops what the bastion has, once it grows past this
 # modes that start every round over (InitGame again) on the same map: the match goes on
 ROUND_MODES = {"sd", "sab", "dd", "arena", "ctf", "oneflag"}
+INIT_WAIT = 30  # seconds an InitGame waits for the match to show in the rcon status
 KILL_LINE = re.compile(
     r"K;(?P<vguid>[^;]*);(?P<vnum>-?\d+);(?P<vteam>[^;]*);(?P<vname>.*);"
     r"(?P<kguid>[^;]*);(?P<knum>-?\d+);(?P<kteam>allies|axis|free|none|spectator|world|[^;]*);(?P<kname>.*);"
@@ -1365,7 +1368,9 @@ class Stats:
         self.log_path, self.out, self.state_path = log_path, out, state
         self.lock = threading.Lock()
         self.roster: dict[int, dict] = {}  # client num -> the last rcon status line of the player there
-        self.game: tuple[str, str] = ("", "")  # map and gametype of the last rcon status
+        self.game: tuple[str, str] = ("", "")  # map and gametype of the last rcon status of a match
+        self.game_at = 0.0  # when that status was (time.monotonic())
+        self.waiting: float | None = None  # since when an InitGame line waits for the status
         try:
             st = json.loads(state.read_text())
         except (OSError, ValueError):
@@ -1406,9 +1411,10 @@ class Stats:
     def see(self, live: dict | None) -> None:
         """The players of the last rcon status, for who is a bot and their pings."""
         if live and live["in_game"]:
-            self.game = (live["map"], live["gametype"])
-            for p in live["players"]:
-                self.roster[p["num"]] = p
+            with self.lock:
+                self.game, self.game_at = (live["map"], live["gametype"]), time.monotonic()
+                for p in live["players"]:
+                    self.roster[p["num"]] = p
 
     def side(self, guid: str, num: str, team: str, name: str) -> dict | None:
         """One side of a kill; None for the world (falls, kill zones)."""
@@ -1430,7 +1436,9 @@ class Stats:
         if body == "InitGame" or body.startswith("InitGame:"):
             info = body.split("\\")[1:]  # IW4x logs none; older games had the server info here
             kv = dict(zip(info[::2], info[1::2]))
-            game = (kv["mapname"], kv.get("g_gametype", "")) if kv.get("mapname") else current_game() or self.game
+            fresh = self.waiting is not None and self.game_at > self.waiting
+            game = (kv["mapname"], kv.get("g_gametype", "")) if kv.get("mapname") else self.game if fresh else ("", "")
+            self.waiting = None
             if self.match and (self.match["map"], self.match["gametype"]) == game and game[1] in ROUND_MODES:
                 return []  # the next round
             ended = [{"type": "end", "match": self.match["id"], "at": at, "off": off}] if self.match else []
@@ -1457,6 +1465,14 @@ class Stats:
                  "victim": victim, "killer": killer, "weapon": m["weapon"], "damage": int(m["damage"]),
                  "means": m["means"], "hit": m["hit"]}]
 
+    def wait(self, line: str) -> bool:
+        """True while this line is an InitGame that waits for the status of its match."""
+        if line.strip().partition(" ")[2] != "InitGame":
+            return False
+        if self.waiting is None:
+            self.waiting = time.monotonic()
+        return self.game_at <= self.waiting and time.monotonic() - self.waiting < INIT_WAIT
+
     def read(self) -> None:
         """Takes in the lines the game wrote since the last call."""
         with self.lock:
@@ -1474,11 +1490,14 @@ class Stats:
             end = data.rfind(b"\n") + 1  # a line the game is still writing waits for the next call
             events, pos, now = [], self.offset, int(time.time())
             for raw in data[:end].splitlines(keepends=True):
+                line = raw.decode(errors="replace")
+                if self.wait(line):
+                    break  # this line and the ones after it: on a later call
                 pos += len(raw)
-                for e in self.parse(raw.decode(errors="replace"), now, pos):
+                for e in self.parse(line, now, pos):
                     self.seq += 1
                     events.append({"seq": self.seq, **e})
-            self.offset += end
+            self.offset = pos
             if events:
                 with self.out.open("a+b") as f:
                     # a line cut short by a crash stays a line of its own (and is skipped)
@@ -1509,17 +1528,6 @@ class Stats:
             except OSError:
                 pass
             return {"log": self.log_id, "last": self.seq, "events": out}
-
-
-def current_game() -> tuple[str, str] | None:
-    """Map and gametype the server runs now (getstatus, no rcon): right after an InitGame line,
-    the match it started. None without an answer."""
-    raw = udp("getstatus", 0.7)
-    if not raw:
-        return None
-    info = raw.split("\n", 1)[0].split("\\")[1:]
-    kv = dict(zip(info[::2], info[1::2]))
-    return (kv["mapname"], kv.get("g_gametype", "")) if kv.get("mapname") else None
 
 
 def stats_line(line: str) -> dict | None:

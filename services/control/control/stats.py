@@ -462,7 +462,7 @@ def person_view(db: Session, person_id: int, where: list, titles: dict[str, str]
     per_server: dict[str, list] = defaultdict(lambda: [0, 0, []])
     for rows, i in ((kills, 0), (deaths, 1)):
         for k in rows:
-            if m := matches.get(k.match_id):
+            if (m := matches.get(k.match_id)) and m.map:  # a match the server saw no map of
                 per_map[m.map_name or m.map][i] += 1
                 per_mode[m.mode_name or m.mode][i] += 1
             per_server[k.server][i] += 1
