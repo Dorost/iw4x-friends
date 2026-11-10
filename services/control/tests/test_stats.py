@@ -103,12 +103,13 @@ def test_the_shutdown_report(db):
     take(db, evening(), run_id=run)
     with db.begin() as s:
         text = stats.report(s, run, NOW)
-    assert text.startswith("📊 2h 14m · 2 matches\n<pre>")
-    lines = text.removesuffix("</pre>").replace("<pre>", "").split("\n")[1:]
-    assert lines[0].split() == ["K", "D", "K/D", "Time"]
-    assert lines[1].split() == ["Yashar", "3", "2", "1.50", "–"]  # no session came in
-    assert lines[2].split() == ["Amin", "1", "2", "0.50", "–"]
-    assert lines[3].split() == ["Sara", "0", "2", "0.00", "–"]
+    assert text.split("\n") == [
+        "📊 2h 14m · 2 matches",
+        "<code>   K    D   K/D  Time</code>",
+        "<code>   3    2  1.50     –</code>  Yashar",  # no session came in, no mini app link
+        "<code>   1    2  0.50     –</code>  Amin",
+        "<code>   0    2  0.00     –</code>  Sara",
+    ]
     with db.begin() as s:  # nobody got a kill: nothing to post
         empty = stats.new_run(s, "nl", NOW, "test")
     take(db, [kill(50, side(YASHAR, "Yashar"), bot("Pedro"))], run_id=empty)
@@ -216,13 +217,14 @@ def test_time_played(db):
         v = stats.person_view(s, pid, stats.Scope(), {"nl": "NL"})
         assert v["time"] == 3900 and v["servers"][0]["time"] == 3900
         text = stats.report(s, run, NOW + 4000, "https://t.me/testbot?startapp=")
-    lines = text.split("</pre>")[0].split("\n")
-    assert lines[2].split() == ["Yashar", "3", "2", "1.50", "1h05"]
-    assert lines[4].split() == ["Sara", "0", "2", "0.00", "20m"]
-    assert lines[5].split() == ["Lurker", "0", "0", "0.00", "5m"]
-    profiles = text.split("</pre>")[1]
-    assert profiles.startswith('\n👤 <a href="https://t.me/testbot?startapp=p')
-    assert f'startapp=p{pid}">Yashar</a>' in profiles and profiles.count("<a ") == 4
+    lines = text.split("\n")
+    link = f'<a href="https://t.me/testbot?startapp=p{pid}">Yashar</a>'
+    assert lines[2] == f"<code>   3    2  1.50  1h05</code>  {link}"
+    assert lines[4].startswith("<code>   0    2  0.00   20m</code>  <a ") and "Sara</a>" in lines[4]
+    assert (
+        lines[5].startswith("<code>   0    0  0.00    5m</code>  <a ") and "Lurker</a>" in lines[5]
+    )
+    assert text.count("<a ") == 4
 
 
 def test_last_run_is_the_latest_anyone_played_in(db):
@@ -286,8 +288,7 @@ async def test_kills_come_in_while_it_runs_and_the_group_gets_them_at_shutdown(f
     await orch.tasks["nl"]
     (msg,) = posts(orch)
     assert msg.startswith("⚪ <b>NL</b> shut down (by test)\n\n📊 30 min · 2 matches")
-    assert "Yashar     3     2   1.50      –" in msg
-    assert '\n👤 <a href="https://t.me/testbot?startapp=p' in msg
+    assert '\n<code>   3    2  1.50     –</code>  <a href="https://t.me/testbot?startapp=p' in msg
     row = orch.row("nl")
     assert row.run_id is None and row.stats_seq == 11
     with orch.db.begin() as s:

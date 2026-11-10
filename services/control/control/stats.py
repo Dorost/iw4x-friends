@@ -22,7 +22,6 @@ from control.telegram import esc
 PAGE = 1000  # events asked of a server at a time
 FREE_FOR_ALL = {"dm"}  # gametypes without teams: no team kills
 PERIODS = {"last": None, "7d": 7, "30d": 30, "all": None}
-NAME_WIDTH = 14  # in the group message's table
 
 # ---------- names for the pages ----------
 
@@ -502,19 +501,17 @@ def report(db: Session, run_id: int, now: int, link: str | None = None) -> str:
     minutes = max(0, now - (run.ready_at or run.booted_at)) // 60
     took = f"{minutes // 60}h {minutes % 60:02d}m" if minutes >= 60 else f"{minutes} min"
     head = f"📊 {took}" + (f" · {matches} match{'es' if matches != 1 else ''}" if matches else "")
-    width = min(NAME_WIDTH, max(len(r["name"]) for r in rows))
-    lines = [f"{'':{width}}  {'K':>4}  {'D':>4}  {'K/D':>5}  {'Time':>5}"]
+    # Telegram has no links in a <pre> block: each row's numbers are a <code> of the same width
+    # at the start of its line, so the columns line up, and the name after it is the link
+    lines = [f"<code>{'K':>4} {'D':>4} {'K/D':>5} {'Time':>5}</code>"]
     for r in rows:
-        name = r["name"] if len(r["name"]) <= width else r["name"][: width - 1] + "…"
         time_ = hm(r["time"]) if r["time"] else "–"
-        lines.append(
-            f"{name:<{width}}  {r['kills']:>4}  {r['deaths']:>4}  {r['kd']:>5.2f}  {time_:>5}"
-        )
-    text = head + "\n<pre>" + esc("\n".join(lines)) + "</pre>"
-    if link:
-        names = (f'<a href="{esc(link)}p{r["id"]}">{esc(r["name"])}</a>' for r in rows)
-        text += "\n👤 " + " · ".join(names)
-    return text
+        numbers = f"{r['kills']:>4} {r['deaths']:>4} {r['kd']:>5.2f} {time_:>5}"
+        name = esc(r["name"])
+        if link:
+            name = f'<a href="{esc(link)}p{r["id"]}">{name}</a>'
+        lines.append(f"<code>{esc(numbers)}</code>  {name}")
+    return head + "\n" + "\n".join(lines)
 
 
 # ---------- one person ----------
