@@ -3,6 +3,8 @@
 /            the fleet page: every server, boot and shut down, schedules (UI_PASSWORD login)
 /costs       what the fleet costs, per server and the bastion (control/costs.py), and what is
              left on each cloud account (UI_PASSWORD login)
+/stats       everyone's kills, deaths and time played, and a page per player (control/stats.py,
+             UI_PASSWORD login; the mini app has the same)
 /s/<name>/   a running server's own control page (services/ui), passed through over WireGuard
 /tg/         the Telegram mini app: map, mode, bots, boot and shut down, costs, kill stats
              (members of the group)
@@ -401,6 +403,22 @@ def routes(
             except stats.NoSuchPlayer:
                 raise HTTPException(404, "no such player") from None
             return {**view, "period": period, "server": server, "span": stats.span(db, sc)}
+
+    @app.get("/stats", response_class=HTMLResponse)
+    def stats_page(request: Request):
+        if not logged_in(request):
+            return RedirectResponse("/login")
+        return page("stats.html")
+
+    @app.get("/api/stats")
+    def fleet_stats(request: Request, period: str = "last", server: str = ""):
+        need_login(request)
+        return stats_board(server, period)
+
+    @app.get("/api/stats/people/{person}")
+    def fleet_stats_person(request: Request, person: int, period: str = "all", server: str = ""):
+        need_login(request)
+        return stats_person(person, server, period)
 
     @app.get("/api/players")
     def players(request: Request):

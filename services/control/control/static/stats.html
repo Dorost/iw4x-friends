@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MW2 Stats</title>
+<!-- the bastion's stats page (services/control, control/stats.py): everyone's kills, deaths and time
+     played, and a page per player; the same as the mini app's 📊 Stats. The address keeps what is
+     shown (#period=all&server=nl&player=3), so a view can be bookmarked or sent -->
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-size: 13px; }
+</style>
+</head>
+<body class="bg-slate-100 text-slate-700 min-h-screen">
+
+<svg style="display:none">
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-reload" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-spin" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+</svg>
+
+<div class="max-w-6xl mx-auto p-4 space-y-4">
+
+  <header class="bg-white rounded-xl shadow-sm p-4 flex flex-wrap items-center gap-3">
+    <a href="/" class="btn bg-slate-100 text-slate-600 hover:bg-slate-200"><svg class="w-3.5 h-3.5"><use href="#i-back"/></svg>Servers</a>
+    <h1 class="text-base font-semibold text-slate-800">Stats</h1>
+    <span id="when" class="text-[11px] text-slate-400"></span>
+    <button id="reload" onclick="load()" class="btn ml-auto bg-slate-100 text-slate-600 hover:bg-slate-200"><svg class="w-3.5 h-3.5"><use href="#i-reload"/></svg>Refresh</button>
+  </header>
+
+  <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+    <div id="periods" class="flex flex-wrap gap-1.5"></div>
+    <div id="servers" class="flex flex-wrap gap-1.5"></div>
+  </div>
+
+  <div class="grid lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] gap-4 items-start">
+    <section class="bg-white rounded-xl shadow-sm p-4">
+      <h2 class="title mb-2">Players</h2>
+      <div id="board"><div class="flex items-center gap-2 text-xs text-slate-500 py-2"><svg class="w-4 h-4 animate-spin"><use href="#i-spin"/></svg>Loading…</div></div>
+    </section>
+    <section id="player" class="space-y-4"></section>
+  </div>
+
+  <p class="text-[11px] text-slate-400 px-1">A kill is one of someone else on the other team (anyone, in free-for-all); every death counts, also by own hand,
+    a fall or a team mate, as on the scoreboard. Kills of bots count too; bot-vs-bot ones aren't kept. HS: headshots of the kills.
+    Time played: from loading into a server's first map to leaving it. Who is who: the Players list on the <a href="/" class="text-sky-700">servers page</a>.</p>
+</div>
+
+<div id="toast" class="hidden fixed bottom-4 right-4 bg-rose-600 text-white text-xs px-3 py-2 rounded-lg shadow"></div>
+
+<style type="text/tailwindcss">
+  .btn { @apply inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition active:scale-95 disabled:opacity-40 disabled:pointer-events-none; }
+  .chip { @apply px-2.5 py-1 rounded-md text-[11px] font-medium bg-white border border-slate-200 text-slate-500 cursor-pointer select-none; }
+  .chip.on { @apply bg-sky-600 border-sky-600 text-white; }
+  .title { @apply text-sm font-semibold text-slate-700 flex items-center gap-1.5; }
+  .num { @apply text-right tabular-nums; }
+  .card { @apply bg-white rounded-xl shadow-sm p-4; }
+  .label { @apply text-[11px] uppercase tracking-wide text-slate-400 mb-1.5; }
+</style>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+const PERIODS = [['last', 'Last run'], ['7d', '7 days'], ['30d', '30 days'], ['all', 'All time']];
+const kd = n => Number(n || 0).toFixed(2);
+const pct = (n, of) => of ? Math.round(100 * n / of) + '%' : '–';
+const played = s => { const m = Math.floor((s || 0) / 60); return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m` : `${m}m`; };
+const when = ts => new Date(ts * 1000).toLocaleString([], {weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
+const clock = ts => new Date(ts * 1000).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+
+// what is shown, kept in the address: #period=all&server=nl&player=3
+let S = {period: 'last', server: '', player: null}, B = null;
+function readHash() {
+  const h = new URLSearchParams(location.hash.slice(1));
+  S = {period: PERIODS.some(p => p[0] === h.get('period')) ? h.get('period') : 'last',
+       server: h.get('server') || '', player: h.get('player') ? Number(h.get('player')) : null};
+}
+function go(change) {
+  S = {...S, ...change};
+  const h = new URLSearchParams({period: S.period});
+  if (S.server) h.set('server', S.server);
+  if (S.player) h.set('player', S.player);
+  location.hash = h.toString();  // hashchange loads it
+}
+
+// a player picked: on a narrow screen their card is under the list, so it scrolls there
+let scrollTo = false;
+function pick(id) {
+  scrollTo = !matchMedia('(min-width: 1024px)').matches;
+  go({player: id});
+}
+
+async function api(path) {
+  const r = await fetch(path);
+  if (r.status === 401) { location.href = '/login'; throw new Error('logged out'); }
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
+  return r.json();
+}
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.remove('hidden');
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.add('hidden'), 6000);
+}
+
+function scopeText(d) {
+  const server = d.server ? (B.servers.find(x => x.name === d.server) || {title: d.server}).title : 'all servers';
+  const period = PERIODS.find(p => p[0] === d.period)[1];
+  if (d.period === 'last' && d.span) return `${period} on ${server}: ${when(d.span.from)} – ${clock(d.span.to)}`;
+  return `${period} on ${server}`;
+}
+
+function renderFilters() {
+  $('periods').innerHTML = PERIODS.map(([k, label]) =>
+    `<span class="chip ${S.period === k ? 'on' : ''}" onclick="go({period: '${k}'})">${label}</span>`).join('');
+  $('servers').innerHTML = [{name: '', title: 'All servers'}, ...(B ? B.servers : [])].map(x =>
+    `<span class="chip ${S.server === x.name ? 'on' : ''}" onclick="go({server: '${esc(x.name)}'})">${esc(x.title)}</span>`).join('');
+}
+
+function renderBoard() {
+  $('when').textContent = scopeText(B);
+  $('board').innerHTML = B.rows.length ? `<table class="w-full text-xs">
+      <thead class="text-[11px] text-slate-400 uppercase tracking-wide"><tr class="border-b border-slate-100">
+        <th class="text-left font-medium py-1.5 w-6"></th><th class="text-left font-medium">Player</th>
+        <th class="num font-medium">Time</th><th class="num font-medium">K</th><th class="num font-medium">D</th>
+        <th class="num font-medium">K/D</th><th class="num font-medium">HS</th><th class="num font-medium pr-1 hidden sm:table-cell">Matches</th></tr></thead>
+      <tbody>${B.rows.map((r, i) => `
+        <tr onclick="pick(${Number(r.id)})" class="border-b border-slate-50 last:border-0 cursor-pointer hover:bg-slate-50 ${S.player === r.id ? 'bg-sky-50 hover:bg-sky-50' : ''}">
+          <td class="py-2 text-slate-400">${i + 1}</td>
+          <td class="font-medium text-slate-800 truncate max-w-[10rem]">${esc(r.name)}</td>
+          <td class="num text-slate-500">${r.time ? played(r.time) : '–'}</td>
+          <td class="num">${r.kills}</td><td class="num">${r.deaths}</td>
+          <td class="num font-semibold text-slate-800">${kd(r.kd)}</td>
+          <td class="num text-slate-500">${pct(r.headshots, r.kills)}</td>
+          <td class="num text-slate-500 pr-1 hidden sm:table-cell">${r.matches}</td>
+        </tr>`).join('')}</tbody></table>`
+    : `<p class="text-xs text-slate-400 py-2">No kills or play time ${S.period === 'all' ? 'yet' : 'in this period'}${S.server ? ' on this server' : ''}.</p>`;
+}
+
+// someone on the other side of a kill: a person opens their page, a bot or the world doesn't
+function other(o) {
+  const name = o.kind === 'bot' ? `🤖 ${esc(o.name)}` : o.kind === 'self' ? `💀 ${esc(o.name)}` : esc(o.name);
+  const link = o.kind === 'person' ? `<a class="text-sky-700 hover:underline cursor-pointer" onclick="pick(${Number(o.id)})">${name}</a>` : name;
+  return `<div class="flex py-1"><span class="min-w-0 truncate">${link}</span><span class="ml-auto num text-slate-600">${o.count}×</span></div>`;
+}
+
+function list(label, rows, row, empty) {
+  return `<div><div class="label">${label}</div>${rows.length ? `<div class="divide-y divide-slate-50">${rows.map(row).join('')}</div>`
+    : `<p class="text-xs text-slate-400">${empty}</p>`}</div>`;
+}
+
+function kdTable(label, rows, withPing) {
+  if (!rows.length) return '';
+  return `<div><div class="label">${label}</div><table class="w-full text-xs">
+    <thead class="text-[11px] text-slate-400"><tr><th class="text-left font-normal"></th>${withPing ? '<th class="num font-normal">Time</th>' : ''}
+      <th class="num font-normal">K</th><th class="num font-normal">D</th><th class="num font-normal">K/D</th>${withPing ? '<th class="num font-normal">Ping</th>' : ''}</tr></thead>
+    <tbody>${rows.map(r => `<tr class="border-t border-slate-50"><td class="py-1 truncate max-w-[9rem]">${esc(r.name)}</td>
+      ${withPing ? `<td class="num text-slate-500">${r.time ? played(r.time) : '–'}</td>` : ''}
+      <td class="num">${r.kills}</td><td class="num">${r.deaths}</td><td class="num font-semibold">${kd(r.kd)}</td>
+      ${withPing ? `<td class="num text-slate-500">${r.ping != null ? r.ping + ' ms' : '–'}</td>` : ''}</tr>`).join('')}</tbody></table></div>`;
+}
+
+function renderPlayer(d) {
+  const ratio = x => kd(x.deaths ? x.kills / x.deaths : x.kills);
+  const tile = (v, label) => `<div class="bg-slate-50 rounded-lg p-3 text-center"><div class="text-2xl font-bold text-slate-800 tabular-nums">${v}</div>
+    <div class="text-[11px] uppercase tracking-wide text-slate-400">${label}</div></div>`;
+  const facts = [`${d.headshots} headshot${d.headshots === 1 ? '' : 's'} (${pct(d.headshots, d.kills)})`,
+    `${d.matches} match${d.matches === 1 ? '' : 'es'}`, d.suicides ? `${d.suicides} by own hand or a fall` : ''].filter(Boolean);
+  const hits = d.hits.map(h => `<div class="py-1"><div class="flex"><span>${esc(h.name)}</span><span class="ml-auto num text-slate-600">${pct(h.count, d.hits_total)}</span></div>
+    <div class="h-1.5 rounded bg-slate-100 mt-1 overflow-hidden"><div class="h-full rounded bg-sky-500" style="width: ${d.hits_total ? 100 * h.count / d.hits_total : 0}%"></div></div></div>`).join('');
+  const empty = !d.kills && !d.deaths && !d.time;
+  $('player').innerHTML = `<div class="card space-y-4">
+    <div class="flex items-start gap-2">
+      <div><h2 class="text-base font-semibold text-slate-800">${esc(d.name)}</h2><div class="text-[11px] text-slate-400">${esc(scopeText(d))}</div></div>
+      <button onclick="go({player: null})" class="btn ml-auto bg-slate-100 text-slate-500 hover:bg-slate-200" title="Close"><svg class="w-3.5 h-3.5"><use href="#i-x"/></svg></button>
+    </div>
+    ${empty ? '<p class="text-xs text-slate-400">Didn\'t play in this period.</p>' : `
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">${tile(d.kills, 'Kills')}${tile(d.deaths, 'Deaths')}${tile(kd(d.kd), 'K/D')}${tile(d.time ? played(d.time) : '–', 'Played')}</div>
+    <div class="text-[11px] text-slate-500">${facts.join(' · ')}</div>
+    <div class="grid sm:grid-cols-2 gap-x-6 gap-y-4">
+      <div><div class="label">Against</div>
+        <div class="flex py-1"><span>People</span><span class="ml-auto num">${d.vs_humans.kills} / ${d.vs_humans.deaths} · <b>${ratio(d.vs_humans)}</b></span></div>
+        <div class="flex py-1 border-t border-slate-50"><span>Bots</span><span class="ml-auto num">${d.vs_bots.kills} / ${d.vs_bots.deaths} · <b>${ratio(d.vs_bots)}</b></span></div></div>
+      ${list('Weapons', d.weapons, w => `<div class="flex py-1"><span>${esc(w.name)}</span><span class="ml-auto num text-slate-600">${w.count} kill${w.count === 1 ? '' : 's'}</span></div>`, 'No kills.')}
+      ${list('Nemesis: killed by', d.nemesis, other, 'Nobody killed them.')}
+      ${list('Favorite victims', d.victims, other, 'No kills.')}
+      <div><div class="label">Where they hit</div>${d.hits_total ? hits : '<p class="text-xs text-slate-400">No kills by a hit yet.</p>'}
+        ${d.no_body_part ? `<p class="text-[11px] text-slate-400 mt-1">${d.no_body_part} kill${d.no_body_part === 1 ? '' : 's'} without a body part: explosives, killstreaks.</p>` : ''}</div>
+      ${kdTable('Maps', d.maps)}
+      ${kdTable('Modes', d.modes)}
+      ${kdTable('Servers', d.servers, true)}
+    </div>`}
+  </div>`;
+}
+
+async function load() {
+  readHash();
+  renderFilters();
+  const q = `period=${S.period}&server=${encodeURIComponent(S.server)}`;
+  try {
+    B = await api(`/api/stats?${q}`);
+    renderFilters();
+    renderBoard();
+    if (S.player) {
+      $('player').innerHTML = `<div class="card flex items-center gap-2 text-xs text-slate-500"><svg class="w-4 h-4 animate-spin"><use href="#i-spin"/></svg>Loading…</div>`;
+      renderPlayer(await api(`/api/stats/people/${S.player}?${q}`));
+      if (scrollTo) $('player').scrollIntoView({behavior: 'smooth', block: 'start'});
+      scrollTo = false;
+    } else {
+      $('player').innerHTML = B.rows.length ? `<div class="card text-xs text-slate-400">Pick a player for who they kill, who kills them, their weapons, maps and servers.</div>` : '';
+    }
+  } catch (e) {
+    if (e.message !== 'logged out') toast(e.message);
+  }
+}
+
+window.addEventListener('hashchange', load);
+load();
+</script>
+</body>
+</html>

@@ -313,3 +313,23 @@ def test_stats_in_the_mini_app_and_players_on_the_page(web):
     assert {p["guid"] for p in yashar["players"]} == {YASHAR, "feed"}
     board = client.get("/tg/api/stats?period=all", headers=tma(AMIN)).json()
     assert board["rows"][0]["kills"] == 4
+
+
+def test_stats_page_on_the_fleet_site(web):
+    from test_stats import evening, take
+
+    client, orch, _, _ = web
+    take(orch.db, evening())
+    assert client.get("/stats").headers["location"] == "/login"
+    assert client.get("/api/stats").status_code == 401
+    assert client.get("/api/stats/people/1").status_code == 401
+    login(client)
+    assert "<title>MW2 Stats</title>" in client.get("/stats").text
+    board = client.get("/api/stats?period=all&server=nl").json()
+    assert [r["name"] for r in board["rows"]] == ["Yashar", "Amin", "Sara"]
+    pid = board["rows"][0]["id"]
+    me = client.get(f"/api/stats/people/{pid}?period=all").json()
+    assert (me["kills"], me["deaths"], me["name"]) == (3, 2, "Yashar")
+    assert client.get("/api/stats?period=year").status_code == 400
+    assert client.get("/api/stats/people/999").status_code == 404
+    assert 'href="/stats"' in client.get("/").text
