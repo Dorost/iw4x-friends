@@ -5,7 +5,7 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import Boolean, Integer, String, Text, UniqueConstraint, create_engine
+from sqlalchemy import Boolean, Integer, String, Text, UniqueConstraint, create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 HERE = Path(__file__).resolve().parent.parent
@@ -193,4 +193,13 @@ def migrate(db_path: Path) -> None:
 def connect(db_path: Path) -> sessionmaker[Session]:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     migrate(db_path)
-    return sessionmaker(create_engine(f"sqlite:///{db_path}"), expire_on_commit=False)
+    # the orchestrator (event loop) and the web UI's sync routes (threads) use it at once. WAL:
+    # reads don't wait for a write (a boot failed on "database is locked" without it), and a
+    # write waits up to 30 s for another instead of the default 5
+    engine = create_engine(f"sqlite:///{db_path}", connect_args={"timeout": 30})
+
+    @event.listens_for(engine, "connect")
+    def wal(dbapi_conn, _):
+        dbapi_conn.execute("PRAGMA journal_mode=WAL")
+
+    return sessionmaker(engine, expire_on_commit=False)
