@@ -2,7 +2,7 @@
 
 Play Modern Warfare 2 ([IW4x](https://iw4x.io)) with friends, on Windows, Mac or Linux:
 
-1. **[Install the game](#install-the-game)**: one script sets up MW2 + IW4x, the custom maps and bots, and a Desktop icon
+1. **[Install the game](#install-the-game)**: one script sets up MW2 + IW4x, MW2's DLC maps, the custom maps and bots, and a Desktop icon
 2. **[Join a game](#joining-a-game)**: on your LAN or over the internet
 3. **[Host a server](#hosting-a-server)** (optional): a dedicated server with a web control page, on a Mac or Windows PC at home, or on a Linux VPS for internet play
 
@@ -63,6 +63,8 @@ It installs into `~/Games/iw4x` (change it with `--dir`). Only need the custom m
 ### Updates
 
 The **IW4x** icon updates IW4x before every start, so you play the same version as the servers. The first start after a while can take a minute or two. Set up before November 2026? Your icon doesn't update yet: run the setup once more, it skips what's done and renews the icon.
+
+The maps don't update by themselves. When the maps + bots pack changes, run the setup once more (or only `install-maps`, see above): it downloads the new pack (~2 GB) and skips everything else. Since November 2026 the pack has MW2's 10 DLC maps (Stimulus: Bailout, Salvage, Storm, Overgrown, Crash; Resurgence: Carnival, Fuel, Strike, Trailer Park, Vacant). Without them you can't join a server while it plays one of those.
 
 ## Joining a game
 

@@ -98,11 +98,14 @@ MAP_NAMES = {
     "mp_storm_spring": "Chemical Plant", "mp_dust2": "Dust II", "mp_bakaara": "Bakaara",
     "mp_bo2carrier": "Carrier (BO2)", "mp_bo2plaza": "Plaza (BO2)", "mp_creek": "Creek",
     "mp_summit": "Summit",
+    # MW2's DLC: Stimulus, then Resurgence
+    "mp_complex": "Bailout", "mp_compact": "Salvage", "mp_storm": "Storm",
+    "mp_overgrown": "Overgrown", "mp_crash": "Crash", "mp_abandon": "Carnival",
+    "mp_fuel2": "Fuel", "mp_strike": "Strike", "mp_trailerpark": "Trailer Park",
+    "mp_vacant": "Vacant",
 }
-# IW4x DLC maps that need textures from MW2's paid DLC packs (iw_dlc1_00.iwd / iw_dlc2_00.iwd),
-# which IW4x doesn't ship: clients without them get "Couldn't load image" and freeze.
 # mp_backlot: the dedicated server fails to load it ("Invalid trigger index") and drops to the lobby
-BROKEN_MAPS = {"mp_crash_tropical", "mp_hardhat", "mp_backlot"}
+BROKEN_MAPS = {"mp_backlot"}
 BOT_SKILLS = {
     "0": "Mixed", "1": "1 (easiest)", "2": "2", "3": "3", "4": "4", "5": "5", "6": "6",
     "7": "7 (hardest)", "9": "Completely random",
@@ -1285,10 +1288,13 @@ def tg_play(p: Play, request: Request):
 
 
 def iwi_image(raw: bytes) -> Image.Image:
-    """Decodes an IW4 .iwi image (version 8 or 9): uncompressed BGR, DXT1 or DXT5."""
+    """Decodes an IW4 .iwi image (version 8 or 9): uncompressed BGRA or BGR, DXT1 or DXT5."""
     if raw[:3] != b"IWi" or len(raw) < 32:
         raise ValueError("not an iwi image")
     fmt, width, height = raw[8], *struct.unpack("<HH", raw[10:14])
+    if fmt == 1:  # most of MW2's DLC maps' loading screens
+        size = width * height * 4
+        return Image.frombytes("RGBA", (width, height), raw[-size:], "raw", "BGRA").convert("RGB")
     if fmt == 2:
         size = width * height * 3
         return Image.frombytes("RGB", (width, height), raw[-size:], "raw", "BGR")
