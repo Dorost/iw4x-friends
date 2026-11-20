@@ -16,7 +16,8 @@ Run it straight from GitHub, in PowerShell:
   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/Dorost/iw4x-friends/main/scripts/windows/install-maps.ps1)))
 
 Options:
-  -InstallDir <path>  game folder (default: C:\Games\Call of Duty Modern Warfare 2)
+  -InstallDir <path>  game folder (default: the first with iw4x.exe of the folder this runs in,
+                      the IW4x Desktop icon's and C:\Games\Call of Duty Modern Warfare 2)
   -MapsUrl <link>     download link of the pack (a Google Drive share link works); also
                       MW_MAPS_URL. When needed and not given, it asks for the setup
                       password (decrypts the links below) or the link itself
@@ -25,7 +26,7 @@ Options:
   -Force              install again even if already installed
 #>
 param(
-    [string]$InstallDir = "C:\Games\Call of Duty Modern Warfare 2",
+    [string]$InstallDir = "",
     [string]$Zip = "",
     [string]$MapsUrl = $env:MW_MAPS_URL,
     [switch]$KeepZip,
@@ -35,7 +36,6 @@ param(
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 $ZipName = "mw2-iw4x-maps-bots.zip"
-$Mark = Join-Path $InstallDir ".iw4x-maps-installed-v3"  # v3: the pack gained MW2's DLC maps, so older installs update
 # download links, encrypted with the setup password (written by `task links`)
 $LinksEnc = "U2FsdGVkX18BSFqqHMCQ++5w+wJL5cdh3asQpzzejdBx2HWUrjeVW3q15pMGc31tolezaREbLw7dPLBzNarkDGagqk5k81ChbyM7uVo97si+Qc/A/GDQ+Y1Gkje41pLweL2l2zWtdoyWSKS33+xtZ92FbDNb5kYs4B9rHU3DfkJFIP0naKFFciIY7ikspmyrxsHNiTtW8zGg5eFIJbcxXe/vVJiCjUDQyPGbkry3TdA="
 
@@ -114,7 +114,22 @@ $Refused = ("the download was refused. With Google Drive that's usually 'Quota e
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 Write-Host "`n==> Maps + bots pack (~2 GB)" -ForegroundColor Cyan
-if (-not (Test-Path (Join-Path $InstallDir "iw4x.exe"))) { Die "no MW2 + IW4x install found in: $InstallDir" }
+# the game folder: -InstallDir, else the folder this runs in, else the one the IW4x Desktop icon
+# starts in (setup.ps1 makes it), else setup.ps1's default
+if ($InstallDir) {
+    if (-not (Test-Path -LiteralPath ([IO.Path]::Combine($InstallDir, "iw4x.exe")))) { Die "no MW2 + IW4x install found in: $InstallDir" }
+} else {
+    $looked = @((Get-Location).Path)
+    $desktop = [Environment]::GetFolderPath("Desktop")
+    $icon = if ($desktop) { Join-Path $desktop "IW4x.lnk" } else { "" }
+    if ($icon -and (Test-Path $icon)) { try { $looked += (New-Object -ComObject WScript.Shell).CreateShortcut($icon).WorkingDirectory } catch {} }
+    $looked += "C:\Games\Call of Duty Modern Warfare 2"
+    $looked = @($looked | Where-Object { $_ } | Select-Object -Unique)
+    $InstallDir = $looked | Where-Object { Test-Path -LiteralPath ([IO.Path]::Combine($_, "iw4x.exe")) } | Select-Object -First 1  # Combine: no error for a drive that is gone
+    if (-not $InstallDir) { Die "no MW2 + IW4x install found in: $($looked -join ', '). Add -InstallDir `"<your game folder>`" (the folder with iw4x.exe)" }
+    Ok "game folder: $InstallDir"
+}
+$Mark = Join-Path $InstallDir ".iw4x-maps-installed-v3"  # v3: the pack gained MW2's DLC maps, so older installs update
 
 # already installed: done, without contacting Google Drive (use -Force to reinstall)
 if (-not $Force -and (Test-Path $Mark)) {
