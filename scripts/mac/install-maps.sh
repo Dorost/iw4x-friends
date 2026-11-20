@@ -1,6 +1,10 @@
 #!/bin/bash
-# Install the custom maps + bots pack (usermaps/, userraw/ and main/iw_23.iwd) into an MW2 game folder.
-# iw_23.iwd holds textures some DLC maps (e.g. Shipment) need but IW4x doesn't ship.
+# Install the maps + bots pack into an MW2 game folder: the custom maps (usermaps/), the bots
+# (userraw/), MW2's own DLC maps (zone/dlc/, or zone/iw4x/x86/dlc/ where recent IW4x keeps
+# map zones, with their textures main/iw_dlc1_00.iwd and iw_dlc2_00.iwd, and from MW2's Steam
+# update zone/english/patch_mp.ff with the maps' scripts and names: the disc's 2009 one can't
+# start 4 of them) and main/iw_23.iwd, textures some IW4x maps (e.g. Shipment) need but IW4x
+# doesn't ship.
 # macOS (CrossOver bottle) and Linux. Safe to re-run: skips if already installed,
 # and an interrupted download resumes.
 # Every run also deletes the usermaps/ folders of maps IW4x ships itself (zone/**/<map>.ff).
@@ -24,7 +28,7 @@
 set -euo pipefail
 
 ZIP_NAME="mw2-iw4x-maps-bots.zip"
-MARK=".iw4x-maps-installed-v2"  # v2: the pack gained main/iw_23.iwd, so older installs update
+MARK=".iw4x-maps-installed-v3"  # v3: the pack gained MW2's DLC maps, so older installs update
 # download links, encrypted with the setup password (written by `task links`)
 LINKS_ENC="U2FsdGVkX18BSFqqHMCQ++5w+wJL5cdh3asQpzzejdBx2HWUrjeVW3q15pMGc31tolezaREbLw7dPLBzNarkDGagqk5k81ChbyM7uVo97si+Qc/A/GDQ+Y1Gkje41pLweL2l2zWtdoyWSKS33+xtZ92FbDNb5kYs4B9rHU3DfkJFIP0naKFFciIY7ikspmyrxsHNiTtW8zGg5eFIJbcxXe/vVJiCjUDQyPGbkry3TdA="
 
@@ -91,7 +95,7 @@ if [[ -z "$DIR" ]]; then
 fi
 [[ -f "$DIR/iw4x.exe" ]] || die "no MW2 + IW4x install found in: $DIR"
 
-step "Custom maps + bots pack (~1 GB)"
+step "Maps + bots pack (~2 GB)"
 
 # already installed: done, without contacting Google Drive (use --force to reinstall)
 if (( ! FORCE )) && [[ -f "$DIR/$MARK" ]]; then
@@ -103,8 +107,8 @@ fi
 if [[ -z "$ZIP" ]]; then
   # reuse a complete copy if one is lying around (a partial download has no zip index yet)
   for candidate in "$HOME/Downloads/$ZIP_NAME" "$PWD/$ZIP_NAME"; do
-    # an older pack without main/iw_23.iwd doesn't count: download the current one
-    if [[ -f "$candidate" ]] && unzip -l "$candidate" 'main/iw_23.iwd' >/dev/null 2>&1; then
+    # an older pack without the DLC maps doesn't count: download the current one
+    if [[ -f "$candidate" ]] && unzip -l "$candidate" 'zone/english/patch_mp.ff' >/dev/null 2>&1; then
       ZIP="$candidate"; [[ "$candidate" == "$HOME/Downloads/$ZIP_NAME" ]] || KEEP_ZIP=1
       break
     fi
@@ -152,16 +156,28 @@ tmp="$DIR/.maps-setup-$$"
 trap 'rm -rf "$tmp"' EXIT
 mkdir "$tmp"
 echo "    Extracting..."
-unzip -q -o "$ZIP" 'usermaps/*' 'userraw/*' 'main/*' -d "$tmp" || [[ $? -eq 11 ]]  # 11: an older pack without main/
-for part in usermaps userraw main; do
+unzip -q -o "$ZIP" 'usermaps/*' 'userraw/*' 'main/*' 'zone/*' -d "$tmp" || [[ $? -eq 11 ]]  # 11: an older pack without main/ or zone/
+# Recent IW4x keeps every map's zone in zone/iw4x/x86/dlc. On start it copies the ones it finds
+# in zone/dlc there and keeps the originals, so the DLC maps would take their 1.4 GB twice: put
+# them there directly when the game has that folder (IW4x's launcher leaves files it doesn't
+# know alone), and drop the copies an earlier install left in zone/dlc
+if [[ -d "$tmp/zone/dlc" && -d "$DIR/zone/iw4x/x86/dlc" ]]; then
+  mkdir -p "$tmp/zone/iw4x/x86"
+  mv "$tmp/zone/dlc" "$tmp/zone/iw4x/x86/dlc"
+  for f in "$tmp/zone/iw4x/x86/dlc"/*; do rm -f "$DIR/zone/dlc/${f##*/}"; done
+  rmdir "$DIR/zone/dlc" 2>/dev/null || true  # only if nothing else is in it
+fi
+for part in usermaps userraw main zone; do
   if [[ ! -d "$tmp/$part" ]]; then
-    [[ "$part" == main ]] && continue
+    [[ "$part" == main || "$part" == zone ]] && continue
     die "pack doesn't contain $part/"
   fi
   mkdir -p "$DIR/$part"
   cp -R "$tmp/$part/." "$DIR/$part/"
 done
 remove_duplicate_maps  # an older pack (e.g. one left in ~/Downloads) still has them
+rm -f "$DIR"/.iw4x-maps-installed*  # an older version's mark
 size_of "$ZIP" > "$DIR/$MARK"
-ok "installed $(ls "$DIR/usermaps" | wc -l | tr -d ' ') maps and the bots mod into $DIR"
+dlc=$(unzip -Z1 "$ZIP" 'zone/dlc/*_load.ff' 2>/dev/null | wc -l | tr -d ' ')
+ok "installed $(ls "$DIR/usermaps" | wc -l | tr -d ' ') custom maps, $dlc DLC maps and the bots mod into $DIR"
 (( KEEP_ZIP )) || { rm -f "$ZIP"; ok "removed $ZIP_NAME"; }

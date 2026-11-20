@@ -242,16 +242,18 @@ function card(base, s, i) {
 
 function openPicker(i) {
   const base = SERVERS[i], s = states[base];
-  const tiles = maps => maps.map(m => `<button class="tile" data-id="${esc(m.id)}" data-stock="${m.stock ? 1 : ""}" onclick="pickMap(this)">
+  const tiles = maps => maps.map(m => `<button class="tile" data-id="${esc(m.id)}" data-sd="${m.stock || m.dlc ? 1 : ""}" onclick="pickMap(this)">
       <div class="img" style="background-image: url('${thumb(base, m.id)}')"></div>
       ${m.id === s.map ? '<span class="now">Now</span>' : ""}<span class="name">${esc(m.name)}</span></button>`).join("");
-  const stock = s.maps.filter(m => m.stock), more = s.maps.filter(m => !m.stock);
+  const stock = s.maps.filter(m => m.stock), dlc = s.maps.filter(m => m.dlc),
+    more = s.maps.filter(m => !m.stock && !m.dlc);
   openView({kind: "map", base, mode: s.modes.some(m => m.id === s.mode) ? s.mode : "war", map: null}, `
     <header><h1>${esc(s.name)}</h1><div class="hint">${s.status === "match" ? `Now: ${esc(s.map_name)} · ${esc(s.mode_name)}` : "No match running"}</div></header>
     <div class="label">Mode</div>
     <div class="chips">${s.modes.map(m => `<button class="chip" data-mode="${esc(m.id)}" onclick="pickMode(this)">${esc(m.name)}</button>`).join("")}</div>
     <div class="group"><div class="label">Original maps</div><div class="grid">${tiles(stock)}</div></div>
-    <div class="group more"${more.length ? "" : " hidden"}><div class="label">More maps</div><div class="grid">${tiles(more)}</div></div>
+    <div class="group dlc"${dlc.length ? "" : " hidden"}><div class="label">DLC maps</div><div class="grid">${tiles(dlc)}</div></div>
+    <div class="group more"${more.length ? "" : " hidden"}><div class="label">Community maps</div><div class="grid">${tiles(more)}</div></div>
     <div class="actions">
       <button class="secondary" id="next" onclick="play(false)">Next match</button>
       <button class="primary" id="now" onclick="play(true)">Start now</button>
@@ -262,12 +264,12 @@ function openPicker(i) {
 function pickMode(el) { if (!busy) { view.mode = el.dataset.mode; updatePicker(); } }
 function pickMap(el) { if (!busy) { view.map = el.dataset.id; updatePicker(); tick(); } }
 
-// marks the picks; Search & Destroy has only the original maps
+// marks the picks; Search & Destroy has only the original and DLC maps
 function updatePicker() {
   const sd = view.mode === "sd";
   app.querySelectorAll(".chip").forEach(c => c.classList.toggle("on", c.dataset.mode === view.mode));
   app.querySelectorAll(".tile").forEach(t => {
-    t.hidden = sd && !t.dataset.stock;
+    t.hidden = sd && !t.dataset.sd;
     if (t.hidden && t.dataset.id === view.map) view.map = null;
     t.classList.toggle("on", t.dataset.id === view.map);
   });

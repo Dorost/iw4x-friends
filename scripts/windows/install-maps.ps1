@@ -1,6 +1,10 @@
 <#
-Install the custom maps + bots pack (usermaps\, userraw\ and main\iw_23.iwd) into an MW2 game folder (Windows).
-iw_23.iwd holds textures some DLC maps (e.g. Shipment) need but IW4x doesn't ship.
+Install the maps + bots pack into an MW2 game folder (Windows): the custom maps (usermaps\), the
+bots (userraw\), MW2's own DLC maps (zone\dlc\, or zone\iw4x\x86\dlc\ where recent IW4x keeps
+map zones, with their textures main\iw_dlc1_00.iwd and iw_dlc2_00.iwd, and from MW2's Steam
+update zone\english\patch_mp.ff with the maps' scripts and names: the disc's 2009 one can't
+start 4 of them) and main\iw_23.iwd, textures some IW4x maps (e.g. Shipment) need but IW4x
+doesn't ship.
 Safe to re-run: skips if already installed, and an interrupted download resumes.
 Every run also deletes the usermaps\ folders of maps IW4x ships itself (zone\**\<map>.ff).
 Older packs had 7 of those (Backlot, Broadcast, District, Ambush, Countdown, Seatown,
@@ -31,7 +35,7 @@ param(
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 $ZipName = "mw2-iw4x-maps-bots.zip"
-$Mark = Join-Path $InstallDir ".iw4x-maps-installed-v2"  # v2: the pack gained main\iw_23.iwd, so older installs update
+$Mark = Join-Path $InstallDir ".iw4x-maps-installed-v3"  # v3: the pack gained MW2's DLC maps, so older installs update
 # download links, encrypted with the setup password (written by `task links`)
 $LinksEnc = "U2FsdGVkX18BSFqqHMCQ++5w+wJL5cdh3asQpzzejdBx2HWUrjeVW3q15pMGc31tolezaREbLw7dPLBzNarkDGagqk5k81ChbyM7uVo97si+Qc/A/GDQ+Y1Gkje41pLweL2l2zWtdoyWSKS33+xtZ92FbDNb5kYs4B9rHU3DfkJFIP0naKFFciIY7ikspmyrxsHNiTtW8zGg5eFIJbcxXe/vVJiCjUDQyPGbkry3TdA="
 
@@ -109,7 +113,7 @@ $Refused = ("the download was refused. With Google Drive that's usually 'Quota e
             "      the link in a browser, save the file to your Downloads folder and run this again.")
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-Write-Host "`n==> Custom maps + bots pack (~1 GB)" -ForegroundColor Cyan
+Write-Host "`n==> Maps + bots pack (~2 GB)" -ForegroundColor Cyan
 if (-not (Test-Path (Join-Path $InstallDir "iw4x.exe"))) { Die "no MW2 + IW4x install found in: $InstallDir" }
 
 # already installed: done, without contacting Google Drive (use -Force to reinstall)
@@ -123,8 +127,8 @@ $download = Join-Path $HOME "Downloads\$ZipName"
 if (-not $Zip) {
     # reuse a complete copy if one is lying around (a partial download has no zip index yet)
     foreach ($candidate in @($download, (Join-Path $PWD $ZipName))) {
-        # an older pack without main/iw_23.iwd doesn't count: download the current one
-        $complete = (Test-Path $candidate) -and $(try { $a = [IO.Compression.ZipFile]::OpenRead($candidate); $has = [bool]$a.GetEntry("main/iw_23.iwd"); $a.Dispose(); $has } catch { $false })
+        # an older pack without the DLC maps doesn't count: download the current one
+        $complete = (Test-Path $candidate) -and $(try { $a = [IO.Compression.ZipFile]::OpenRead($candidate); $has = [bool]$a.GetEntry("zone/english/patch_mp.ff"); $a.Dispose(); $has } catch { $false })
         if ($complete) { $Zip = $candidate; if ($candidate -ne $download) { $KeepZip = $true }; break }
     }
 } else { $KeepZip = $true }
@@ -153,17 +157,31 @@ if ($Zip) {
 }
 
 Write-Host "    Extracting..."
+# Recent IW4x keeps every map's zone in zone\iw4x\x86\dlc. On start it copies the ones it finds
+# in zone\dlc there and keeps the originals, so the DLC maps would take their 1.4 GB twice: put
+# them there directly when the game has that folder (IW4x's launcher leaves files it doesn't
+# know alone), and drop the copies an earlier install left in zone\dlc
+$oldDlc = Join-Path $InstallDir "zone\dlc"
+$intoIw4x = Test-Path (Join-Path $InstallDir "zone\iw4x\x86\dlc")
 $archive = [IO.Compression.ZipFile]::OpenRead($Zip)
 try {
+    $dlc = @($archive.Entries | Where-Object { $_.FullName -like "zone/dlc/*_load.ff" }).Count
     foreach ($entry in $archive.Entries) {
-        if ($entry.FullName -notmatch '^(usermaps|userraw|main)/') { continue }
-        $dest = Join-Path $InstallDir ($entry.FullName -replace "/", "\")
+        if ($entry.FullName -notmatch '^(usermaps|userraw|main|zone)/') { continue }
+        $name = $entry.FullName
+        if ($intoIw4x -and $name.StartsWith("zone/dlc/")) {
+            if ($entry.Name) { Remove-Item (Join-Path $oldDlc $entry.Name) -Force -ErrorAction SilentlyContinue }
+            $name = "zone/iw4x/x86/dlc/" + $name.Substring("zone/dlc/".Length)
+        }
+        $dest = Join-Path $InstallDir ($name -replace "/", "\")
         if ($entry.FullName.EndsWith("/")) { New-Item -ItemType Directory -Force -Path $dest | Out-Null; continue }
         New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
         [IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $dest, $true)
     }
 } finally { $archive.Dispose() }
+if ($intoIw4x -and (Test-Path $oldDlc) -and -not (Get-ChildItem $oldDlc -Force)) { Remove-Item $oldDlc }  # only if nothing else is in it
 Remove-DuplicateMaps  # an older pack (e.g. one left in Downloads) still has them
+Remove-Item (Join-Path $InstallDir ".iw4x-maps-installed*") -Force -ErrorAction SilentlyContinue  # an older version's mark
 Set-Content -Path $Mark -Value "$((Get-Item $Zip).Length)" -Encoding ascii
-Ok "installed $((Get-ChildItem (Join-Path $InstallDir 'usermaps') -Directory).Count) maps and the bots mod into $InstallDir"
+Ok "installed $((Get-ChildItem (Join-Path $InstallDir 'usermaps') -Directory).Count) custom maps, $dlc DLC maps and the bots mod into $InstallDir"
 if (-not $KeepZip) { Remove-Item $Zip; Ok "removed $ZipName" }

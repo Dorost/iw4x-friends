@@ -2,7 +2,7 @@
 
 Play Modern Warfare 2 ([IW4x](https://iw4x.io)) with friends, on Windows, Mac or Linux:
 
-1. **[Install the game](#install-the-game)**: one script sets up MW2 + IW4x, the custom maps and bots, and a Desktop icon
+1. **[Install the game](#install-the-game)**: one script sets up MW2 + IW4x, MW2's DLC maps, the custom maps and bots, and a Desktop icon
 2. **[Join a game](#joining-a-game)**: on your LAN or over the internet
 3. **[Host a server](#hosting-a-server)** (optional): a dedicated server with a web control page, on a Mac or Windows PC at home, or on a Linux VPS for internet play
 
@@ -64,6 +64,8 @@ It installs into `~/Games/iw4x` (change it with `--dir`). Only need the custom m
 
 The **IW4x** icon updates IW4x before every start, so you play the same version as the servers. The first start after a while can take a minute or two. Set up before November 2026? Your icon doesn't update yet: run the setup once more, it skips what's done and renews the icon.
 
+The maps don't update by themselves. When the maps + bots pack changes, run the setup once more (or only `install-maps`, see above): it downloads the new pack (~2 GB) and skips everything else. Since November 2026 the pack has MW2's 10 DLC maps (Stimulus: Bailout, Salvage, Storm, Overgrown, Crash; Resurgence: Carnival, Fuel, Strike, Trailer Park, Vacant). Without them you can't join a server while it plays one of those.
+
 ## Joining a game
 
 In the game, open **Server Browser → LAN** for a server on your network. For any server (LAN or internet), press `~` and type:
@@ -88,7 +90,7 @@ Runs on any Mac or Windows PC with the game installed (see above). No GPU needed
 2. Double-click **Start Server** (`Start Server.command` on Mac, `Start Server.cmd` on Windows). On a Mac the first time: right-click → Open
 3. The control page opens in your browser: press **Start**
 
-Matches run back to back: when one ends, the scoreboard shows what is next and the next map and mode load right away, no lobby in between. Players see "Next up" at the start of each match, in its last minute and whenever it changes. In the control page, picking a map and mode sets the next match, **Start game** switches to it now and **End match** ends the running one early. In game, players can pick the next map and mode with `!map`, `!gt` or the `!menu`. Search & Destroy offers only the 16 original maps and plays to 12 round wins unless you set another Win limit. Nobody gets disconnected in between. You can also add bots (named from `services/ui/bots.txt`, and what they say in chat is in `services/ui/botchat.txt`), kick players and set a game password. To protect the control page itself, set `UI_PASSWORD=yourpassword` in the `.env` file and start it again: the page then asks for that password.
+Matches run back to back: when one ends, the scoreboard shows what is next and the next map and mode load right away, no lobby in between. Players see "Next up" at the start of each match, in its last minute and whenever it changes. In the control page, picking a map and mode sets the next match, **Start game** switches to it now and **End match** ends the running one early. In game, players can pick the next map and mode with `!map`, `!gt` or the `!menu`. Search & Destroy offers only the 16 original maps and the 10 DLC maps, and plays to 12 round wins unless you set another Win limit. Nobody gets disconnected in between. You can also add bots (named from `services/ui/bots.txt`, and what they say in chat is in `services/ui/botchat.txt`), kick players and set a game password. To protect the control page itself, set `UI_PASSWORD=yourpassword` in the `.env` file and start it again: the page then asks for that password.
 
 The server needs the custom maps too: they come with the setup above. If the server runs from its own CrossOver bottle (for example `mw-server`), add them there:
 

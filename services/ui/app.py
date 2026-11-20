@@ -98,11 +98,14 @@ MAP_NAMES = {
     "mp_storm_spring": "Chemical Plant", "mp_dust2": "Dust II", "mp_bakaara": "Bakaara",
     "mp_bo2carrier": "Carrier (BO2)", "mp_bo2plaza": "Plaza (BO2)", "mp_creek": "Creek",
     "mp_summit": "Summit",
+    # MW2's DLC: Stimulus, then Resurgence
+    "mp_complex": "Bailout", "mp_compact": "Salvage", "mp_storm": "Storm",
+    "mp_overgrown": "Overgrown", "mp_crash": "Crash", "mp_abandon": "Carnival",
+    "mp_fuel2": "Fuel", "mp_strike": "Strike", "mp_trailerpark": "Trailer Park",
+    "mp_vacant": "Vacant",
 }
-# IW4x DLC maps that need textures from MW2's paid DLC packs (iw_dlc1_00.iwd / iw_dlc2_00.iwd),
-# which IW4x doesn't ship: clients without them get "Couldn't load image" and freeze.
 # mp_backlot: the dedicated server fails to load it ("Invalid trigger index") and drops to the lobby
-BROKEN_MAPS = {"mp_crash_tropical", "mp_hardhat", "mp_backlot"}
+BROKEN_MAPS = {"mp_backlot"}
 BOT_SKILLS = {
     "0": "Mixed", "1": "1 (easiest)", "2": "2", "3": "3", "4": "4", "5": "5", "6": "6",
     "7": "7 (hardest)", "9": "Completely random",
@@ -296,6 +299,9 @@ SD_WINLIMIT = "12"
 STOCK_MAPS = ["mp_afghan", "mp_boneyard", "mp_brecourt", "mp_checkpoint", "mp_derail", "mp_estate",
               "mp_favela", "mp_highrise", "mp_invasion", "mp_nightshift", "mp_quarry", "mp_rundown",
               "mp_rust", "mp_subbase", "mp_terminal", "mp_underpass"]
+# MW2's own DLC maps (Stimulus, then Resurgence): their own group in the mini app
+DLC_MAPS = ["mp_complex", "mp_compact", "mp_storm", "mp_overgrown", "mp_crash",
+            "mp_abandon", "mp_fuel2", "mp_strike", "mp_trailerpark", "mp_vacant"]
 
 app = FastAPI()
 
@@ -361,7 +367,8 @@ def installed_maps() -> list[dict]:
         d.name for d in (GAME_DIR / "usermaps").glob("mp_*") if (d / f"{d.name}.ff").exists()
     }
     maps = [
-        {"id": n, "name": MAP_NAMES.get(n, n), "custom": n in custom and n not in names, "stock": n in STOCK_MAPS}
+        {"id": n, "name": MAP_NAMES.get(n, n), "custom": n in custom and n not in names, "stock": n in STOCK_MAPS,
+         "dlc": n in DLC_MAPS}
         for n in (names | custom) - BROKEN_MAPS
     ]
     return sorted(maps, key=lambda m: m["name"])
@@ -1159,7 +1166,7 @@ def tg_state(request: Request):
                          key=lambda p: p["name"].lower()),
         "bots": sum(p["bot"] for p in players),
         "lobby_count": live["lobby_count"] if status == "lobby" else 0,
-        "maps": [{k: m[k] for k in ("id", "name", "stock")} for m in (st["maps"] if st else [])],
+        "maps": [{k: m[k] for k in ("id", "name", "stock", "dlc")} for m in (st["maps"] if st else [])],
         "modes": [{"id": k, "name": v} for k, v in APP_MODES.items()],
         "bot_settings": tg_bot_settings((st or {}).get("config") or config_view()),
         "bot_skills": [{"id": k, "name": BOT_SKILL_NAMES.get(k, k)} for k in BOT_SKILLS],
@@ -1265,7 +1272,7 @@ def tg_play(p: Play, request: Request):
         raise HTTPException(400, "unknown mode")
     gametype = "dm" if p.mode in GUN_GAMES else p.mode
     maps = {m["id"]: m for m in installed_maps()}
-    if p.map not in maps or (gametype == "sd" and not maps[p.map]["stock"]):
+    if p.map not in maps or (gametype == "sd" and not (maps[p.map]["stock"] or maps[p.map]["dlc"])):
         raise HTTPException(400, "that map isn't available in this mode")
     v = read_cfg()
     if p.mode in GUN_GAMES:
@@ -1285,10 +1292,13 @@ def tg_play(p: Play, request: Request):
 
 
 def iwi_image(raw: bytes) -> Image.Image:
-    """Decodes an IW4 .iwi image (version 8 or 9): uncompressed BGR, DXT1 or DXT5."""
+    """Decodes an IW4 .iwi image (version 8 or 9): uncompressed BGRA or BGR, DXT1 or DXT5."""
     if raw[:3] != b"IWi" or len(raw) < 32:
         raise ValueError("not an iwi image")
     fmt, width, height = raw[8], *struct.unpack("<HH", raw[10:14])
+    if fmt == 1:  # most of MW2's DLC maps' loading screens
+        size = width * height * 4
+        return Image.frombytes("RGBA", (width, height), raw[-size:], "raw", "BGRA").convert("RGB")
     if fmt == 2:
         size = width * height * 3
         return Image.frombytes("RGB", (width, height), raw[-size:], "raw", "BGR")

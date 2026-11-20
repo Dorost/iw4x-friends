@@ -259,7 +259,7 @@ step "Custom maps + bots"
 # the pack over parallel connections too when its server allows it; install-maps.sh downloads
 # it the plain way otherwise, or when this fails
 MAPS_ZIP=""
-if [[ -n "$MAPS_LINK" && ! -f "$MAPS_LINK" && ! -f "$GAME/.iw4x-maps-installed-v2" ]]; then  # install-maps.sh's mark
+if [[ -n "$MAPS_LINK" && ! -f "$MAPS_LINK" && ! -f "$GAME/.iw4x-maps-installed-v3" ]]; then  # install-maps.sh's mark
   url="$MAPS_LINK"
   if [[ "$MAPS_LINK" =~ /d/([A-Za-z0-9_-]{20,}) ]] || [[ "$MAPS_LINK" =~ [?\&]id=([A-Za-z0-9_-]{20,}) ]]; then
     url="https://drive.usercontent.google.com/download?id=${BASH_REMATCH[1]}&export=download&confirm=t"
