@@ -150,10 +150,21 @@ if ($Zip) {
     if (-not $remoteSize) { Die $Refused }
     $Zip = $download
     Remove-HtmlPartial $Zip
+    # a complete zip here is an older pack (the current one would have been used above), and
+    # resuming it would glue the end of the new pack onto it; a partial one has no zip index yet
+    if ((Test-Path $Zip) -and $(try { [IO.Compression.ZipFile]::OpenRead($Zip).Dispose(); $true } catch { $false })) { Remove-Item $Zip }
     Write-Host "    Downloading to $Zip (if it stops, run this again and it continues)"
     New-Item -ItemType Directory -Force -Path (Split-Path $Zip) | Out-Null
     & curl.exe -fL -C - --retry 5 --retry-delay 5 --progress-bar -o $Zip $url
     if ("$((Get-Item $Zip).Length)" -ne $remoteSize) { Die "download incomplete, run this again to resume" }
+}
+
+# only the pack this script is for: an older one (from a link that still serves it, or an old
+# file) would get this version's mark and never be replaced
+$current = $(try { $a = [IO.Compression.ZipFile]::OpenRead($Zip); $has = [bool]$a.GetEntry("zone/english/patch_mp.ff"); $a.Dispose(); $has } catch { $false })
+if (-not $current) {
+    if (-not $KeepZip) { Remove-Item $Zip -ErrorAction SilentlyContinue }
+    Die "$Zip is an older maps pack, without MW2's DLC maps. If it came from the download link, the new pack isn't there yet: try again later."
 }
 
 Write-Host "    Extracting..."

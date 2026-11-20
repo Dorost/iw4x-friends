@@ -146,9 +146,20 @@ else
   ZIP="$HOME/Downloads/$ZIP_NAME"
   # a partial file that is really an HTML error page can't be resumed
   [[ -f "$ZIP" ]] && [[ "$(head -c 1 "$ZIP")" == "<" ]] && rm -f "$ZIP"
+  # a complete zip here is an older pack (the current one would have been used above), and
+  # resuming it would glue the end of the new pack onto it; a partial one has no zip index yet
+  [[ -f "$ZIP" ]] && unzip -l "$ZIP" >/dev/null 2>&1 && rm -f "$ZIP"
   echo "    Downloading to $ZIP (if it stops, run this again and it continues)"
   curl -fL -C - --retry 5 --retry-delay 5 --progress-bar "$URL" -o "$ZIP"
   [[ "$(size_of "$ZIP")" == "$remote_size" ]] || die "download incomplete, run this again to resume"
+fi
+
+# only the pack this script is for: an older one (from a link that still serves it, or an old
+# file) would get this version's mark and never be replaced
+if ! unzip -l "$ZIP" 'zone/english/patch_mp.ff' >/dev/null 2>&1; then
+  (( KEEP_ZIP )) || rm -f "$ZIP"
+  die "$ZIP is an older maps pack, without MW2's DLC maps. If it came from the
+      download link, the new pack isn't there yet: try again later."
 fi
 
 # extract next to the game (same disk), then merge into the game folder
