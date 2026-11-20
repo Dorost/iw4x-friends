@@ -295,13 +295,24 @@ LOBBY_PLAYLIST = "playlists_lobby.info"
 WATCHDOG_SECONDS = 90
 # S&D round wins needed to win when the Game panel's Win limit is empty (the game's own default is 4)
 SD_WINLIMIT = "12"
-# the 16 original MW2 maps: the only ones the Game panel offers for S&D
+# the 16 original MW2 maps
 STOCK_MAPS = ["mp_afghan", "mp_boneyard", "mp_brecourt", "mp_checkpoint", "mp_derail", "mp_estate",
               "mp_favela", "mp_highrise", "mp_invasion", "mp_nightshift", "mp_quarry", "mp_rundown",
               "mp_rust", "mp_subbase", "mp_terminal", "mp_underpass"]
 # MW2's own DLC maps (Stimulus, then Resurgence): their own group in the mini app
 DLC_MAPS = ["mp_complex", "mp_compact", "mp_storm", "mp_overgrown", "mp_crash",
             "mp_abandon", "mp_fuel2", "mp_strike", "mp_trailerpark", "mp_vacant"]
+# community maps whose entities have everything S&D needs: attacker and defender spawns, the bomb
+# and two bomb sites (checked in their zone files). IW4x's ports of MW2's pre-release maps
+# (*_sh, *_tropical, *_long, mp_storm_spring, mp_firingrange) and the maps pack's custom maps
+# can't be read that way, so they stay out until tested in game.
+SD_COMMUNITY_MAPS = ["mp_alpha", "mp_backlot", "mp_bloc", "mp_bravo", "mp_broadcast", "mp_carentan",
+                     "mp_cargoship", "mp_citystreets", "mp_convoy", "mp_countdown", "mp_crash_snow",
+                     "mp_cross_fire", "mp_dome", "mp_farm", "mp_hardhat", "mp_killhouse", "mp_nuked",
+                     "mp_paris", "mp_pipeline", "mp_plaza2", "mp_seatown", "mp_shipment", "mp_showdown",
+                     "mp_underground", "mp_village"]
+# the maps S&D is offered on (Game panel, mini app, in-game menu)
+SD_MAPS = set(STOCK_MAPS) | set(DLC_MAPS) | set(SD_COMMUNITY_MAPS)
 
 app = FastAPI()
 
@@ -368,7 +379,7 @@ def installed_maps() -> list[dict]:
     }
     maps = [
         {"id": n, "name": MAP_NAMES.get(n, n), "custom": n in custom and n not in names, "stock": n in STOCK_MAPS,
-         "dlc": n in DLC_MAPS}
+         "dlc": n in DLC_MAPS, "sd": n in SD_MAPS}
         for n in (names | custom) - BROKEN_MAPS
     ]
     return sorted(maps, key=lambda m: m["name"])
@@ -529,8 +540,8 @@ def install_lobby_gsc() -> None:
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(src.read_bytes())
     if GAME_DIR.exists():
-        # maps and modes for vote.gsc: map<TAB>id<TAB>name, mode<TAB>id<TAB>name
-        lines = [f"map\t{m['id']}\t{m['name']}" for m in installed_maps()]
+        # maps and modes for vote.gsc: map<TAB>id<TAB>name[<TAB>sd], mode<TAB>id<TAB>name
+        lines = [f"map\t{m['id']}\t{m['name']}" + ("\tsd" if m["sd"] else "") for m in installed_maps()]
         lines += [f"mode\t{g}\t{name}" for g, name in gametypes().items()]
         dest = GAME_DIR / "userraw" / VOTE_LIST
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -1166,7 +1177,7 @@ def tg_state(request: Request):
                          key=lambda p: p["name"].lower()),
         "bots": sum(p["bot"] for p in players),
         "lobby_count": live["lobby_count"] if status == "lobby" else 0,
-        "maps": [{k: m[k] for k in ("id", "name", "stock", "dlc")} for m in (st["maps"] if st else [])],
+        "maps": [{k: m[k] for k in ("id", "name", "stock", "dlc", "sd")} for m in (st["maps"] if st else [])],
         "modes": [{"id": k, "name": v} for k, v in APP_MODES.items()],
         "bot_settings": tg_bot_settings((st or {}).get("config") or config_view()),
         "bot_skills": [{"id": k, "name": BOT_SKILL_NAMES.get(k, k)} for k in BOT_SKILLS],
@@ -1272,7 +1283,7 @@ def tg_play(p: Play, request: Request):
         raise HTTPException(400, "unknown mode")
     gametype = "dm" if p.mode in GUN_GAMES else p.mode
     maps = {m["id"]: m for m in installed_maps()}
-    if p.map not in maps or (gametype == "sd" and not (maps[p.map]["stock"] or maps[p.map]["dlc"])):
+    if p.map not in maps or (gametype == "sd" and not maps[p.map]["sd"]):
         raise HTTPException(400, "that map isn't available in this mode")
     v = read_cfg()
     if p.mode in GUN_GAMES:

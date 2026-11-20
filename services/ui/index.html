@@ -234,10 +234,10 @@ function fillForm(c) {
   fillMaps(c.map);
 }
 
-// S&D offers the original and DLC MW2 maps only; its empty Win limit means 12
+// S&D offers the maps with bomb sites only; its empty Win limit means 12
 function fillMaps(pick) {
   const sd = $('gametype').value === 'sd';
-  const maps = S.maps.filter(m => !sd || m.stock || m.dlc);
+  const maps = S.maps.filter(m => !sd || m.sd);
   $('liveMap').innerHTML = maps.map(m => `<option value="${m.id}">${esc(m.name)}${m.custom ? ' (custom)' : ''}</option>`).join('');
   if (maps.some(m => m.id === pick)) $('liveMap').value = pick;
   $('winlimit').placeholder = sd ? '12' : 'default';
