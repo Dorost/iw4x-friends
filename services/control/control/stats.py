@@ -442,8 +442,8 @@ def hm(seconds: int) -> str:
 
 
 def board(db: Session, sc: Scope) -> list[dict]:
-    """Per person: kills, deaths, K/D, headshots, matches, seconds played; most kills first
-    (then K/D, then time played)."""
+    """Per person: kills, deaths, K/D, headshots, matches, seconds played; best K/D first
+    (then kills, then time played)."""
     where = sc.kills()
     person = people(db)
     who = names(db)
@@ -483,13 +483,13 @@ def board(db: Session, sc: Scope) -> list[dict]:
         r["kd"] = ratio(r["kills"], r["deaths"])
         r["matches"] = len(matches[pid] - {None})
     return sorted(
-        rows.values(), key=lambda r: (-r["kills"], -r["kd"], -r["time"], r["name"].lower())
+        rows.values(), key=lambda r: (-r["kd"], -r["kills"], -r["time"], r["name"].lower())
     )
 
 
 def report(db: Session, run_id: int, now: int, link: str | None = None) -> str:
     """For the group when a server shuts down: how long it ran, and everyone's kills, deaths, K/D
-    and time played of this run (bots count as victims and killers), most kills first; with
+    and time played of this run (bots count as victims and killers), best K/D first; with
     link (the mini app's, "https://t.me/<bot>?startapp="), each name opens their page. "" when
     no person got a kill."""
     run = db.get(Run, run_id)
@@ -598,7 +598,7 @@ def person_view(db: Session, person_id: int, sc: Scope, titles: dict[str, str]) 
             {"name": k, "kills": v[0], "deaths": v[1], "kd": ratio(v[0], v[1])}
             for k, v in d.items()
         ]
-        return sorted(out, key=lambda r: (-r["kills"], -r["kd"], r["name"]))  # most kills first
+        return sorted(out, key=lambda r: (-r["kd"], -r["kills"], r["name"]))  # best K/D first
 
     return {
         "id": person_id,
@@ -632,7 +632,7 @@ def person_view(db: Session, person_id: int, sc: Scope, titles: dict[str, str]) 
                 }
                 for s, v in per_server.items()
             ),
-            key=lambda r: (-r["kills"], -r["kd"], -r["time"]),  # most kills first
+            key=lambda r: (-r["kd"], -r["kills"], -r["time"]),  # best K/D first
         ),
     }
 

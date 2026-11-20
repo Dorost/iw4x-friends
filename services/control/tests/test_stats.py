@@ -117,6 +117,26 @@ def test_the_shutdown_report(db):
         assert stats.report(s, empty, NOW) == ""
 
 
+def test_best_kd_first(db):
+    """The lists and the shutdown table: best K/D first, then the most kills."""
+    newbie, sara = side("abcdefabcdef0000", "Newbie", ping=30), side(SARA, "Sara")
+    with db.begin() as s:
+        run = stats.new_run(s, "nl", NOW - 3600, "test")
+    more = [
+        kill(20, bot("Pedro"), newbie, match=2),  # 2 / 0: fewer kills than Yashar's 3 / 2
+        kill(21, bot("Jose"), newbie, match=2),
+        kill(22, bot("Pedro"), sara, match=2),  # 2 / 2
+        kill(23, bot("Jose"), sara, match=2),
+    ]
+    take(db, evening() + more, run_id=run)
+    with db.begin() as s:
+        rows = [(r["name"], r["kills"], r["deaths"]) for r in stats.board(s, stats.Scope())]
+        text = stats.report(s, run, NOW)
+    assert rows == [("Newbie", 2, 0), ("Yashar", 3, 2), ("Sara", 2, 2), ("Amin", 1, 2)]
+    names = [line.rsplit("  ", 1)[1] for line in text.split("\n")[2:]]
+    assert names == ["Newbie", "Yashar", "Sara", "Amin"]
+
+
 def test_one_person_on_two_installs(db):
     take(db, evening())
     new = "77777777deadbeef"  # Yashar on a new laptop
@@ -160,7 +180,10 @@ def test_a_players_page(db):
     hits = {h["key"]: h["count"] for h in v["hits"]}
     assert hits == {"head": 1, "neck": 0, "torso": 1, "arms": 0, "legs": 1}
     assert v["maps"][0] == {"name": "Rust", "kills": 2, "deaths": 2, "kd": 1.0}
-    assert [m["name"] for m in v["modes"]] == ["Team Deathmatch", "Free-for-all"]  # most kills
+    assert [m["name"] for m in v["modes"]] == [
+        "Team Deathmatch",
+        "Free-for-all",
+    ]  # same K/D: more kills
     assert [(m["name"], m["kills"], m["deaths"]) for m in v["maps"]] == [
         ("Rust", 2, 2),
         ("Shipment", 1, 0),
