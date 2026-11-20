@@ -299,6 +299,9 @@ SD_WINLIMIT = "12"
 STOCK_MAPS = ["mp_afghan", "mp_boneyard", "mp_brecourt", "mp_checkpoint", "mp_derail", "mp_estate",
               "mp_favela", "mp_highrise", "mp_invasion", "mp_nightshift", "mp_quarry", "mp_rundown",
               "mp_rust", "mp_subbase", "mp_terminal", "mp_underpass"]
+# MW2's own DLC maps (Stimulus, then Resurgence): their own group in the mini app
+DLC_MAPS = ["mp_complex", "mp_compact", "mp_storm", "mp_overgrown", "mp_crash",
+            "mp_abandon", "mp_fuel2", "mp_strike", "mp_trailerpark", "mp_vacant"]
 
 app = FastAPI()
 
@@ -364,7 +367,8 @@ def installed_maps() -> list[dict]:
         d.name for d in (GAME_DIR / "usermaps").glob("mp_*") if (d / f"{d.name}.ff").exists()
     }
     maps = [
-        {"id": n, "name": MAP_NAMES.get(n, n), "custom": n in custom and n not in names, "stock": n in STOCK_MAPS}
+        {"id": n, "name": MAP_NAMES.get(n, n), "custom": n in custom and n not in names, "stock": n in STOCK_MAPS,
+         "dlc": n in DLC_MAPS}
         for n in (names | custom) - BROKEN_MAPS
     ]
     return sorted(maps, key=lambda m: m["name"])
@@ -1162,7 +1166,7 @@ def tg_state(request: Request):
                          key=lambda p: p["name"].lower()),
         "bots": sum(p["bot"] for p in players),
         "lobby_count": live["lobby_count"] if status == "lobby" else 0,
-        "maps": [{k: m[k] for k in ("id", "name", "stock")} for m in (st["maps"] if st else [])],
+        "maps": [{k: m[k] for k in ("id", "name", "stock", "dlc")} for m in (st["maps"] if st else [])],
         "modes": [{"id": k, "name": v} for k, v in APP_MODES.items()],
         "bot_settings": tg_bot_settings((st or {}).get("config") or config_view()),
         "bot_skills": [{"id": k, "name": BOT_SKILL_NAMES.get(k, k)} for k in BOT_SKILLS],
