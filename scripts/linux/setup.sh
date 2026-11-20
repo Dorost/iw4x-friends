@@ -33,7 +33,7 @@ REPO="$PWD"
 GAME="${IW4X_GAME_DIR:-$REPO/game}"
 DOWNLOAD_ZIP="${IW4X_DOWNLOAD_DIR:-$REPO}/mw.zip"
 # download links, encrypted with the setup password (written by `task links`)
-LINKS_ENC="U2FsdGVkX19cVI2uMb6Pq+FSWv0vKnvzMaMmzNK3mcXMuSMOQ+zxN/rsbadkDRbb3OM3Kz3dt/ttgFqLc6XTP4W39fbUB2TDSn61vfIeb9GMh9AiWikHWRZlRsjqsGvp3h8Jl78Pjv3WWF3hkGgAGxPRCo6H4hd1sdI5FkCXctwQ1jAbx0wQg5DlWSH6F564eGePii/HcjGuwdqXpUoxKrMV/i3lsonHq4v3YOvNews="
+LINKS_ENC="U2FsdGVkX18BSFqqHMCQ++5w+wJL5cdh3asQpzzejdBx2HWUrjeVW3q15pMGc31tolezaREbLw7dPLBzNarkDGagqk5k81ChbyM7uVo97si+Qc/A/GDQ+Y1Gkje41pLweL2l2zWtdoyWSKS33+xtZ92FbDNb5kYs4B9rHU3DfkJFIP0naKFFciIY7ikspmyrxsHNiTtW8zGg5eFIJbcxXe/vVJiCjUDQyPGbkry3TdA="
 
 KEEP_ZIP=0 ZIP="" GAME_ONLY=0 GAME_LINK="${MW_GAME_URL:-}" MAPS_LINK="${MW_MAPS_URL:-}"
 while (( $# )); do
