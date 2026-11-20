@@ -242,7 +242,7 @@ function card(base, s, i) {
 
 function openPicker(i) {
   const base = SERVERS[i], s = states[base];
-  const tiles = maps => maps.map(m => `<button class="tile" data-id="${esc(m.id)}" data-sd="${m.stock || m.dlc ? 1 : ""}" onclick="pickMap(this)">
+  const tiles = maps => maps.map(m => `<button class="tile" data-id="${esc(m.id)}" data-sd="${(m.sd ?? (m.stock || m.dlc)) ? 1 : ""}" onclick="pickMap(this)">
       <div class="img" style="background-image: url('${thumb(base, m.id)}')"></div>
       ${m.id === s.map ? '<span class="now">Now</span>' : ""}<span class="name">${esc(m.name)}</span></button>`).join("");
   const stock = s.maps.filter(m => m.stock), dlc = s.maps.filter(m => m.dlc),
@@ -264,7 +264,7 @@ function openPicker(i) {
 function pickMode(el) { if (!busy) { view.mode = el.dataset.mode; updatePicker(); } }
 function pickMap(el) { if (!busy) { view.map = el.dataset.id; updatePicker(); tick(); } }
 
-// marks the picks; Search & Destroy has only the original and DLC maps
+// marks the picks; Search & Destroy has only the maps with bomb sites
 function updatePicker() {
   const sd = view.mode === "sd";
   app.querySelectorAll(".chip").forEach(c => c.classList.toggle("on", c.dataset.mode === view.mode));
@@ -273,7 +273,7 @@ function updatePicker() {
     if (t.hidden && t.dataset.id === view.map) view.map = null;
     t.classList.toggle("on", t.dataset.id === view.map);
   });
-  app.querySelector(".more").hidden = sd || !app.querySelector(".more .tile");
+  app.querySelectorAll(".group").forEach(g => g.hidden = !g.querySelector(".tile:not([hidden])"));
   for (const id of ["next", "now"]) document.getElementById(id).disabled = !view.map || busy;
 }
 

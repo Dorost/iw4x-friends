@@ -10,7 +10,7 @@
 //           !gt alone opens the menu at the game type list
 //           !map <name> sets the next map (short or partial names: rust, afghan, ship):
 //           that map loads after the match; !map <name> now switches right away;
-//           !map alone opens the menu at the map list (S&D: the original and DLC maps only);
+//           !map alone opens the menu at the map list (S&D: the maps with bomb sites only);
 //           !map clear drops the pick
 //           !menu opens a menu on screen, you are frozen while it is open: Up/Down (or W/S)
 //           move, Enter (or F) pick, melee back / close. Nothing changes without a pick.
@@ -143,11 +143,12 @@ loadLists()
 	level.voteMaps = [];
 	level.voteMapNames = [];
 	level.voteModes = [];
+	level.voteSdMaps = [];
 	level.voteModeNames = [];
 	text = "";
 	if ( FileExists( "vote.txt" ) )
 		text = FileRead( "vote.txt" );
-	// lines: map<TAB>mp_rust<TAB>Rust, mode<TAB>war<TAB>Team Deathmatch
+	// lines: map<TAB>mp_rust<TAB>Rust[<TAB>sd], mode<TAB>war<TAB>Team Deathmatch
 	foreach ( line in strTok( text, "\n" ) )
 	{
 		parts = strTok( line, "\t" );
@@ -157,6 +158,8 @@ loadLists()
 		{
 			level.voteMapNames[ level.voteMaps.size ] = parts[ 2 ];
 			level.voteMaps[ level.voteMaps.size ] = parts[ 1 ];
+			if ( parts.size > 3 && parts[ 3 ] == "sd" )
+				level.voteSdMaps[ level.voteSdMaps.size ] = parts[ 1 ];
 		}
 		else if ( parts[ 0 ] == "mode" )
 		{
@@ -176,7 +179,7 @@ loadLists()
 		level.voteModes = strTok( "war dm dom sd koth sab ctf dd", " " );
 		level.voteModeNames = level.voteModes;
 	}
-	// the installed ones: the random next map uses these, so does the map menu for S&D
+	// the installed ones: the random next map uses these
 	level.voteBaseMaps = [];
 	foreach ( map in base )
 		if ( isMap( map ) )
@@ -185,11 +188,16 @@ loadLists()
 		level.voteBaseMaps = level.voteMaps;
 }
 
-// the maps of the menu's map list: S&D gets the original and DLC maps only
+// the maps of the menu's map list: S&D gets the maps with bomb sites only (the web UI marks
+// them; from an older vote.txt without marks, the original and DLC maps)
 menuMaps()
 {
 	if ( nextMode() == "sd" )
+	{
+		if ( level.voteSdMaps.size )
+			return level.voteSdMaps;
 		return level.voteBaseMaps;
+	}
 	return level.voteMaps;
 }
 
