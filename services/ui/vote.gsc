@@ -10,7 +10,7 @@
 //           !gt alone opens the menu at the game type list
 //           !map <name> sets the next map (short or partial names: rust, afghan, ship):
 //           that map loads after the match; !map <name> now switches right away;
-//           !map alone opens the menu at the map list (S&D: the 16 original maps only);
+//           !map alone opens the menu at the map list (S&D: the original and DLC maps only);
 //           !map clear drops the pick
 //           !menu opens a menu on screen, you are frozen while it is open: Up/Down (or W/S)
 //           move, Enter (or F) pick, melee back / close. Nothing changes without a pick.
@@ -20,7 +20,7 @@
 // No lobby between matches: when a match ends, the scoreboard shows "Next up: <map>, <mode>"
 //   and that match loads right away (a new mode passes through the lobby, see startMatch). Next up is also announced at the start of a match, in its
 //   last minute and whenever it changes. The map is the pick (!map, menu, web UI), else a
-//   random other original MW2 map; the mode is the !gt pick, else the one just played.
+//   random other original or DLC MW2 map; the mode is the !gt pick, else the one just played.
 // The web UI writes the installed maps and modes to userraw/scriptdata/vote.txt.
 init()
 {
@@ -164,8 +164,8 @@ loadLists()
 			level.voteModes[ level.voteModes.size ] = parts[ 1 ];
 		}
 	}
-	// the 16 original MW2 maps, no DLC (Stimulus, Resurgence) or custom maps
-	base = strTok( "mp_afghan mp_boneyard mp_brecourt mp_checkpoint mp_derail mp_estate mp_favela mp_highrise mp_invasion mp_nightshift mp_quarry mp_rundown mp_rust mp_subbase mp_terminal mp_underpass", " " );
+	// the 16 original MW2 maps and its 10 DLC maps (Stimulus, Resurgence), no custom maps
+	base = strTok( "mp_afghan mp_boneyard mp_brecourt mp_checkpoint mp_derail mp_estate mp_favela mp_highrise mp_invasion mp_nightshift mp_quarry mp_rundown mp_rust mp_subbase mp_terminal mp_underpass mp_complex mp_compact mp_storm mp_overgrown mp_crash mp_abandon mp_fuel2 mp_strike mp_trailerpark mp_vacant", " " );
 	if ( !level.voteMaps.size )
 	{
 		level.voteMaps = base;
@@ -185,7 +185,7 @@ loadLists()
 		level.voteBaseMaps = level.voteMaps;
 }
 
-// the maps of the menu's map list: S&D gets the original maps only
+// the maps of the menu's map list: S&D gets the original and DLC maps only
 menuMaps()
 {
 	if ( nextMode() == "sd" )

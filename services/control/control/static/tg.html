@@ -385,7 +385,7 @@ async function shutdown(name) {
 
 function openPicker(name) {
   const s = server(name), g = s.game;
-  const tiles = maps => maps.map(m => `<button class="tile" data-id="${esc(m.id)}" data-stock="${m.stock ? 1 : ""}" onclick="pickMap(this)">
+  const tiles = maps => maps.map(m => `<button class="tile" data-id="${esc(m.id)}" data-sd="${m.stock || m.dlc ? 1 : ""}" onclick="pickMap(this)">
       <div class="img" style="background-image: url('${thumb(name, m.id)}')"></div>
       ${m.id === g.map ? '<span class="now">Now</span>' : ""}<span class="name">${esc(m.name)}</span></button>`).join("");
   const stock = g.maps.filter(m => m.stock), dlc = g.maps.filter(m => m.dlc),
@@ -407,16 +407,16 @@ function openPicker(name) {
 function pickMode(el) { if (!busy) { view.mode = el.dataset.mode; updatePicker(); } }
 function pickMap(el) { if (!busy) { view.map = el.dataset.id; updatePicker(); tick(); } }
 
-// marks the picks; Search & Destroy has only the original maps
+// marks the picks; Search & Destroy has only the original and DLC maps
 function updatePicker() {
   const sd = view.mode === "sd";
   app.querySelectorAll(".chip").forEach(c => c.classList.toggle("on", c.dataset.mode === view.mode));
   app.querySelectorAll(".tile").forEach(t => {
-    t.hidden = sd && !t.dataset.stock;
+    t.hidden = sd && !t.dataset.sd;
     if (t.hidden && t.dataset.id === view.map) view.map = null;
     t.classList.toggle("on", t.dataset.id === view.map);
   });
-  for (const group of [".dlc", ".more"]) app.querySelector(group).hidden = sd || !app.querySelector(`${group} .tile`);
+  app.querySelector(".more").hidden = sd || !app.querySelector(".more .tile");
   for (const id of ["next", "now"]) document.getElementById(id).disabled = !view.map || busy;
 }
 

@@ -1272,7 +1272,7 @@ def tg_play(p: Play, request: Request):
         raise HTTPException(400, "unknown mode")
     gametype = "dm" if p.mode in GUN_GAMES else p.mode
     maps = {m["id"]: m for m in installed_maps()}
-    if p.map not in maps or (gametype == "sd" and not maps[p.map]["stock"]):
+    if p.map not in maps or (gametype == "sd" and not (maps[p.map]["stock"] or maps[p.map]["dlc"])):
         raise HTTPException(400, "that map isn't available in this mode")
     v = read_cfg()
     if p.mode in GUN_GAMES:
