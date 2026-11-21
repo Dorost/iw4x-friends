@@ -435,6 +435,26 @@ def played(db: Session, sc: Scope, guids: list[str] | None = None) -> dict[str, 
     return {g: int(t or 0) for g, t in db.execute(q.group_by(PlaySession.guid)).all()}
 
 
+def pings(db: Session, sc: Scope) -> dict[int, int]:
+    """person id -> their average ping in the scope, from the pings each kill keeps of both
+    sides (a suicide counts once; 0 and 999, a player still loading or timing out, don't)."""
+    person = people(db)
+    sums: dict[int, list[int]] = defaultdict(lambda: [0, 0])
+    own_hand = Kill.killer_guid == Kill.victim_guid
+    sides = (
+        (Kill.victim_guid, Kill.victim_ping, ~Kill.victim_bot),
+        (Kill.killer_guid, Kill.killer_ping, ~Kill.killer_bot & ~own_hand),
+    )
+    for guid_col, ping_col, person_side in sides:
+        q = select(guid_col, func.sum(ping_col), func.count())
+        q = q.where(person_side, ping_col.between(1, 998), *sc.kills()).group_by(guid_col)
+        for guid, total, n in db.execute(q).all():
+            if (pid := person.get(guid)) is not None:
+                sums[pid][0] += total
+                sums[pid][1] += n
+    return {pid: round(total / n) for pid, (total, n) in sums.items() if n}
+
+
 def hm(seconds: int) -> str:
     """Time played, short: 45m, 2h05."""
     m = seconds // 60
@@ -488,10 +508,10 @@ def board(db: Session, sc: Scope) -> list[dict]:
 
 
 def report(db: Session, run_id: int, now: int, link: str | None = None) -> str:
-    """For the group when a server shuts down: how long it ran, and everyone's kills, deaths, K/D
-    and time played of this run (bots count as victims and killers), best K/D first; with
-    link (the mini app's, "https://t.me/<bot>?startapp="), each name opens their page. "" when
-    no person got a kill."""
+    """For the group when a server shuts down: how long it ran, and everyone's kills, deaths,
+    K/D, time played and average ping of this run (bots count as victims and killers), best K/D
+    first; with link (the mini app's, "https://t.me/<bot>?startapp="), each name opens their
+    page. "" when no person got a kill."""
     run = db.get(Run, run_id)
     sc = Scope(run_id=run_id)
     rows = [r for r in board(db, sc) if r["kills"] or r["deaths"] or r["time"]]
@@ -503,10 +523,12 @@ def report(db: Session, run_id: int, now: int, link: str | None = None) -> str:
     head = f"📊 {took}" + (f" · {matches} match{'es' if matches != 1 else ''}" if matches else "")
     # Telegram has no links in a <pre> block: each row's numbers are a <code> of the same width
     # at the start of its line, so the columns line up, and the name after it is the link
-    lines = [f"<code>{'K':>4} {'D':>4} {'K/D':>5} {'Time':>5}</code>"]
+    ping = pings(db, sc)
+    lines = [f"<code>{'K':>4} {'D':>4} {'K/D':>5} {'Time':>5} {'Ping':>4}</code>"]
     for r in rows:
         time_ = hm(r["time"]) if r["time"] else "–"
-        numbers = f"{r['kills']:>4} {r['deaths']:>4} {r['kd']:>5.2f} {time_:>5}"
+        ping_ = ping.get(r["id"], "–")
+        numbers = f"{r['kills']:>4} {r['deaths']:>4} {r['kd']:>5.2f} {time_:>5} {ping_:>4}"
         name = esc(r["name"])
         if link:
             name = f'<a href="{esc(link)}p{r["id"]}">{name}</a>'

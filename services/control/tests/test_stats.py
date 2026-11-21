@@ -105,11 +105,13 @@ def test_the_shutdown_report(db):
         text = stats.report(s, run, NOW)
     assert text.split("\n") == [
         "📊 2h 14m · 2 matches",
-        "<code>   K    D   K/D  Time</code>",
-        "<code>   3    2  1.50     –</code>  Yashar",  # no session came in, no mini app link
-        "<code>   1    2  0.50     –</code>  Amin",
-        "<code>   0    2  0.00     –</code>  Sara",
+        "<code>   K    D   K/D  Time Ping</code>",
+        "<code>   3    2  1.50     –   46</code>  Yashar",  # no session came in, no mini app link
+        "<code>   1    2  0.50     –   70</code>  Amin",
+        "<code>   0    2  0.00     –   50</code>  Sara",
     ]
+    # pings: Yashar 45 x5, 50 in the FFA match (46); Amin 80 x2, 50 for his suicide counted once
+    # (70); bots (0) and the fall's world killer don't count
     with db.begin() as s:  # nobody got a kill: nothing to post
         empty = stats.new_run(s, "nl", NOW, "test")
     take(db, [kill(50, side(YASHAR, "Yashar"), bot("Pedro"))], run_id=empty)
@@ -242,10 +244,14 @@ def test_time_played(db):
         text = stats.report(s, run, NOW + 4000, "https://t.me/testbot?startapp=")
     lines = text.split("\n")
     link = f'<a href="https://t.me/testbot?startapp=p{pid}">Yashar</a>'
-    assert lines[2] == f"<code>   3    2  1.50  1h05</code>  {link}"
-    assert lines[4].startswith("<code>   0    2  0.00   20m</code>  <a ") and "Sara</a>" in lines[4]
+    assert lines[2] == f"<code>   3    2  1.50  1h05   46</code>  {link}"
     assert (
-        lines[5].startswith("<code>   0    0  0.00    5m</code>  <a ") and "Lurker</a>" in lines[5]
+        lines[4].startswith("<code>   0    2  0.00   20m   50</code>  <a ")
+        and "Sara</a>" in lines[4]
+    )
+    assert (  # played, but no kill or death took a ping of them
+        lines[5].startswith("<code>   0    0  0.00    5m    –</code>  <a ")
+        and "Lurker</a>" in lines[5]
     )
     assert text.count("<a ") == 4
 
@@ -311,7 +317,9 @@ async def test_kills_come_in_while_it_runs_and_the_group_gets_them_at_shutdown(f
     await orch.tasks["nl"]
     (msg,) = posts(orch)
     assert msg.startswith("⚪ <b>NL</b> shut down (by test)\n\n📊 30 min · 2 matches")
-    assert '\n<code>   3    2  1.50     –</code>  <a href="https://t.me/testbot?startapp=p' in msg
+    assert (
+        '\n<code>   3    2  1.50     –   46</code>  <a href="https://t.me/testbot?startapp=p' in msg
+    )
     row = orch.row("nl")
     assert row.run_id is None and row.stats_seq == 11
     with orch.db.begin() as s:
