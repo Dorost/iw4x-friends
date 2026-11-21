@@ -17,7 +17,9 @@
 #   bash -c "$(curl -fsSL https://raw.githubusercontent.com/Dorost/iw4x-friends/main/scripts/mac/install-maps.sh)"
 # Options:
 #   --bottle <name>  macOS: CrossOver bottle to install into (default: mw)
-#   --dir <path>     game folder to install into (overrides --bottle; required on Linux)
+#   --dir <path>     game folder to install into (overrides --bottle). Without --dir and
+#                    --bottle: the folder this runs in if it has iw4x.exe, else the bottle
+#                    (macOS) or ~/Games/iw4x/game (Linux, where setup-game.sh installs)
 #   --maps-url <link>  download link of the pack (a Google Drive share link works);
 #                    also MW_MAPS_URL. When needed and not given, it asks for the setup
 #                    password (decrypts the links below) or the link itself
@@ -32,10 +34,10 @@ MARK=".iw4x-maps-installed-v3"  # v3: the pack gained MW2's DLC maps, so older i
 # download links, encrypted with the setup password (written by `task links`)
 LINKS_ENC="U2FsdGVkX18BSFqqHMCQ++5w+wJL5cdh3asQpzzejdBx2HWUrjeVW3q15pMGc31tolezaREbLw7dPLBzNarkDGagqk5k81ChbyM7uVo97si+Qc/A/GDQ+Y1Gkje41pLweL2l2zWtdoyWSKS33+xtZ92FbDNb5kYs4B9rHU3DfkJFIP0naKFFciIY7ikspmyrxsHNiTtW8zGg5eFIJbcxXe/vVJiCjUDQyPGbkry3TdA="
 
-BOTTLE="mw" DIR="" ZIP="" KEEP_ZIP=0 FORCE=0 LINK="${MW_MAPS_URL:-}"
+BOTTLE="mw" BOTTLE_SET=0 DIR="" ZIP="" KEEP_ZIP=0 FORCE=0 LINK="${MW_MAPS_URL:-}"
 while (( $# )); do
   case "$1" in
-    --bottle) BOTTLE="$2"; shift ;;
+    --bottle) BOTTLE="$2"; BOTTLE_SET=1; shift ;;
     --dir) DIR="$2"; shift ;;
     --maps-url) LINK="$2"; shift ;;
     --zip) ZIP="$2"; KEEP_ZIP=1; shift ;;
@@ -90,8 +92,16 @@ unlock_links() {
 }
 
 if [[ -z "$DIR" ]]; then
-  [[ "$(uname)" == "Darwin" ]] || die "pass --dir <game folder> on this system"
-  DIR="$HOME/Library/Application Support/CrossOver/Bottles/$BOTTLE/drive_c/Program Files (x86)/Call of Duty Modern Warfare 2"
+  if (( ! BOTTLE_SET )) && [[ -f "$PWD/iw4x.exe" ]]; then
+    DIR="$PWD"
+  elif [[ "$(uname)" == "Darwin" ]]; then
+    DIR="$HOME/Library/Application Support/CrossOver/Bottles/$BOTTLE/drive_c/Program Files (x86)/Call of Duty Modern Warfare 2"
+  elif [[ -f "$HOME/Games/iw4x/game/iw4x.exe" ]]; then
+    DIR="$HOME/Games/iw4x/game"  # where setup-game.sh installs
+  else
+    die "no MW2 + IW4x install found here or in ~/Games/iw4x/game: pass --dir <game folder>"
+  fi
+  ok "game folder: $DIR"
 fi
 [[ -f "$DIR/iw4x.exe" ]] || die "no MW2 + IW4x install found in: $DIR"
 
