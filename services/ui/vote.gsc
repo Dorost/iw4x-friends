@@ -19,7 +19,8 @@
 //           ones that match it, an unknown or unclear !map / !gt name the maps or modes that do
 // No lobby between matches: when a match ends, the scoreboard shows "Next up: <map>, <mode>"
 //   and that match loads right away (a new mode passes through the lobby, see startMatch). Next up is also announced at the start of a match, in its
-//   last minute and whenever it changes. The map is the pick (!map, menu, web UI), else a
+//   last minute and whenever it changes (once, when the change has held for 1.5 s, see
+//   nextUpWatch). The map is the pick (!map, menu, web UI), else a
 //   random other original or DLC MW2 map; the mode is the !gt pick, else the one just played.
 // The web UI writes the installed maps and modes to userraw/scriptdata/vote.txt.
 init()
@@ -74,15 +75,28 @@ announceStart()
 	announceNextUp( true );
 }
 
-// a pick (chat, menu, web UI) changes what is next: tell everyone
+// a pick (chat, menu, web UI) changes what is next: tell everyone, once it has held for
+// 1.5 s. The web UI and the mini app set the map and the mode with two rcon commands, up
+// to ~1.25 s apart (a reply timing out after 1 s, then 0.25 s between commands): announcing
+// in between showed the new map with the old mode first, then the whole pick right after
 nextUpWatch()
 {
 	level endon( "game_ended" );
 
+	pending = "";
+	since = 0;
 	for ( ;; )
 	{
-		wait 1;
-		if ( nextUpText() != level.nextUpShown )
+		wait 0.5;
+		text = nextUpText();
+		if ( text == level.nextUpShown )
+			pending = "";  // nothing new, or a change undone before it was announced
+		else if ( text != pending )
+		{
+			pending = text;  // changed: the rest of the pick may still come
+			since = getTime();
+		}
+		else if ( getTime() - since >= 1500 )
 			announceNextUp( false );
 	}
 }

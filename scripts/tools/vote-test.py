@@ -21,6 +21,7 @@ import argparse
 import base64
 import json
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -31,9 +32,12 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 UI = ROOT / "services" / "ui"
 IMAGE = "iw4x-vote-test"
 CONTAINER = "iw4x-vote-test"
-UI_PORT, GAME_PORT, PASSWORD = 8099, 28990, "test"
+UI_PORT, GAME_PORT, PASSWORD, RCON_PASSWORD = 8099, 28990, "test", "votetest"
 SETTLE = 4.0  # seconds after a change by which its announcement must have shown
 LATENCY = 3.0  # a change is announced within this many seconds
+# the split picks: over the old 1 s check (it always saw the half), under the 1.5 s a change
+# must hold to be announced; a dropped request sent again adds 0.1 s to the nominal gap
+GAP_MAX = 1.4
 START_MAP = "mp_rust"
 # announceNextUp in every version: the probe goes right after it sets the text players see
 ANCHOR = "announceNextUp( bold )\n{\n\tlevel.nextUpShown = nextUpText();\n"
@@ -63,6 +67,25 @@ def api(path: str, body: dict | None = None) -> dict:
 def rcon(cmd: str) -> str:
     """Through the web UI, as its own commands go (one rcon at a time, spaced)."""
     return api("/api/rcon", {"cmd": cmd})["output"]
+
+
+def rcon_at(cmd: str, at: float) -> float:
+    """Straight to the game at time.monotonic() `at`, for exact timing: the web UI's rcon can wait
+    up to ~0.6 s for its poll's. IW4x drops a request within rcon_timeout (100 ms) of another
+    from the same address (the web UI's polls) and doesn't answer it: sent again then.
+    Returns when the game took it."""
+    time.sleep(max(0.0, at - time.monotonic()))
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.settimeout(0.1)  # it answers within ~10 ms; a drop costs 0.1 s
+        for _ in range(8):
+            sent = time.monotonic()
+            sock.sendto(f"\xff\xff\xff\xffrcon {RCON_PASSWORD} {cmd}\n".encode("latin-1"), ("127.0.0.1", GAME_PORT))
+            try:
+                sock.recv(65535)
+                return sent
+            except TimeoutError:
+                continue
+    sys.exit(f"the game didn't take rcon {cmd!r}")
 
 
 class Log:
@@ -126,7 +149,7 @@ class Server:
         lines = [ln for ln in (ROOT / "server.cfg.example").read_text().splitlines() if "g_gametype" not in ln]
         cfg.write_text(
             "\n".join(lines)
-            + f'\nset rcon_password "votetest"\nset g_gametype "sd"\nset ui_gametype "sd"\nset ui_mapname "{START_MAP}"\n'
+            + f'\nset rcon_password "{RCON_PASSWORD}"\nset g_gametype "sd"\nset ui_gametype "sd"\nset ui_mapname "{START_MAP}"\n'
         )
         (self.work / "data").mkdir(exist_ok=True)
 
@@ -204,7 +227,7 @@ def t_single_change(s: Server) -> str:
     seen, loaded = s.log.watch(SETTLE, t0)
     want = s.next_up("mp_highrise", "sd")
     if loaded:
-        return "RETRY"
+        return "RETRY: a map (re)loaded during the test"
     if [text for _, _, text in seen] != [want]:
         return f"wanted one {want!r}, got {seen}"
     if seen[0][0] > LATENCY:
@@ -216,7 +239,7 @@ PICKS = [("mp_highrise", "dom"), ("mp_favela", "war"), ("mp_crash", "sd"), ("mp_
 
 
 def t_web_picks(s: Server) -> str:
-    """Picks of map and mode from the web UI / mini app (/api/select): the pick is what's announced last."""
+    """Picks of map and mode from the web UI / mini app (/api/select): each announced once, the whole pick."""
     s.establish("mp_terminal", "sd")
     problems = []
     for map_id, mode in PICKS:
@@ -225,11 +248,70 @@ def t_web_picks(s: Server) -> str:
         api("/api/select", {"map": map_id, "gametype": mode})
         seen, loaded = s.log.watch(SETTLE, t0)
         if loaded:
-            return "RETRY"
+            return "RETRY: a map (re)loaded during the test"
         want = s.next_up(map_id, mode)
-        if not seen or seen[-1][2] != want:
-            problems.append(f"{map_id} {mode}: wanted {want!r} last, got {seen}")
+        if [text for _, _, text in seen] != [want]:
+            problems.append(f"{map_id} {mode}: wanted one {want!r}, got {seen}")
     return "; ".join(problems)
+
+
+def split_pick(first: str, second: str, gap: float) -> tuple[float, float]:
+    """Two rcon commands `gap` s apart, as the game took them: (when the first went in, the gap)."""
+    a = rcon_at(first, time.monotonic())
+    b = rcon_at(second, a + gap)
+    return a, b - a
+
+
+def t_slow_pick(s: Server) -> str:
+    """A pick whose mode comes 1.2 s after its map (a slow rcon reply): one announcement, the whole pick."""
+    s.establish("mp_terminal", "sd")
+    # more than the old 1 s check, so it always saw the half pick; less than the app's worst case
+    a, gap = split_pick("set sv_vote_map mp_crash", "set sv_vote_mode dom", 1.2)
+    if not 1.05 <= gap <= GAP_MAX:
+        return f"RETRY: the mode went in {gap:.2f} s after the map"  # a dropped request, sent again late
+    seen, loaded = s.log.watch(SETTLE + gap, a)
+    if loaded:
+        return "RETRY: a map (re)loaded during the test"
+    want = s.next_up("mp_crash", "dom")
+    return "" if [text for _, _, text in seen] == [want] else f"wanted one {want!r}, got {seen}"
+
+
+def t_undone_change(s: Server) -> str:
+    """A change undone within 1.1 s (picked, then picked back) announces nothing, and doesn't linger."""
+    s.establish("mp_terminal", "sd")
+    a, gap = split_pick("set sv_vote_map mp_highrise", "set sv_vote_map mp_terminal", 1.1)
+    if not 1.02 <= gap <= GAP_MAX:
+        return f"RETRY: the second change went in {gap:.2f} s after the first"
+    seen, loaded = s.log.watch(SETTLE + gap, a)
+    if loaded:
+        return "RETRY: a map (re)loaded during the test"
+    if seen:
+        return f"announced {seen}"
+    # nor does it linger: the same half pick later waits for the rest like any other
+    s.log.mark()
+    a, gap = split_pick("set sv_vote_map mp_highrise", "set sv_vote_mode dom", 0.6)
+    if not 0.55 <= gap <= GAP_MAX:
+        return f"RETRY: the mode went in {gap:.2f} s after the map"
+    seen, loaded = s.log.watch(SETTLE + gap, a)
+    if loaded:
+        return "RETRY: a map (re)loaded during the test"
+    want = s.next_up("mp_highrise", "dom")
+    return "" if [text for _, _, text in seen] == [want] else f"then a pick: wanted one {want!r}, got {seen}"
+
+
+def t_quick_changes(s: Server) -> str:
+    """Changes in a row, each 1.2 s after the last: one announcement, the last."""
+    s.establish("mp_terminal", "sd")
+    a = rcon_at("set sv_vote_map mp_highrise", time.monotonic())
+    b = rcon_at("set sv_vote_mode dom", a + 1.2)
+    c = rcon_at("set sv_vote_map mp_favela", b + 1.2)
+    if not (1.05 <= b - a <= GAP_MAX and 1.05 <= c - b <= GAP_MAX):
+        return f"RETRY: the changes went in {b - a:.2f} s and {c - b:.2f} s apart"
+    seen, loaded = s.log.watch(SETTLE + c - a, a)
+    if loaded:
+        return "RETRY: a map (re)loaded during the test"
+    want = s.next_up("mp_favela", "dom")
+    return "" if [text for _, _, text in seen] == [want] else f"wanted one {want!r}, got {seen}"
 
 
 def t_same_pick(s: Server) -> str:
@@ -239,11 +321,11 @@ def t_same_pick(s: Server) -> str:
     api("/api/select", {"map": "mp_terminal", "gametype": "sd"})
     seen, loaded = s.log.watch(SETTLE, t0)
     if loaded:
-        return "RETRY"
+        return "RETRY: a map (re)loaded during the test"
     return f"announced {seen}" if seen else ""
 
 
-TESTS = [t_match_start, t_single_change, t_web_picks, t_same_pick]
+TESTS = [t_match_start, t_single_change, t_web_picks, t_same_pick, t_slow_pick, t_undone_change, t_quick_changes]
 
 
 def main() -> int:
@@ -276,12 +358,13 @@ def main() -> int:
                 continue
             for _ in range(3):
                 problem = test(s)
-                if problem != "RETRY":
+                if not problem.startswith("RETRY"):
                     break
-                print(f"  {test.__name__}: a round restarted during the test, again", flush=True)
+                print(f"  {test.__name__}: inconclusive ({problem[7:]}), again", flush=True)
             ok = not problem
             failed += not ok
-            print(f"{'PASS' if ok else 'FAIL'} {test.__name__}: {test.__doc__.splitlines()[0]}", flush=True)
+            verdict = "PASS" if ok else "INCONCLUSIVE" if problem.startswith("RETRY") else "FAIL"
+            print(f"{verdict} {test.__name__}: {test.__doc__.splitlines()[0]}", flush=True)
             if not ok:
                 print(f"     {problem}", flush=True)
     finally:
