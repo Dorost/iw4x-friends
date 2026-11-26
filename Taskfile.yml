@@ -196,3 +196,8 @@ tasks:
     desc: Encrypt the mw.zip and maps download links with a password into the setup scripts
     cmds:
       - uv run scripts/tools/encrypt-links.py
+
+  vote-test:
+    desc: Live test of vote.gsc's "Next up" announcements on a real server in Docker (needs the game in ~/Games/iw4x)
+    cmds:
+      - uv run scripts/tools/vote-test.py {{.CLI_ARGS}}
