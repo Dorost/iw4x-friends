@@ -38,7 +38,12 @@ start()
 	// the fallback next map, kept across S&D rounds
 	if ( !listHas( level.voteBaseMaps, getDvar( "sv_vote_next" ) ) || getDvar( "sv_vote_next" ) == getDvar( "mapname" ) )
 		setDvar( "sv_vote_next", randomOtherMap() );
-	level.nextUpShown = nextUpText();
+	// what players were last told (announceNextUp keeps it in sv_vote_shown). A later S&D round
+	// goes on from there, so a pick made as the round before ended, when its nextUpWatch had
+	// stopped, is announced in this one; a new match tells it at its start (announceStart)
+	if ( !isDefined( game[ "roundsPlayed" ] ) || game[ "roundsPlayed" ] == 0 || getDvar( "sv_vote_shown" ) == "" )
+		setDvar( "sv_vote_shown", nextUpText() );
+	level.nextUpShown = getDvar( "sv_vote_shown" );
 	level thread announceStart();
 	level thread nextUpWatch();
 
@@ -76,9 +81,10 @@ announceStart()
 }
 
 // a pick (chat, menu, web UI) changes what is next: tell everyone, once it has held for
-// 1.5 s. The web UI and the mini app set the map and the mode with two rcon commands, up
-// to ~1.25 s apart (a reply timing out after 1 s, then 0.25 s between commands): announcing
-// in between showed the new map with the old mode first, then the whole pick right after
+// 1.5 s. The web UI and the mini app set the map and the mode with two rcon commands, sent
+// back to back (app.py, select): ~0.35 s apart, ~1.35 s at most (a reply waited for up to
+// 1 s and 0.1 s more for the rest of it, then 0.25 s between commands). Announcing in
+// between showed the new map with the old mode first, then the whole pick right after
 nextUpWatch()
 {
 	level endon( "game_ended" );
@@ -104,6 +110,7 @@ nextUpWatch()
 announceNextUp( bold )
 {
 	level.nextUpShown = nextUpText();
+	setDvar( "sv_vote_shown", level.nextUpShown );
 	if ( bold )
 		iPrintLnBold( level.nextUpShown );
 	else
