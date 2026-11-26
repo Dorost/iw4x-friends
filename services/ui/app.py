@@ -723,7 +723,7 @@ def udp(msg: str, timeout: float = 1.0) -> str:
 RCON_TIMEOUT_MS = 100
 FAST_RCON_GAP = 0.25
 rcon_gap = 0.6
-rcon_lock = threading.Lock()
+rcon_lock = threading.RLock()  # held across several rcon() calls that must go back to back
 last_rcon = 0.0
 
 
@@ -1861,8 +1861,11 @@ def select(p: Pick):
     save_cfg(save_pick(p))
     live = live_status()
     if live and live["in_game"]:
-        rcon(f"set sv_vote_map {p.map}")
-        rcon(f"set sv_vote_mode {p.gametype}")
+        # back to back, no status poll between them: vote.gsc announces a change once it has
+        # held for 1.5 s, so the map with the old mode doesn't show first
+        with rcon_lock:
+            rcon(f"set sv_vote_map {p.map}")
+            rcon(f"set sv_vote_mode {p.gametype}")
     changed()
     return {"ok": True}
 

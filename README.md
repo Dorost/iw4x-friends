@@ -195,7 +195,7 @@ On the fleet, the bastion does the Telegram parts above itself: the mini app is 
 ## Repo layout
 
 - `scripts/windows/`, `scripts/mac/`, `scripts/linux/`: setup and helper scripts per system
-- `scripts/tools/`: maintenance (`task sync-config`, `task links`, `task telegram`)
+- `scripts/tools/`: maintenance (`task sync-config`, `task links`, `task telegram`) and `task vote-test`, a live test of the in-game "Next up" announcements
 - `deploy/`: the fleet: the bastion, the game servers it creates, their scripts and `fleet.toml` (see [Our servers: the fleet](#our-servers-the-fleet))
 - `config/`: shared game settings and classes, copied into the setup scripts by `task sync-config`
 - `services/ui/`: the server's web control page

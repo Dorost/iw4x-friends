@@ -19,7 +19,8 @@
 //           ones that match it, an unknown or unclear !map / !gt name the maps or modes that do
 // No lobby between matches: when a match ends, the scoreboard shows "Next up: <map>, <mode>"
 //   and that match loads right away (a new mode passes through the lobby, see startMatch). Next up is also announced at the start of a match, in its
-//   last minute and whenever it changes. The map is the pick (!map, menu, web UI), else a
+//   last minute and whenever it changes (once, when the change has held for 1.5 s, see
+//   nextUpWatch). The map is the pick (!map, menu, web UI), else a
 //   random other original or DLC MW2 map; the mode is the !gt pick, else the one just played.
 // The web UI writes the installed maps and modes to userraw/scriptdata/vote.txt.
 init()
@@ -37,7 +38,12 @@ start()
 	// the fallback next map, kept across S&D rounds
 	if ( !listHas( level.voteBaseMaps, getDvar( "sv_vote_next" ) ) || getDvar( "sv_vote_next" ) == getDvar( "mapname" ) )
 		setDvar( "sv_vote_next", randomOtherMap() );
-	level.nextUpShown = nextUpText();
+	// what players were last told (announceNextUp keeps it in sv_vote_shown). A later S&D round
+	// goes on from there, so a pick made as the round before ended, when its nextUpWatch had
+	// stopped, is announced in this one; a new match tells it at its start (announceStart)
+	if ( !isDefined( game[ "roundsPlayed" ] ) || game[ "roundsPlayed" ] == 0 || getDvar( "sv_vote_shown" ) == "" )
+		setDvar( "sv_vote_shown", nextUpText() );
+	level.nextUpShown = getDvar( "sv_vote_shown" );
 	level thread announceStart();
 	level thread nextUpWatch();
 
@@ -74,15 +80,29 @@ announceStart()
 	announceNextUp( true );
 }
 
-// a pick (chat, menu, web UI) changes what is next: tell everyone
+// a pick (chat, menu, web UI) changes what is next: tell everyone, once it has held for
+// 1.5 s. The web UI and the mini app set the map and the mode with two rcon commands, sent
+// back to back (app.py, select): ~0.35 s apart, ~1.35 s at most (a reply waited for up to
+// 1 s and 0.1 s more for the rest of it, then 0.25 s between commands). Announcing in
+// between showed the new map with the old mode first, then the whole pick right after
 nextUpWatch()
 {
 	level endon( "game_ended" );
 
+	pending = "";
+	since = 0;
 	for ( ;; )
 	{
-		wait 1;
-		if ( nextUpText() != level.nextUpShown )
+		wait 0.5;
+		text = nextUpText();
+		if ( text == level.nextUpShown )
+			pending = "";  // nothing new, or a change undone before it was announced
+		else if ( text != pending )
+		{
+			pending = text;  // changed: the rest of the pick may still come
+			since = getTime();
+		}
+		else if ( getTime() - since >= 1500 )
 			announceNextUp( false );
 	}
 }
@@ -90,6 +110,7 @@ nextUpWatch()
 announceNextUp( bold )
 {
 	level.nextUpShown = nextUpText();
+	setDvar( "sv_vote_shown", level.nextUpShown );
 	if ( bold )
 		iPrintLnBold( level.nextUpShown );
 	else
